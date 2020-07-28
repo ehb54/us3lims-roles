@@ -1,7 +1,14 @@
 ---
 - name: Converge
   hosts: all
+  vars:
+   cron_admin: root@localhost
   tasks:
+    - name: install crontab
+      dnf:
+        name:
+          - cronie
+          - php
     - name: create apache user
       user:
         name: apache

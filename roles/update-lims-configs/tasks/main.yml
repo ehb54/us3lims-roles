@@ -20,7 +20,7 @@
         - certbot_create_standalone_stop_services: [httpd]
         - certbot_certs:
                 - domains: 
-                        - "{{ ansible_fqdn }}" 
+                        - "{{ hostname }}" 
   loop:
         - config-lims-packages 
         - config-lims-us3-user

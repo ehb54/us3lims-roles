@@ -1,0 +1,7 @@
+---
+- name: Converge
+  hosts: all
+  tasks:
+    - name: "Include config-lims-firewall"
+      include_role:
+        name: "config-lims-firewall"

@@ -1,0 +1,7 @@
+---
+- name: Converge
+  hosts: all
+  tasks:
+    - name: "Include install-vncserver"
+      include_role:
+        name: "install-vncserver"

@@ -1,7 +1,7 @@
 ---
 - name: Create newus3 database
   mysql_db:
-        name: newus3
+        name: "{{ us3_db_name }}"
         state: present
         login_user: root
         login_password: "{{ root_db_pass }}"
@@ -13,6 +13,40 @@
         login_user: root
         login_password: "{{ root_db_pass }}"
 
+- name: Create us3 database
+  mysql_db:
+        name: "us3"
+        state: present
+        login_user: root
+        login_password: "{{ root_db_pass }}"
+
+- name: Create us3_notice database
+  mysql_db:
+        name: us3_notice
+        state: present
+        login_user: root
+        login_password: "{{ root_db_pass }}"
+
+#start table creation process
+
+# us3_notice
+- name: copy over us3_notice table file
+  copy:
+        src: us3_notice.sql
+        dest: /tmp
+  when: root_pwd_check.rc == 0
+
+- name: Inject tables for us3_notice
+  mysql_db:
+        login_user: root
+        login_password: "{{ root_db_pass }}"
+        name: us3_notice
+        state: import
+        login_host: localhost
+        target: /tmp/us3_notice.sql
+  when: root_pwd_check.rc == 0
+
+# newus3user
 - name: Copy over the metadata_create file
   copy:
         src: metadata_create.sql
@@ -29,13 +63,13 @@
         target: /tmp/metadata_create.sql
   when: root_pwd_check.rc == 0
 
-- name: Copy over the people_create file
+- name: Copy over the people_create tables for newus3
   copy:
         src: people_create.sql
         dest: /tmp
   when: root_pwd_check.rc == 0
 
-- name: Inject the people_create file
+- name: Inject the people_create file into newus3
   mysql_db:
         login_user: root
         login_password: "{{ root_db_pass }}"
@@ -44,13 +78,14 @@
         target: /tmp/people_create.sql
   when: root_pwd_check.rc == 0
 
+# gfac
 - name: Copy over the gfac file
   copy:
         src: gfac-db.sql
         dest: /tmp
   when: root_pwd_check.rc == 0
 
-- name: Inject gfac-db file for gfac
+- name: Inject gfac-db file into gfac
   mysql_db:
         login_user: root
         login_password: "{{ root_db_pass }}"
@@ -79,4 +114,20 @@
   file :
         path: /tmp/new_people_inject.sql
         state: absent
+  when: root_pwd_check.rc == 0
+
+# global
+- name: Copy over the global file
+  copy:
+        src: global-db.sql
+        dest: /tmp
+  when: root_pwd_check.rc == 0
+
+- name: Inject global-db file into uslims3_global
+  mysql_db:
+        login_user: root
+        login_password: "{{ root_db_pass }}"
+        name: uslims3_global
+        state: import
+        target: /tmp/global-db.sql
   when: root_pwd_check.rc == 0

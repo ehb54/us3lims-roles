@@ -1,0 +1,105 @@
+---
+# tasks file for install-postfix
+
+- name: Remove sendmail RedHat
+  yum:
+    name:
+      - sendmail
+    state: absent
+  when: ansible_facts['os_family'] == "RedHat"
+
+- name: Install postfix RedHat
+  yum:
+    name:
+      - libgsasl
+      - cyrus-sasl
+      - cyrus-sasl-plain
+      - cyrus-sasl-lib
+      - postfix
+    state: present
+  when: ansible_facts['os_family'] == "RedHat"
+
+- name: Remove sendmail Debian
+  apt:
+    name:
+      - sendmail
+    state: absent
+  when: ansible_facts['os_family'] == "Debian"
+
+- name: Install postfix Debian
+  apt:
+    name:
+      - libsasl2-modules
+      - postfix
+    state: present
+  when: ansible_facts['os_family'] == "Debian"
+
+- name: Create /etc/postfix/sasl directory
+  file:
+    path: /etc/postfix/sasl
+    state: directory
+    mode: '0755'
+
+- name: Copy over sasl_passwd
+  template: 
+    src: sasl_passwd.j2
+    dest: /etc/postfix/sasl/sasl_passwd
+    mode: '0600'
+
+- name: Run postmap
+  command:
+    chdir: /etc/postfix/sasl
+    cmd: postmap /etc/postfix/sasl/sasl_passwd
+
+- name: Fix permissions of sasl_passwd
+  file:
+    path: "{{ item }}"
+    owner: root
+    group: root
+    mode: '0600'
+  with_items:
+    - /etc/postfix/sasl/sasl_passwd.db
+    - /etc/postfix/sasl/sasl_passwd
+
+- name: Stop postfix
+  service:
+    name : postfix
+    enabled: yes
+    state: stopped
+
+- name: Configure postfix
+  command:
+    cmd: postconf -e {{ item }}
+  with_items:
+    - inet_interfaces=loopback-only
+    - inet_protocols=ipv4
+    - relayhost=[{{ postfix_relay_smtp_host }}]:{{ postfix_relay_smtp_port }}
+    - smtp_use_tls=yes
+    - smtp_sasl_password_maps=hash:/etc/postfix/sasl/sasl_passwd
+    - smtp_sasl_auth_enable=yes
+    - smtp_sasl_security_options=
+    - smtp_tls_security_level=may
+    - myhostname={{ postfix_hostname }}
+    - mydomain={{ postfix_hostname }}
+    - myorigin={{ postfix_hostname }}
+    - mydestination=
+    
+- name: Set postfix permissions
+  command:
+    cmd: /usr/sbin/postfix set-permissions
+
+- name: Postfix check
+  command:
+    cmd: postfix check
+
+- name: Set postfix alternative for RedHat
+  command:
+    cmd: alternatives --set mta /usr/sbin/sendmail.postfix
+  when: ansible_facts['os_family'] == "RedHat"
+
+- name: Enable postfix
+  service:
+    name : postfix
+    enabled: yes
+    state: started
+    

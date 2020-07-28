@@ -15,13 +15,14 @@ env:
     - ROLE_NAME: config-lims-slurm
     - ROLE_NAME: config-lims-us3-user
     - ROLE_NAME: config-lims-database
+    - ROLE_NAME: config-lims-firewall
 
 
 before_script: 
   - cd ${TRAVIS_BUILD_DIR}/roles/${ROLE_NAME} 
  
 script: 
-  - molecule test 
+  - molecule test --all
 
 on:
   branch: master

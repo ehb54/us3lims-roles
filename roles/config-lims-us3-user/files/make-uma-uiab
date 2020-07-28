@@ -1,0 +1,86 @@
+#!/bin/sh
+#	make-uma	Make Us_Mpi_Analysis (update,build,install)
+
+UHOME=`ls -d ~us3`
+US3BASE=$UHOME/us3-nodb
+USRCDIR=$US3BASE/utils
+PSRCDIR=$US3BASE/programs/us_mpi_analysis
+CLIBDIR=$UHOME/cluster/lib/
+CBINDIR=$UHOME/cluster/bin/
+
+################ test user and path to qmake ######################
+USER=`id -un`
+if [ "${USER}" != "us3" -a "${USER}" != "root" ]; then
+  echo "USER=${USER}; must be 'us3' or 'root'"
+  exit 1
+fi
+QMAKE=`which qmake 2>/dev/null`
+if [ -z "$QMAKE" ]; then
+  #++++++ if needed, manually set QTDIR to find qmake +++++++++++++
+  QTDIR=/opt/qt
+  #++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+  export PATH=${QTDIR}/bin:$PATH
+  QMAKE=`which qmake 2>/dev/null`
+  if [ -z "$QMAKE" ]; then
+    echo "QTDIR not known -- set in make-uma or PATH; then rerun"
+    exit 1
+  fi
+fi
+###################################################################
+
+PROG=us_mpi_analysis
+LNAM=libus_utils
+LIBR=${LNAM}.so.10.0.0
+ARGA="$@"
+if [ "$ARGA" = "all" ]; then
+  ARGA="update build install"
+fi
+if [ -z "$ARGA" ]; then
+  ARGA="help"
+fi
+ARGI="$1"
+for ARGI in $ARGA; do
+ 
+case "$ARGI" in
+
+  update)
+    cd ${USRCDIR}
+    git pull origin master
+    pwd
+    ls -lrt|tail -15
+    cd ${PSRCDIR}
+    git pull origin master
+    ls -lrt|tail -15
+  ;;
+
+  build)
+    cd ${USRCDIR}
+    make
+    cd ${PSRCDIR}
+    make
+  ;;
+
+  install|copy)
+    cd ${PSRCDIR}
+    echo "cp --preserve=timestamps ${PROG} ${CBINDIR}"
+    echo "cp --preserve=timestamps ../../lib/${LIBR} ${CLIBDIR}"
+    cp --preserve=timestamps ${PROG} ${CBINDIR}
+    cp --preserve=timestamps ../../lib/${LIBR} ${CLIBDIR}
+    ls -l ${CBINDIR} ${CLIBDIR}
+  ;;
+
+  *)
+    echo "make-uma    -    Make Us_Mpi_Analysis"
+    echo "   usage:"
+    echo "make-uma update     (do git pull)"
+    echo "make-uma build      (build ${LNAM} and ${PROG})"
+    echo "make-uma install    (install ${LNAM} and ${PROG} in us3 dirs)"
+    echo "   USRCDIR = ${USRCDIR}"
+    echo "   PSRCDIR = ${PSRCDIR}"
+    echo "   CLIBDIR = ${CLIBDIR}"
+    echo "   CBINDIR = ${CBINDIR}"
+    exit 1
+  ;;
+esac
+
+done

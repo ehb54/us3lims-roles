@@ -8,8 +8,8 @@ ssl_self_base_path: "/etc/httpd/ssl"
 ssl_self_key_path: "{{ ssl_self_base_path }}/self-priv.key" 
 ssl_self_csr_path: "{{ ssl_self_base_path }}/self-csr.key" 
 ssl_self_cert_path: "{{ ssl_self_base_path }}/self-cert.key" 
-server_admin: "demeler@gmail.com" 
-server_name: "{{ ansible_fqdn }}" 
+server_admin: "{{ admin_email }}"
+server_name: "{{ hostname }}" 
 self_signed: 'no'
 certbot_admin_email: "{{ admin_email }}" 
 certbot_create_if_missing: true 

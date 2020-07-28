@@ -3,6 +3,7 @@
   dnf:
       enablerepo: PowerTools
       name: "{{ packages }}"
+      update_cache: yes
 
 - name: Check if magik already exists
   stat:

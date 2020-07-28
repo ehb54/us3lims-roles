@@ -8,6 +8,7 @@
     - gegorbet
     - demeler
     - alexey
+    - ehb
 
 - name: Add authorized keys
   authorized_key:
@@ -17,3 +18,41 @@
     - gegorbet
     - alexey
     - demeler
+    - ehb
+
+- name: "Install emacs-nox via yum"
+  yum:
+    name: emacs-nox
+    state: present
+  when: ansible_facts['os_family'] == "RedHat"
+
+- name: "Install emacs-nox via apt"
+  apt:
+    name: emacs-nox
+    state: present
+  when: ansible_facts['os_family'] == "Debian"
+
+- name: "Copy .emacs to ~/ehb"
+  copy:
+    src: files/dot_emacs
+    dest: ~ehb/.emacs
+    owner: ehb
+    group: ehb
+    mode: u=rw,g=r,o=r
+
+- name: Creates directory
+  file:
+    path: ~ehb/bin
+    state: directory
+
+- name: "Copy items to ~ehb/bin"
+  copy:
+    src: 'files/{{ item }}'
+    dest: "~ehb/bin/{{ item }}"
+    owner: root
+    group: root
+    mode: u=rwx,g=rx,o=rx
+  with_items:
+    - e
+    - s
+    - lth

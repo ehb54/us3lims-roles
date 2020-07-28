@@ -1,12 +1,25 @@
 ---
-- firewalld: 
+- name: Install dependencies 
+  dnf: 
+    name: 
+      - firewalld 
+    update_cache: yes
+
+- name: Ensure firewalld is started 
+  service: 
+    name: firewalld
+    state: started
+  changed_when: false
+ 
+- name: Configure firewall rules 
+  firewalld:
       zone: public
-      service: "{{ item }}" 
+      service: "{{ item }}"
       permanent: yes
       state: enabled
-  notify: reload firewalld 
-  loop: 
-    - https 
-    - http 
-    - ssh 
-    - mysql 
+  notify: reload firewalld
+  loop:
+    - https
+    - http
+    - ssh
+    - mysql

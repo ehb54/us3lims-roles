@@ -1,0 +1,16 @@
+#!/bin/sh
+
+REV=`svn info https://github.com/ehb54/ultrascan3.git/trunk/us_somo/develop | grep 'Last Changed Rev:' | awk '{ print $4 }'`
+RDATE=`svn info https://github.com/ehb54/ultrascan3.git/trunk/us_somo/develop | grep 'Last Changed Date:' | sed s/:/~/ | awk -F~ '{ print $2 }'`
+
+cat > /opt/ultrascan3/us_somo/develop/include/us_revision.h <<EOF 
+#ifndef US_REVISION_H
+#define US_REVISION_H
+
+#define REVISION "Revision: $REV"
+#define REVISION_DATE "$RDATE"
+
+#endif
+EOF
+
+    

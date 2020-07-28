@@ -1,0 +1,16 @@
+---
+- name: Converge
+  hosts: all
+  vars:
+    - slurm_ver: 20.02.2
+  tasks:
+    - name: "install mariadb"
+      dnf:
+        name:
+          - mariadb-devel
+    - name: "Get epel"
+      include_role:
+        name: "geerlingguy.repo-epel"
+    - name: "Include config-lims-slurm"
+      include_role:
+        name: "config-lims-slurm"

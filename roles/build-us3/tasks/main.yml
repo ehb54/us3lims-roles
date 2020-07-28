@@ -1,0 +1,136 @@
+---
+
+- name: Check if us3 already installed, using /opt/ultrascan3/bin/us as a proxy
+  stat: 
+    path: /opt/ultrascan3/bin/us
+  register: us_installed_details
+
+- name: Install, configure and compile us3
+  become: no
+  block:
+
+    - name: Temporarily change /opt to allow the remote user to create a directory
+      file:
+        path: /opt
+        mode: '0777'
+      become: yes
+      become_user: root
+      
+    - name: Git clone ultrascan3 repository
+      git:
+       repo: https://github.com/ehb54/ultrascan3.git
+       version: "{{ us3_branch }}"
+       dest: "/opt/ultrascan3"
+    
+    - name: Revert /opt to standard ownership
+      file:
+        path: /opt
+        mode: '0755'
+      become: yes
+      become_user: root
+
+    - name: Copy over local.pri
+      template: 
+           src: local.pri.j2
+           dest: /opt/ultrascan3/local.pri
+    
+    - name: make ultrascan3
+      shell:
+        chdir: /opt/ultrascan3
+        cmd: ./makeall.sh -j {{ cores_for_parallel_compile }} > build.stdout 2> build.stderr
+      environment: 
+        PATH: /opt/qt-{{ qt_version }}/bin/:/usr/bin:/usr/local/bin:/bin
+        QTDIR: /opt/qt-{{ qt_version }}
+        QWTDIR: /opt/qt-{{ qt_version }}-qwt-{{ qwt_version }}
+    
+        US3DIR: /opt/ultrascan3
+        QTBIN: /opt/qt-{{ qt_version }}/bin
+        QTLIB: /opt/qt-{{ qt_version }}/lib
+        QTINC: /opt/qt-{{ qt_version }}/include
+        US3BIN: /opt/ultrascan3/bin
+        US3LIB: /opt/ultrascan3/lib
+        us3 : /opt/ultrascan3
+#        LD_LIBRARY: ${US3LIB}:${QTLIB}:${QWTLIB}:${OLPATH}:${USDIR}
+  when: us_installed_details.stat.exists == false
+
+- name: Check if us_somo already installed, using /opt/ultrascan3/bin/us3_somo as a proxy
+  stat: 
+    path: /opt/ultrascan3/bin/us3_somo
+  register: us_somo_installed_details
+
+- name: Install, configure and compile us_somo
+  become: no
+  block:
+
+    - name: Clean up build_somo.stdout, .stderr
+      file:
+        path: "{{ item }}"
+        state: absent
+      with_items:
+        - /opt/ultrascan3/build_somo.stdout
+        - /opt/ultrascan3/build_somo.stderr
+
+    - name: Check if us_somo us_revision.h exists
+      stat: 
+        path: /opt/ultrascan3/us_somo/develop/include/us_revision.h
+      register: us_somo_revision_h_details
+  
+    - name: Create us_somo us_revision.h
+      block:
+        - name: Copy over ansible_set_us_revision.sh
+          template: 
+            src: ansible_set_us_revision.sh.j2
+            dest: /opt/ultrascan3/us_somo/develop/ansible_set_us_revision.sh
+            mode: '0755'
+
+        - name: Run ansible_set_us_revision.sh
+          shell:
+            chdir: /opt/ultrascan3/us_somo/develop
+            cmd: ./ansible_set_us_revision.sh >> /opt/ultrascan3/build_somo.stdout 2>> /opt/ultrascan3/build_somo.stderr
+
+      when: us_somo_revision_h_details.stat.exists == false
+
+    - name: copy over local.pri
+      template: 
+        src: somo.local.pri.j2
+        dest: /opt/ultrascan3/us_somo/develop/local.pri
+    
+    - name: Extra qmakes
+      shell:
+        chdir: /opt/ultrascan3/us_somo/develop/{{ item }}
+        cmd: /opt/qt-{{ qt_version }}/bin/qmake {{ item }}.pro
+      with_items:
+        - us_admin
+        - us_saxs_cmds_t
+        - us3_hydrodyn
+
+    - name: Make somo
+      shell:
+        chdir: /opt/ultrascan3
+        cmd: ./makesomo.sh -j {{ cores_for_parallel_compile }} >> build_somo.stdout 2>> build_somo.stderr
+      environment: 
+        PATH: /opt/qt-{{ qt_version }}/bin/:/usr/bin:/usr/local/bin:/bin
+        QTDIR: /opt/qt-{{ qt_version }}
+        QWTDIR: /opt/qt-{{ qt_version }}-qwt-{{ qwt_version }}
+    
+        US3DIR: /opt/ultrascan3
+        QTBIN: /opt/qt-{{ qt_version }}/bin
+        QTLIB: /opt/qt-{{ qt_version }}/lib
+        QTINC: /opt/qt-{{ qt_version }}/include
+        US3BIN: /opt/ultrascan3/bin
+        US3LIB: /opt/ultrascan3/lib
+        us3 : /opt/ultrascan3
+        ULTRASCAN:  /opt/ultrascan3/
+#        LD_LIBRARY: ${US3LIB}:${QTLIB}:${QWTLIB}:${OLPATH}:${USDIR}
+
+    - name: Make convenience us.sh, us_somo.sh us_env.sh
+      template: 
+        src: "{{ item }}.j2"
+        dest: /opt/ultrascan3/bin/{{ item }}
+        mode: '0755'
+      with_items:
+        - us.sh
+        - us_somo.sh
+        - us_env.sh
+
+  when: us_somo_installed_details.stat.exists == false

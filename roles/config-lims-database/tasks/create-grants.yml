@@ -1,0 +1,63 @@
+---
+# new_us3user privs
+- name: Do new_us3user grants 
+  mysql_user:
+        name: '{{ us3_db_user }}'
+        host: "{{ item }}"
+        append_privs: yes
+        priv: '*.*:USAGE/newus3.*:ALL'
+        password: "{{ us3_db_pass }}"
+        login_user: root
+        login_password: "{{ root_db_pass }}"
+  with_items:
+        - "{{ server_name }}"
+        - 127.0.0.1
+        - localhost
+        - ::1
+
+# us3php privs
+- name: Do us3php grants
+  mysql_user:
+        name: 'us3php'
+        host: "{{ item }}"
+        priv: '*.*:USAGE/newus3.*:ALL/us3.*:SELECT,INSERT,UPDATE,DELETE'
+        append_privs: yes
+        password: '{{ us3php_db_pass }}'
+        login_user: root
+        login_password: "{{ root_db_pass }}"
+  with_items:
+        - "{{ server_name }}"
+        - 127.0.0.1
+        - localhost
+        - ::1
+
+# gfac privs
+- name: Grant SELECT, INSERT, UPDATE, DELETE to gfac user on gfac
+  mysql_user:
+        name: '{{ gbl_db_user }}'
+        host: "{{ item }}"
+        priv: "{{ gbl_db_name }}.*:SELECT,INSERT,UPDATE,DELETE"
+        append_privs: yes
+        password: '{{ gbl_db_pass }}'
+        login_user: root
+        login_password: "{{ root_db_pass }}"
+  with_items:
+        - "{{ server_name }}"
+        - 127.0.0.1
+        - localhost
+        - ::1
+
+# us3_notice privs
+- name: Grant SELECT on to us3_notice user on us3_notice
+  mysql_user:
+        name: 'us3_notice'
+        host: "{{ item }}"
+        priv: "us3_notice.*:SELECT"
+        append_privs: yes
+        login_user: root
+        login_password: "{{ root_db_pass }}"
+  with_items:
+        - "{{ server_name }}"
+        - 127.0.0.1
+        - localhost
+        - ::1

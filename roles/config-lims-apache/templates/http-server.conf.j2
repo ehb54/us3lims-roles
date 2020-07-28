@@ -4,8 +4,8 @@
    ServerAdmin {{ server_admin }} 
    DocumentRoot "{{ www_uslims }}"
    ServerName "{{ server_name }}"
-   ErrorLog "/var/log/httpd/{{ ansible_hostname }}-error.log"
-   CustomLog "/var/log/httpd/{{ ansible_hostname }}-access.log" combined
+   ErrorLog "/var/log/httpd/{{ hostname }}-error.log"
+   CustomLog "/var/log/httpd/{{ hostname }}-access.log" combined
 RewriteEngine on
 RewriteCond %{SERVER_NAME} ={{ server_name }}
 RewriteRule ^ https://%{SERVER_NAME}%{REQUEST_URI} [END,NE,R=permanent]

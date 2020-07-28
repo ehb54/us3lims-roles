@@ -13,6 +13,7 @@
   dnf:
     name:
       - git
+    update_cache: yes
 
 # Create ini file
 - name: Create LIMS ini file
@@ -29,6 +30,14 @@
    repo: "{{ common_url }}"
    dest: "{{ www_common }}"
    version: "{{ branch }}"
+   force: yes
+  changed_when: false
+
+- name: Template topmenu.php
+  template: 
+      src: topmenu.php.j2
+      dest: "{{ www_common }}/topmenu.php"
+  changed_when: false
 
 # Web info dir.
 - name: clone webinfo repo

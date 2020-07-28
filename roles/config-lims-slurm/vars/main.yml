@@ -1,0 +1,1 @@
+slurm_hash: "{% if slurm_md5 != 'none' %}{{ slurm_md5 }}{% elif slurm_sha1 != 'none' %}{{slurm_sha1}}{% else %}none{% endif %}"

@@ -5,6 +5,9 @@
     name:
       - git
       - httpd
+      - php
+    update_cache: yes
+
 - name: Create group for us3
   group:
     name: us3
@@ -18,27 +21,92 @@
     shell: /bin/bash
     state: present
 
-- name: check if lims instance folder exist
-  stat:
-    path: /home/us3/lims/database/instances
-  register: instance_folder
-
 - name: create instances folder
   file:
     path: '/home/us3/lims/database/instances'
     state: directory
     owner: us3
     group: apache
-  when: instance_folder.stat.exists == false
 
-- name: git mysql scripts
+- name: Make sure work folder exists
+  file:
+    path: '/home/us3/lims/work'
+    state: directory
+    owner: us3
+    group: apache
+
+- name: Make sure scripts folder exists
+  file:
+    path: '/home/us3/lims/scripts'
+    state: directory
+    owner: us3
+    group: us3
+
+- name: Copy over make-uma-uiab script
+  copy:
+    src: 'make-uma-uiab'
+    dest: '/home/us3/lims/scripts/make-uma-uiab'
+    owner: us3
+    group: us3
+    mode: 0755
+
+- name: git clone us3_mysql repository
   git:
    repo: https://github.com/ehb54/us3_sql.git
    version: "{{ branch }}"
    dest: "/home/us3/lims/database/sql"
 
-- name: git gridctl scripts
+- name: git clone gridctl repository to bin
   git:
    repo: https://github.com/ehb54/us3lims_gridctl.git
    version: "{{ branch }}"
    dest: "/home/us3/lims/bin"
+
+- name: Change permissions in gridctl
+  file:
+      path: /home/us3/lims/bin
+      state: directory
+      recurse: yes
+  changed_when: false
+
+- name: template listen-config.php
+  template:
+    src: listen-config.php.j2
+    dest: /home/us3/lims/bin/listen-config.php
+
+- name: Create us3/etc
+  file:
+    path: /home/us3/lims/etc
+    state: directory
+    owner: us3
+    group: us3
+
+- name: check if us3-pipe exists
+  stat:
+    path: /home/us3/lims/etc/us3-pipe
+  register: us3pipe
+
+- name: Create us3-pipe
+  shell:
+    cmd: mkfifo /home/us3/lims/etc/us3-pipe
+  become_user: us3
+  become: yes
+  when: us3pipe.stat.exists == false
+
+- name: Include cron related tasks
+  include: cron-tasks.yml
+
+- name: Copy over us3-listen.service
+  copy:
+    src: us3-listen.service
+    dest: /etc/systemd/system/us3-listen.service
+
+- name: Reload systemd daemon
+  systemd:
+    daemon_reload: yes
+
+- name: Start us3-listen service
+  service:
+    name: us3-listen
+    state: started
+  changed_when: false

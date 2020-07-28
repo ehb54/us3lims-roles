@@ -1,0 +1,50 @@
+<?php
+$home        = exec( "ls -d ~us3/lims" );
+$home_remote = "$home";                                // for local submission
+$work        = "$home/work";
+$work_remote = "$home_remote/work";
+$pipe        = "$home/etc/us3-pipe";
+$logfile     = "$home/etc/udp.log";
+$cfgfile     = "$home/.us3lims.ini";
+$configs     = parse_ini_file( $cfgfile, true );
+$submit_dir  = '{{ submit_dir }}'; // LIMS submit files dir
+$listen_port = 12233;
+//$dbhost      = "uslims.uleth.ca";
+$dbhost      = "localhost";
+$servhost    = "uslims.uleth.ca";
+$self        = basename( $_SERVER['PHP_SELF'] );
+$class_dir_p = '{{ class_dir_p }}';        // Class dir for production
+$class_dir_d = '{{ class_dir_d }}';  // Class dir for development
+$class_dir_l = '{{ class_dir_l }}';  // Class dir for local
+$class_dir   = $class_dir_l;                           // Class dir default
+
+// Global DB credentials
+$guser       = "gfac";
+$gpasswd     = $configs[ 'gfac' ][ 'password' ];
+$gDB         = "gfac";
+
+$serviceURL  = "{{ serviceURL }}";
+$serviceURL2 = "{{ serviceURL2 }}";
+
+// US3 DB credentials
+$user        = "us3php";
+$passwd      = $configs[ 'us3php' ][ 'password' ];
+
+$org_name    = "{{ org_name }}";
+$org_domain  = "{{ org_domain }}";
+$admin_email = "{{ gridctl_admin_email }}";
+
+// This is really a library routine
+
+date_default_timezone_set( '{{time_zone}}' );
+
+function write_log( $message )
+{
+   global $logfile;
+
+   $log = fopen( $logfile, "a" );
+   fwrite( $log, date( "Y-m-d H:i:s " ) . $message . "\n" );
+   fclose( $log );
+}
+
+?>

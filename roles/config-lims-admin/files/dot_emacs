@@ -1,0 +1,345 @@
+; try below if shell starts in a new window (emacs25?)
+(push (cons "\\*shell\\*" display-buffer--same-window-action) display-buffer-alist)
+
+; golang
+(add-to-list 'load-path "~/emacs/")
+(autoload 'go-mode "go-mode" nil t)
+(add-to-list 'auto-mode-alist '("\\.go\\'" . go-mode))
+
+
+(autoload 'markdown-mode "markdown-mode"
+   "Major mode for editing Markdown files" t)
+(add-to-list 'auto-mode-alist '("\\.md\\'" . markdown-mode))
+
+(setq c-basic-offset 3)
+(setq c-offsets-alist '((substatement-open . 0)))
+
+(setq vc-handled-backends nil)
+
+(defun select-previous-window ()
+  "Switch to the previous window" 
+  (interactive)
+  (other-window -1))
+
+(global-set-key (kbd "C-x p")  'select-previous-window)
+
+(setq-default indent-tabs-mode nil) 
+
+(fset 'usindent
+   "\C-[<\C-[%\C-q\C-i\C-m   \C-m!\C-[<\C-xh\C-[\C-\\")
+
+; (setq-default global-font-lock-mode nil)
+; (setq-default transient-mark-model nil)
+
+(global-font-lock-mode 0)
+(transient-mark-mode 0)
+(menu-bar-mode 0)
+
+(global-set-key "\C-cn" 'name-last-kbd-macro)
+
+(defun dupwindow ()
+  "duplicate into split window"
+ (interactive)
+ (delete-other-windows)
+ (split-window-horizontally)
+ )
+
+
+(defun process-send-string-echo ( proc string )
+  (process-send-string proc (concat "echo " string ";" string "\n" ) )
+  )
+
+(defun ussh ()
+  "create std shells"
+  (interactive)
+  (find-file "/root/todo")
+  (find-file "/root/mattia/somo/notes")
+  (shell)
+  (rename-buffer "findfunc")
+  (process-send-string-echo nil ". ~/p")
+  (process-send-string-echo nil "cd /src/us3_somo_qt5/develop/src")
+  (shell)
+  (rename-buffer "genapp")
+  (process-send-string nil ". ~/p\n")
+  (process-send-string nil "cd $ULTRASCAN/genapp\n")
+  (shell)
+  (rename-buffer "mpicc")
+  (process-send-string nil ". ~/p\n")
+  (process-send-string nil "cd $ULTRASCAN/develop/us_saxs_cmds_mpi\n")
+  (shell) 
+  (rename-buffer "mpirun")
+  (process-send-string nil ". ~/p\n")
+  (process-send-string nil  "cd $ULTRASCAN/develop\n")
+  (shell) 
+  (rename-buffer "run")
+  (process-send-string nil ". ~/p\n")
+  (process-send-string nil ". /etc/qt/3\n")
+  (process-send-string nil "cd $ULTRASCAN/develop\n")
+  (shell) 
+  (rename-buffer "run2")
+  (process-send-string nil ". ~/p\n")
+  (process-send-string nil "cd $ULTRASCAN/develop\n")
+  (split-window-horizontally)
+  (shell) 
+  (rename-buffer "compile")
+  (process-send-string nil ". ~/p\n")
+  (process-send-string nil ". /etc/qt/3\n")
+  (process-send-string nil  "cd $ULTRASCAN/develop\n")
+  (shell) 
+  (rename-buffer "qt4")
+  (process-send-string nil ". ~/p\n")
+  (process-send-string nil ". /etc/qt/4\n")
+  (process-send-string nil  "cd /src/us3/somo\n")
+  (shell) 
+  (rename-buffer "us2to3")
+  (process-send-string nil ". ~/p\n")
+  (process-send-string nil ". /etc/qt/4\n")
+  (process-send-string nil  "cd /src/ultrascan3/somo\n")
+  (shell) 
+  (rename-buffer "us3somo")
+  (process-send-string nil ". ~/p\n")
+  (process-send-string nil ". /etc/qt/4\n")
+  (process-send-string nil  "cd /src/us3_somo/develop\n")
+  (shell) 
+  (rename-buffer "runus3somo")
+  (process-send-string nil ". ~/p\n")
+  (process-send-string nil ". /etc/qt/4\n")
+  (process-send-string nil  "cd /src/us3_somo/develop\n")
+  (shell) 
+  (rename-buffer "noqt3")
+  (process-send-string nil ". ~/p\n")
+  (process-send-string nil ". /etc/qt/5\n")
+  (process-send-string nil  "cd /src/us3/somo/noqt3\n")
+  (shell) 
+  (rename-buffer "us3qt5")
+  (process-send-string nil ". ~/p\n")
+  (process-send-string nil ". /etc/qt/5\n")
+  (process-send-string nil  "cd /src/us3_somo_qt5/develop\n")
+  (shell) 
+  (rename-buffer "qt5run")
+  (process-send-string nil ". ~/p\n")
+  (process-send-string nil ". /etc/qt/5\n")
+  (process-send-string nil  "cd /src/us3_somo_qt5/develop\n")
+  (shell) 
+  (rename-buffer "toqt5")
+  (process-send-string nil ". ~/p\n")
+  (process-send-string nil ". /etc/qt/5\n")
+  (process-send-string nil  "cd /src/us3/somo/noqt3/toqt5\n")
+  )
+
+(defun usc ()
+  "compile"
+  (interactive)
+  (select-previous-window)
+  (dupwindow)
+  (switch-to-buffer "compile")
+  (process-send-string nil  "qmake libus; make -j8 -k\n")
+  (process-send-string nil  "qmake us_all; make -j8 -k\n")
+  (other-window +1)
+  )
+
+(defun us1 ()
+  "compile"
+  (interactive)
+  (dupwindow)
+  (select-previous-window)
+  (switch-to-buffer "compile")
+  (erase-buffer)
+  (process-send-string "compile"  "?\^C\n")
+  (process-send-string "compile"  "cd $ULTRASCAN/develop\n")
+  (process-send-string "compile"  "qmake libus && make -j8 -k && qmake us_all && make -j8\n")
+  (other-window +1)
+  )
+
+(defun us2 ()
+  "compile us3_somo"
+  (interactive)
+  (dupwindow)
+  (select-previous-window)
+  (switch-to-buffer "us3somo")
+  (process-send-string "us3somo"  "?\^C\n")
+  (process-send-string "us3somo" "cd /src/us3_somo/develop\n")
+  (process-send-string "us3somo" "rm qmake_image_collection.cpp; qmake libus_somo.pro && make -j8 -k && qmake us_somo.pro && make -j8\n")
+  (other-window +1)
+  )
+
+
+(defun ur1 ()
+  "run us_hydrodyn"
+  (interactive)
+  (dupwindow)
+  (select-previous-window)
+  (switch-to-buffer "run")
+  (erase-buffer)
+  (process-send-string "run" "?\^C\n")
+  (process-send-string "run" "us_hydrodyn -e\n")
+  (other-window +1)
+  )
+
+(defun ur2 ()
+  "run us"
+  (interactive)
+  (dupwindow)
+  (select-previous-window)
+  (switch-to-buffer "run2")
+  (erase-buffer)
+  (process-send-string "run2" "?\^C\n")
+  (process-send-string "run2" "us\n")
+  (other-window +1)
+  )
+
+(defun ur3 ()
+  "run us_hydrodyn"
+  (interactive)
+  (dupwindow)
+  (select-previous-window)
+  (switch-to-buffer "run")
+  (erase-buffer)
+  (process-send-string "run" "?\^C\n")
+  (process-send-string "run" "us_hydrodyn\n")
+  (other-window +1)
+  )
+
+(defun ur4 ()
+  "run us3_somo"
+  (interactive)
+  (dupwindow)
+  (select-previous-window)
+  (switch-to-buffer "runus3somo")
+  (erase-buffer)
+  (process-send-string "runus3somo" "?\^C\n")
+  (process-send-string "runus3somo" "us3_somo\n")
+  (other-window +1)
+  )
+
+(defun ur5 ()
+  "make us2to3"
+  (interactive)
+  (dupwindow)
+  (select-previous-window)
+  (switch-to-buffer "us2to3")
+  (erase-buffer)
+  (process-send-string "us2to3" "?\^C\n")
+  (process-send-string "us2to3" "cd /src/ultrascan3/somo && ./mkus3somo\n")
+  (other-window +1)
+  )
+
+(defun ur9 ()
+  "compile us3_somo_qt5"
+  (interactive)
+  (dupwindow)
+  (select-previous-window)
+  (switch-to-buffer "us3qt5")
+  (process-send-string "us3qt5"  "?\^C\n")
+  (process-send-string "us3qt5" "cd /src/us3_somo_qt5/develop\n")
+  (process-send-string "us3qt5" ". /etc/qt/5 && qmake libus_somo.pro && make -j12 -k && qmake us_somo.pro && make -j12\n")
+  (other-window +1)
+  )
+
+
+(defun ur0 ()
+  "run us3_somo_qt5"
+  (interactive)
+  (dupwindow)
+  (select-previous-window)
+  (switch-to-buffer "qt5run")
+  (erase-buffer)
+  (process-send-string "qt5run" "?\^C\n")
+  (process-send-string "qt5run" "us3_somo\n")
+  (other-window +1)
+  )
+
+(defun usvn ()
+  "svn update"
+  (interactive)
+  (dupwindow)
+  (select-previous-window)
+  (switch-to-buffer "compile")
+  (erase-buffer)
+  (process-send-string "compile" "cd $ULTRASCAN/develop\n")
+  (process-send-string "compile" "\nsvn up\n");
+  (other-window +1)
+  )
+
+(defun myshell ()
+ "shell with . ~/p"
+ (interactive)
+ (shell)
+ (process-send-string nil ". ~/p\n")
+ )
+
+(put 'erase-buffer 'disabled nil)
+
+(defun todo ()
+ (interactive)
+ (switch-to-buffer "todo")
+ )
+
+(defun load-assoc-h ()
+  "load associated .h file into other window"
+  (interactive)
+  (dupwindow)
+  (select-previous-window)
+  (find-file (concat "../include/" (file-name-sans-extension (file-name-nondirectory buffer-file-name)) ".h" ) )
+  )
+
+(defun makethisone ()
+  "compile this one"
+  (interactive)
+  (setq my-local-file (file-name-sans-extension (file-name-nondirectory buffer-file-name) ) )
+  (dupwindow)
+  (select-previous-window)
+  (switch-to-buffer "us3qt5")
+  (erase-buffer)
+  (process-send-string "us3qt5"  "?\^C\n")
+  (process-send-string "us3qt5"  "echo cd /src/us3_somo_qt5/develop; cd /src/us3_somo_qt5/develop\n")
+  (process-send-string "us3qt5"  (concat "echo 'qmake libus_somo.pro; make src/obj/" my-local-file ".o'; qmake libus_somo.pro; make src/obj/" my-local-file ".o\n" ) )
+  (other-window +1)
+  )
+
+(defun findfunc ( findname )
+  "findfunc"
+  (interactive "MEnter the name to find:" )
+  (dupwindow)
+  (select-previous-window)
+  (switch-to-buffer "findfunc")
+  (erase-buffer)
+  (process-send-string "findfunc"  "?\^C\n")
+  (process-send-string-echo "findfunc"  "cd /src/us3_somo_qt5/develop/src")
+  (process-send-string "findfunc"  (concat "echo grep -ain " findname " \\\*.cpp;grep -ain " findname " *.cpp\n" ) )
+  (other-window +1)
+  )
+
+(global-set-key "\C-cg" 'goto-line)
+(global-set-key "\C-cl" 'global-font-lock-mode)
+(global-set-key "\C-cT" 'transient-mark-mode)
+(global-set-key "\C-cu" 'rename-uniquely)
+(global-set-key "\C-cr" 'rename-buffer)
+(global-set-key "\C-cd" 'dupwindow)
+(global-set-key "\C-ch" 'load-assoc-h)
+(global-set-key "\C-cw" 'toggle-truncate-lines)
+
+(global-set-key "\C-c1" 'us1)          ; compile us2
+(global-set-key "\C-c2" 'us2)          ; compile us3-qt4
+(global-set-key "\C-c3" 'ur1)          ; run us_hydrodyn expertmode
+(global-set-key "\C-c4" 'ur2)          ; run us
+(global-set-key "\C-c5" 'ur3)          ; run us_hydrodyn expertmode
+(global-set-key "\C-c6" 'ur4)          ; run us3_somo
+(global-set-key "\C-c7" 'usvn)         ; svn update us2
+(global-set-key "\C-c8" 'ur5)          ; us2to3
+(global-set-key "\C-c9" 'ur9)          ; compile us3-qt5
+(global-set-key "\C-c0" 'ur0)          ; run us3-qt5
+(global-set-key "\C-cs" 'myshell)
+(global-set-key "\C-ct" 'todo )
+(global-set-key "\C-cm" 'makethisone )
+
+(global-set-key "\C-cS" 'ussh)
+(global-set-key "\C-cf" 'findfunc)
+
+(custom-set-faces
+ '(highlight ((t (:underline t)))))
+(if (>= emacs-major-version 22 ) 
+    (set-face-inverse-video-p 'vertical-border nil) )
+
+(global-set-key "\C-x\C-b" 'buffer-menu)
+

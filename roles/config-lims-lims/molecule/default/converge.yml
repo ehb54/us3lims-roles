@@ -9,11 +9,15 @@
     - admins_db_pass: foobar-admin
     - self_signed: 'yes'
     - ipaddr_ext: 127.0.0.1
+    - cron_admin: root@localhost
     - ipaddr_int: 127.0.0.1
   tasks:
     - name: "Setup epel repo via geerlingguy"
       include_role:
         name: "geerlingguy.repo-epel"
+    - name: "install crontab" 
+      dnf: 
+        name: cronie
     - name: "Include config-lims-us3-user"
       include_role:
         name: "config-lims-us3-user"

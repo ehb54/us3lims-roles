@@ -15,6 +15,7 @@
       - mariadb-server
       - mariadb
       - python3-PyMySQL
+    update_cache: yes
 
 - name: Create Folder for custom mariadb service file
   file:
@@ -29,6 +30,31 @@
 - name: reload daemon
   systemd:
        daemon_reload: yes
+
+- name: Make sure path mysql ssl folder path exists
+  file:
+    path: /etc/my.cnf.d/ssl
+    state: directory
+    owner: mysql
+    group: mysql
+
+- name: Copy over mysql ssl files from ultrascan
+  copy:
+    src: "{{ item }}"
+    dest: /etc/my.cnf.d/ssl/{{ item }}
+    owner: mysql
+    group: mysql
+    mode: 0640
+  with_items:
+       - server-cert.pem
+       - server-key.pem
+       - ca-cert.pem
+
+- name: Template /etc/my.cnf
+  template:
+    src: my.cnf
+    dest: /etc/my.cnf
+    backup: yes
 
 - name: start MariaDB
   service:
@@ -55,7 +81,7 @@
         login_user: root
         login_password: "{{ root_old_db_pass }}"
   with_items:
-        - "{{ ansible_fqdn }}"
+        - "{{ hostname}}"
         - 127.0.0.1
         - localhost
         - ::1
@@ -69,105 +95,8 @@
           login_user: root
           login_password: "{{ root_db_pass }}"
 
-- name: Create database
+- name: Create databases and tables
   include: create-database.yml
 
-- name: Grant us3 user USAGE
-  mysql_user:
-        name: '{{ us3_db_user }}'
-        host: "{{ item }}"
-        append_privs: yes
-        priv: '*.*:USAGE'
-        password: "{{ us3_db_pass }}"
-        login_user: root
-        login_password: "{{ root_db_pass }}"
-  with_items:
-        - "{{ server_name }}"
-        - 127.0.0.1
-        - localhost
-        - ::1
-
-- name: Grant us3php USAGE
-  mysql_user:
-        name: 'us3php'
-        host: "{{ item }}"
-        priv: '*.*:USAGE'
-        append_privs: yes
-        password: '{{ us3php_db_pass }}'
-        login_user: root
-        login_password: "{{ root_db_pass }}"
-  with_items:
-        - "{{ server_name }}"
-        - 127.0.0.1
-        - localhost
-        - ::1
-
-- name: Grant us3 user ALL on newus3
-  mysql_user:
-        name: '{{ us3_db_user }}'
-        host: "{{ item }}"
-        priv: 'newus3.*:ALL'
-        append_privs: yes
-        password: "{{ us3_db_pass }}"
-        login_user: root
-        login_password: "{{ root_db_pass }}"
-  with_items:
-        - "{{ server_name }}"
-        - 127.0.0.1
-        - localhost
-        - ::1
-
-- name: Grant us3php ALL on newus3
-  mysql_user:
-        name: 'us3php'
-        host: "{{ item }}"
-        priv: 'newus3.*:ALL'
-        password: '{{ us3php_db_pass }}'
-        append_privs: yes
-        login_user: root
-        login_password: "{{ root_db_pass }}"
-  with_items:
-        - "{{ server_name }}"
-        - 127.0.0.1
-        - localhost
-        - ::1
-
-- name: Grant gfac ALL on gfac
-  mysql_user:
-        name: '{{ gbl_db_user }}'
-        host: "{{ item }}"
-        priv: "{{ gbl_db_name }}.*:ALL"
-        append_privs: yes
-        password: '{{ gbl_db_pass }}'
-        login_user: root
-        login_password: "{{ root_db_pass }}"
-  with_items:
-        - "{{ server_name }}"
-        - 127.0.0.1
-        - localhost
-        - ::1
-
-- name: Make sure path mysql ssl folder path exists
-  file:
-    path: /etc/my.cnf.d/ssl
-    state: directory
-    owner: mysql
-    group: mysql
-
-- name: Copy over mysql ssl files from ultrascan
-  copy:
-    src: "{{ item }}"
-    dest: /etc/my.cnf.d/ssl/{{ item }}
-    owner: mysql
-    group: mysql
-    mode: 0640
-  with_items:
-       - server-cert.pem
-       - server-key.pem
-       - ca-cert.pem
-
-- name: Copy over my.cnf
-  copy:
-    src: my.cnf
-    dest: /etc/my.cnf
-    backup: yes
+- name: Create db grants
+  include: create-grants.yml

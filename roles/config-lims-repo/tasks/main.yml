@@ -4,7 +4,8 @@
   shell: dnf config-manager --set-enabled PowerTools
   args:
      warn: false
-
+  changed_when: false
+  when: (ansible_facts['distribution'] == "CentOS" and ansible_facts['distribution_major_version'] == "8") 
 
 - name: install epel via greeling's role 
   include_role:

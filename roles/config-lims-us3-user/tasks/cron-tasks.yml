@@ -1,0 +1,52 @@
+---
+# https://habilis.net/cronic/
+- name: Copy over cronic script
+  copy:
+    src: cronic
+    dest: /usr/bin/cronic
+    mode: '0755'
+    owner: root
+    group: root
+
+- name: Set Cron Admin
+  cron:
+    name: MAILTO
+    env: yes
+    job: "{{ cron_admin }}"
+    cron_file: /etc/crontab
+    user: root
+
+- name: Set gridctl_pro cronjob
+  cron:
+    name: gridctl_pro cronjob
+    minute: "*/1"
+    job: /usr/bin/cronic php /home/us3/lims/bin/gridctl_pro.php
+    user: us3
+    cron_file: /etc/crontab
+  when: cron_enable_pro == 'yes'
+
+- name: set gridctl_dev cronjob
+  cron:
+    name: gridctl_dev cronjob
+    minute: "*/1"
+    job: /usr/bin/cronic php /home/us3/lims/bin/gridctl_dev.php
+    user: us3
+    cron_file: /etc/crontab
+  when: cron_enable_dev == 'yes'
+
+- name: set cluster_status cronjob
+  cron:
+    name: cluster_status cronjob
+    minute: "*/12"
+    job: /usr/bin/cronic php /home/us3/lims/bin/cluster_status.php
+    user: us3
+    cron_file: /etc/crontab
+
+- name: set update_notice cronjob
+  cron:
+    name: update_notice cronjob
+    minute: "*/20"
+    job: /usr/bin/cronic php /home/us3/lims/bin/update_notice.php
+    user: us3
+    cron_file: /etc/crontab
+  when: cron_enable_update_notice == 'yes'

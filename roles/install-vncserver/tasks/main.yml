@@ -1,0 +1,42 @@
+---
+# tasks file for install-vncserver
+
+- name: Install tigervnc-server for RedHat
+  yum:
+    name:
+      - xorg-x11-fonts-Type1
+      - tigervnc-server
+      - tigervnc-server-module
+    state: present
+  when: ansible_facts['os_family'] == "RedHat" and
+        ( vncserver is not defined or vncserver == "tiger" )
+
+- name: Install tigervnc-server for Debian
+  apt:
+    name:
+      - tigervnc-standalone-server
+      - tigervnc-xorg-extension
+      - tigervnc-viewer
+    state: present
+  when: ansible_facts['os_family'] == "Debian" and
+        ( vncserver is not defined or vncserver == "tiger" )
+
+- name: Install tightvnc-server for Debian
+  apt:
+    name:
+      - xfce4
+      - xfce4-goodies
+      - tightvncserver
+    state: present
+  when: ansible_facts['os_family'] == "Debian" and
+        vncserver is defined and
+        vncserver == "tight"
+        
+- name: Install tightvnc-server for RedHat
+  fail:
+    msg: "We do not have ansible tasks configured for installing tightvnc server on RedHat based systems. We suggest you set the variable vncserver: tiger"
+  when: ansible_facts['os_family'] == "Debian" and
+        vncserver is defined and
+        vncserver == "tight"
+        
+

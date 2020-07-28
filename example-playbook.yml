@@ -1,21 +1,38 @@
 ---
-- hosts: all
+- hosts: example-host
+  remote_user: usadmin
+
   pre_tasks:
        - name: disable selinux
          selinux:
             state: disabled
+       - name: update system
+         yum: name=* state=latest
+         when: ansible_facts['os_family'] == "RedHat"
+       - name: install EPEL repo
+         yum: name=epel-release state=present
+         when: ansible_facts['os_family'] == "RedHat"
+
   roles:
+        - config-lims-admin
+        - config-lims-firewall
         - config-lims-repo
         - config-lims-us3-user
         - config-lims-database
         - config-lims-apache
         - config-lims-php
         - config-lims-lims
-        - config-lim-slurm
-        - config-lims-firewall
+        - config-lims-slurm
+#        - build-qt
+#        - build-qwt
+#        - build-us3
+#        - install-vncserver
+#        - install-postfix
+
   become: yes
   vars:
         # Required variables to define:
+        # N.B. once you set these, you can't change them simply by rerunning ansible-playbook for the same remote host!
         - us3_db_pass: "foobar-demo"
         - root_db_pass: "foobar-super"
         - admins_db_pass: "foobar-admin"
@@ -25,19 +42,47 @@
         - limsadmin_db_pass: "foobar-iam-admin" 
 
         - admin_email: "example@email.org"
+        - cron_admin: "example@email.org" # root@localhost 
         
         - ipaddr_ext: "192.168.5.30"
         - ipaddr_int: "192.168.5.30"
         
-        - self_signed: 'yes' 
-        
-        - cerbot_admin_email: "{{ admin_email }}" 
+        - self_signed: 'yes' # change to 'no' to use certbot 
+
+        - qt_major_version: "5.14"
+        - qt_version: "5.14.2"
+        - qwt_version: "6.1.5"
+        - cores_for_parallel_compile: 4
+        - us3_branch: "master"
+
+        - postfix_relay_smtp_host: smtp.gmail.com
+        - postfix_relay_smtp_port: 587
+        - postfix_relay_smtp_user: us.etc.tests@gmail.com
+        - postfix_relay_smtp_password: put_app_password_here
+
+        # set this to a specific value (could be numeric ip) instead of {{ ansible_fqdn }} if you with, e.g. if the host is private
+        # N.B. you can only configure one host per ansible-playbook run if you do not use {{ ansible_fqdn }}
+        - hostname: "{{ ansible_fqdn }}"
+        - postfix_hostname: "{{ hostname }}"
+        # N.B. if your host name is pure ip (e.g. 1.2.3.4 etc), you need to configure a text string prefix as commented below
+        # - postfix_hostname: "us-{{ hostname }}"
+
+        # Doesn't matter if self-signed is enabled but here as an example for some certbot uses
+        - certbot_create_if_missing: true
+        - certbot_admin_email: "{{ admin_email }}" 
         - certbot_create_standalone_stop_services: [httpd] # centos/RHEL 
-        - cerbot_certs: 
+        - certbot_certs: 
             - domains: 
-                  - "{{ ansible_fqdn }}" 
-                  
-        - slurm_ver: 20.02.2
+                  - "{{ hostname }}" 
+
+        - certbot_auto_renew: true 
+        - certbot_auto_renew_hour: "1" 
+        - certbot_auto_renew_minute: "30" 
+        - cerbot_auto_renew_options: "--quiet --no-self-upgrade"
+
+        - slurm_ver: 20.02.3 # Change to appropriate version 
+        - slurm_md5: c71a300d6c5d33ef8ca60e52a203bb1e
+        - slurm_cores : 2
 
         # Overrride variables that are default
         - lims_admin: "John Smith"

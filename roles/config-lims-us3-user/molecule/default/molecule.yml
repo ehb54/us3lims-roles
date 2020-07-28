@@ -5,8 +5,15 @@ driver:
   name: docker
 platforms:
   - name: instance
-    image: docker.io/pycontribs/centos:8
+    image: geerlingguy/docker-${MOLECULE_DISTRO:-centos8}-ansible
     pre_build_image: true
+    command: ""
+    tempfs: 
+      - /run
+      - /tmp
+    volumes: 
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+    privileged: true
 provisioner:
   name: ansible
 verifier:

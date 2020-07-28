@@ -3,6 +3,7 @@
   hosts: all
   vars:
     - slurm_ver: 20.02.2
+    - slurm_md5: c57b67b252ec6b64509fafe6453bf716
   tasks:
     - name: "install mariadb"
       dnf:
