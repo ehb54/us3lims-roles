@@ -1,12 +1,10 @@
-# Virtual Host for Chinook
-
 <VirtualHost *:80>
-   ServerAdmin {{ server_admin }} 
-   DocumentRoot "{{ www_uslims }}"
-   ServerName "{{ server_name }}"
-   ErrorLog "/var/log/httpd/{{ hostname }}-error.log"
-   CustomLog "/var/log/httpd/{{ hostname }}-access.log" combined
-RewriteEngine on
-RewriteCond %{SERVER_NAME} ={{ server_name }}
-RewriteRule ^ https://%{SERVER_NAME}%{REQUEST_URI} [END,NE,R=permanent]
+  ServerAdmin {{ server_admin }} 
+  DocumentRoot "{{ www_uslims }}"
+  ServerName "{{ server_name }}"
+  ErrorLog "/var/log/httpd/{{ hostname }}-error.log"
+  CustomLog "/var/log/httpd/{{ hostname }}-access.log" combined
+  RewriteEngine on
+  RewriteCond %{SERVER_NAME} ={{ server_name }}
+  RewriteRule ^ https://%{SERVER_NAME}%{REQUEST_URI} [END,NE,R=permanent]
 </VirtualHost>

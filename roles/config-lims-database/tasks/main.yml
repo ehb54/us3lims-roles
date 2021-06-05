@@ -8,14 +8,24 @@
                 - us3php_db_pass is defined
                 - admins_db_pass is defined
 
+- name: Turn on proxychains if use_proxychains is true
+  shell:
+    cmd: "echo 'LD_PRELOAD=/usr/lib/libproxychains4.so' > /etc/environment"
+  when: use_proxychains|default(false)
+    
 - name: Install mariadb & additionals
   dnf:
-    enablerepo: PowerTools
+    enablerepo: powertools
     name:
       - mariadb-server
       - mariadb
       - python3-PyMySQL
     update_cache: yes
+
+- name: Turn off proxychains if use_proxychains is true
+  shell:
+    cmd: "echo '# LD_PRELOAD=/usr/lib/libproxychains4.so' > /etc/environment"
+  when: use_proxychains|default(false)
 
 - name: Create Folder for custom mariadb service file
   file:
@@ -56,9 +66,10 @@
     dest: /etc/my.cnf
     backup: yes
 
-- name: start MariaDB
+- name: start & enable MariaDB
   service:
        name: mariadb
+       enabled: yes
        state: started
 
 - name: check if root_pw_set

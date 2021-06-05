@@ -1,0 +1,37 @@
+---
+# tasks file for install-msttcore-fonts
+
+- name: install dependencies
+  yum:
+    name:
+      - curl
+#      - cabextract
+      - xorg-x11-font-utils
+      - fontconfig
+
+- name: get and extract cabextract source
+  ansible.builtin.unarchive:
+    src: https://www.cabextract.org.uk/cabextract-1.9.1.tar.gz
+    dest: /tmp
+    remote_src: yes
+
+- name: compile cabextract
+  shell:
+    cmd: ./configure --prefix=/usr && make -j {{ cores_for_parallel_compile }} && make install
+    chdir: /tmp/cabextract-1.9.1
+
+- name: Download mscorefont2 rpm from sourceforge
+  ansible.builtin.get_url:
+    url: https://downloads.sourceforge.net/project/mscorefonts2/rpms/msttcore-fonts-installer-2.6-1.noarch.rpm
+    dest: /tmp/msttcore-fonts-installer-2.6-1.noarch.rpm
+    mode: '0440'
+    
+- name: Install rpm
+  command:
+    cmd: rpm -i --nodeps msttcore-fonts-installer-2.6-1.noarch.rpm 
+    chdir: /tmp
+
+- name: Run fc-cache -f
+  command:
+    cmd: fc-cache -f
+    

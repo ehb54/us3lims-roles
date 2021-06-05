@@ -1,0 +1,96 @@
+#!/usr/bin/perl
+
+### user defines
+$serverfile = "/etc/tigervnc/vncserver.users";
+
+### end user defines
+
+$notes = "usage: $0 {status|start|restart|stop|enable|disable}
+
+controls vnc server for user
+
+options:
+    status        : reports systemd status for vnc service for user
+    start         : starts the vnc service for user
+    stop          : stop the vnc service for user
+    stop          : stop the vnc service for user
+    restart       : restarts the vnc service for user
+    enable        : enables the vnc service for user at system boot
+    disable       : disables the vnc service for user at system boot
+
+";
+
+%okargs = (
+    "status" => 1,
+    "start" => 1,
+    "restart" => 1,
+    "stop" => 1,
+    "enable" => 1,
+    "disable" => 1
+    );
+
+%infoargs = (
+    "status" => 1,
+    "start" => 1,
+    "restart" => 1
+    );
+
+%startargs = (
+    "start" => 1,
+    "restart" => 1,
+    );
+
+$user = $ENV{'SUDO_USER'};
+die "$0: must be run as a user (not root) and with a sudo prefix\n" if !$user || $user eq 'root';
+die "$0: $serverfile does not exist\n" if !-e $serverfile;
+die "$0: $serverfile is not readable\n" if !-r $serverfile;
+
+$arg = shift || die $notes;
+die $notes if @ARGV;
+
+die "Invalid argument '$arg'\n\n$notes" if !$okargs{ $arg };
+
+@vncusers = `grep -v ^\# $serverfile`;
+grep chomp, @vncusers;
+@vncusers = grep /^\s*:\d+\s*=\s*\S+\s*$/, @vncusers;
+
+for $l ( @vncusers ) {
+    ( $vport, $vuser ) = $l =~ /\s*:(\d+)\s*=\s*(\S+)\s*$/, $l;
+    $vports{ $vuser } = $vport;
+}        
+
+die "$0: user '$user' not defined in $serverfile. Please contact your administrator to request vnc access. Terminating.\n" if !$vports{$user};
+
+if ( $startargs{$arg} ) {
+    my @userinfo     = `egrep -i '^$user:' /etc/passwd`;
+    my ( $userhome ) = $userinfo[0] =~ /[^:]*:[^:]*:[^:]*:[^:]*:([^:]*):[^:]*$/;
+    my $uservncd     = "$userhome/.vnc";
+    my $uservncc     = "$uservncd/config";
+    my $uservncpw    = "$uservncd/passwd";
+    my $userexists   = scalar @userinfo;
+    my $userstatus   = sprintf(
+        " %-6s | %-13s | %-10s | %-12s | %-9s | %-10s\n"
+        , $vports{$user} ? $vports{$user} : "NONE"
+        , $user
+        , $userexists    ? "Exists" : "MISSING"
+        , -e $uservncd   ? "Exists" : "MISSING"
+        , -e $uservncpw  ? "Exists" : "MISSING"
+        , -e $uservncc   ? "Exists" : "MISSING"
+        );
+                          
+    my $errors = "";
+    $errors .= "Error: you must run vncpasswd before starting\n" if !-e $uservncpw;
+    $errors .= "Error: config file $uservncc missing, you must create one before starting\n" if !-e $uservncc;
+    $errors .= "Error: vnc directory $uservncd missing. This will also be created by running vncpasswd, but teh config file must be created manually or via vncadmin\n" if !-d $uservncd;
+    die $errors if $errors;
+}
+    
+
+print `systemctl $arg vncserver\@:$vports{$user}\n`;
+
+if ( $infoargs{$arg} ) {
+    $nport = $vports{$user} + 5900;
+    print "vnc port for user $user is :$vports{$user}
+for ssh tunneling use numerical port $nport\n";
+}
+

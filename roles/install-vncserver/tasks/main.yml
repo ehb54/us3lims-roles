@@ -7,6 +7,7 @@
       - xorg-x11-fonts-Type1
       - tigervnc-server
       - tigervnc-server-module
+      - tigervnc
     state: present
   when: ansible_facts['os_family'] == "RedHat" and
         ( vncserver is not defined or vncserver == "tiger" )
@@ -39,4 +40,42 @@
         vncserver is defined and
         vncserver == "tight"
         
+- name: Add group 'vncusers'
+  ansible.builtin.group:
+    name: vncusers
+    state: present
 
+- name: Copy over vncadmin
+  copy:
+    src: vncadmin
+    dest: /usr/sbin/vncadmin
+    mode: u=rx
+    owner: root
+    group: root
+
+- name: Copy over vncctl
+  copy:
+    src: vncctl
+    dest: /usr/bin/vncctl
+    mode: u=rwx,g=rx,o=rx
+    owner: root
+    group: root
+
+- name: Copy over vncctl to sudoers.d
+  copy:
+    src: vncctl.sudoers.d
+    dest: /etc/sudoers.d/vncctl
+    mode: u=rw,g=r,o=r
+    owner: root
+    group: root
+
+- name: Add admin users to vnc
+  command:
+    cmd: /usr/sbin/vncadmin add {{ item }}
+  with_items:
+    - demeler
+    - gegorbet
+    - alexey
+    - ehb
+  ignore_errors: yes
+  

@@ -131,3 +131,29 @@
         state: import
         target: /tmp/global-db.sql
   when: root_pwd_check.rc == 0
+
+# Ansible's mysql_db does not support a "chdir" option, so need to use the shell
+#- name: Populate us3 tables
+#  mysql_db:
+#        chdir: /home/us3/lims/database/sql
+#        login_user: root
+#        login_password: "{{ root_db_pass }}"
+#        name: us3
+#        state: import
+#        target: 
+#  when: root_pwd_check.rc == 0
+
+- name: Create us3 db
+  mysql_db:
+    login_user: root
+    login_password: "{{ root_db_pass }}"
+    name: us3
+    state: present
+#  when: root_pwd_check.rc == 0
+
+- name: Populate us3 tables
+  shell:
+    chdir: /home/us3/lims/database/sql
+    cmd: mysql -u root -p'{{ root_db_pass }}' us3 < /home/us3/lims/database/sql/us3.sql
+#  when: root_pwd_check.rc == 0
+    

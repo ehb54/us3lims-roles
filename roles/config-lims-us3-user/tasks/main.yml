@@ -1,12 +1,22 @@
 ---
 # 1009 was picked just to follow the uid on demeler3
-- name: install dependencies
+- name: install dependencies RedHat
   dnf:
     name:
       - git
       - httpd
       - php
     update_cache: yes
+  when: ansible_facts['os_family'] == "RedHat"
+
+- name: install dependencies Debian
+  apt:
+    name:
+      - git
+      - apache2
+      - php
+    state: present
+  when: ansible_facts['os_family'] == "Debian"
 
 - name: Create group for us3
   group:
@@ -26,14 +36,14 @@
     path: '/home/us3/lims/database/instances'
     state: directory
     owner: us3
-    group: apache
+    group: "{{ www_user }}"
 
 - name: Make sure work folder exists
   file:
     path: '/home/us3/lims/work'
     state: directory
     owner: us3
-    group: apache
+    group: "{{ www_user }}"
 
 - name: Make sure scripts folder exists
   file:
@@ -56,10 +66,20 @@
    version: "{{ branch }}"
    dest: "/home/us3/lims/database/sql"
 
+- name: git clone us3lims_dbutils repository
+  git:
+   repo: https://github.com/ehb54/us3lims_dbutils.git
+   version: "{{ branch }}"
+   dest: "/home/us3/lims/database/utils"
+
+- set_fact:
+    gridctl_branch: "{{ branch }}"
+  when: gridctl_branch is undefined
+    
 - name: git clone gridctl repository to bin
   git:
    repo: https://github.com/ehb54/us3lims_gridctl.git
-   version: "{{ branch }}"
+   version: "{{ gridctl_branch }}"
    dest: "/home/us3/lims/bin"
 
 - name: Change permissions in gridctl
@@ -73,6 +93,18 @@
   template:
     src: listen-config.php.j2
     dest: /home/us3/lims/bin/listen-config.php
+    
+- name: Set us3 ownership of us3/lims/bin
+  command:
+    chdir: "/home/us3/lims/bin"
+    cmd: chown -R us3:us3 .
+    warn: false
+
+- name: Set us3 ownership of us3/lims/database/sql
+  command:
+    chdir: "/home/us3/lims/database/sql"
+    cmd: chown -R us3:us3 .
+    warn: false
 
 - name: Create us3/etc
   file:
@@ -108,5 +140,8 @@
 - name: Start us3-listen service
   service:
     name: us3-listen
-    state: started
+    enabled: yes
+    state: restarted
   changed_when: false
+
+

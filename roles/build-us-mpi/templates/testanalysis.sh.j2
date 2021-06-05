@@ -1,0 +1,49 @@
+#!/usr/bin/bash
+
+# **** test analysis
+
+set -e
+
+. /etc/profile
+
+cd {{ mpi_test_path }}/analysis
+
+# temporarily allow errors (files do not exist) during initial cleanup
+set +e
+rm hpcinput-localhost-uslims3_test-00001.tar stdout stderr 2> /dev/null
+set -e
+
+tar Jxf hpcinput-localhost-uslims3_test-00001.tar.xz
+
+cat > test.slurm <<EOF
+#!/bin/bash
+#SBATCH -p batch
+#SBATCH -J US3_test_1
+#SBATCH -N 1
+#SBATCH -n 8
+#SBATCH -t 48:00:00
+#SBATCH -e {{ mpi_test_path }}/analysis/stderr
+#SBATCH -o {{ mpi_test_path }}/analysis/stdout
+# -W causes sbatch to wait until completion
+#SBATCH -W
+{{ slurm_sbatch_extras }}
+
+module purge
+module load mpi
+module load ultrascan/mpi
+
+# export UCX_LOG_LEVEL=error
+# export OMPI_MCA_btl=self,sm,tcp
+export QT_LOGGING_RULES='*.debug=true'
+
+cd {{ mpi_test_path }}/analysis
+
+mpirun us_mpi_analysis -walltime 2880 -mgroupcount 1 hpcinput-localhost-uslims3_test-00001.tar
+EOF
+
+# we are giving it three minutes to complete
+timeout 180 sbatch test.slurm
+
+# test if the expected output files exist
+ls stdout stderr
+

@@ -18,8 +18,13 @@
   file:
         path: "{{ www_base }}"
         owner: us3
-        group: apache
+        group: "{{ www_user }}"
         state: directory
+
+- name: Warning if certbot fails
+  ansible.builtin.debug:
+    msg: certbot will fail if firewall does not have ports 80,443 open
+  when: self_signed == 'no'
 
 - include_role:
          name: geerlingguy.certbot

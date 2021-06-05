@@ -35,10 +35,11 @@ CREATE TABLE `analysis` (
   `gfacID` varchar(80) DEFAULT NULL,
   `cluster` varchar(64) DEFAULT NULL,
   `us3_db` varchar(32) DEFAULT NULL,
+  `autoflowAnalysisID` int(11) DEFAULT NULL,
   `stdout` longtext,
   `stderr` longtext,
   `tarfile` mediumblob,
-  `status` enum('SUBMITTED','SUBMIT_TIMEOUT','RUNNING','RUN_TIMEOUT','DATA','DATA_TIMEOUT','COMPLETE','CANCELLED','CANCELED','FAILED','FAILED_DATA','ERROR') DEFAULT 'SUBMITTED',
+  `status` enum('SUBMITTED','SUBMIT_TIMEOUT','RUNNING','RUN_TIMEOUT','DATA','DATA_TIMEOUT','COMPLETE','CANCELLED','CANCELED','FAILED','FAILED_DATA','ERROR','FINISHED','DONE') DEFAULT 'SUBMITTED',
   `queue_msg` text,
   `time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)

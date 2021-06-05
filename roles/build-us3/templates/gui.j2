@@ -1,0 +1,15 @@
+#%Module 1.0
+#
+#  us-gui module for use with 'environment-modules' package:
+#
+
+# Only allow one us-mpi module to be loaded at a time
+conflict ultrascan
+
+# Define prefix so PATH and MANPATH can be updated.
+setenv        US_GUI        /opt/ultrascan3
+setenv        ULTRASCAN     /opt/ultrascan3
+prepend-path  PATH          /opt/ultrascan3/bin
+prepend-path  LD_LIBRARY_PATH /opt/ultrascan3/lib:/opt/qt-{{ qt_version }}/lib:/opt/qt-{{ qt_version }}-qwt-{{ qwt_version }}/lib
+
+

@@ -1,5 +1,5 @@
 apache_user: us3
-apache_group: apache 
+apache_group: "{{ www_user }}"
 www_base: "/srv/www/htdocs" 
 www_uslims: "{{ www_base }}/uslims3" 
 ssl_key_path: "/etc/letsencrypt/live/{{ server_name }}/privkey.pem"

@@ -1,0 +1,42 @@
+---
+# tasks file for upgrade-environment-modules
+
+- name: Copy over template files for ultrascan/gui modulefiles
+  template: 
+    src: gui.j2
+    dest: /etc/modulefiles/ultrascan/gui
+    mode: '0644'
+
+- name: Copy over template files for ultrascan/gui-build modulefiles for Debian
+  template: 
+    src: gui-build.j2
+    dest: /etc/modulefiles/ultrascan/gui-build
+    mode: '0644'
+  when: ansible_facts['os_family'] == "Debian"
+
+- name: Copy over template files for ultrascan/gui-build modulefiles for RedHat
+  template: 
+    src: gui-build-gcc-toolset-9.j2
+    dest: /etc/modulefiles/ultrascan/gui-build
+    mode: '0644'
+  when: ansible_facts['os_family'] == "RedHat"
+
+- name: Copy over template files for ultrascan/mpi modulefiles
+  template: 
+    src: mpi.j2
+    dest: /etc/modulefiles/ultrascan/mpi
+    mode: '0644'
+
+- name: Copy over template files for ultrascan/mpi-build modulefiles for Debian
+  template: 
+    src: mpi-build.j2
+    dest: /etc/modulefiles/ultrascan/mpi-build
+    mode: '0644'
+  when: ansible_facts['os_family'] == "Debian"
+
+- name: Copy over template files for ultrascan/mpi-build modulefiles for RedHat
+  template: 
+    src: mpi-build-gcc-toolset-9.j2
+    dest: /etc/modulefiles/ultrascan/mpi-build
+    mode: '0644'
+  when: ansible_facts['os_family'] == "RedHat"

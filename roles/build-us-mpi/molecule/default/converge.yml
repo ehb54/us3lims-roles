@@ -1,0 +1,7 @@
+---
+- name: Converge
+  hosts: all
+  tasks:
+    - name: "Include build-us-mpi"
+      include_role:
+        name: "build-us-mpi"

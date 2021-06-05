@@ -1,0 +1,39 @@
+#!/usr/bin/bash
+
+# **** test slurm
+
+set -e
+
+. /etc/profile
+
+cd {{ mpi_test_path }}/slurm
+
+# temporarily allow errors (files do not exist) during initial cleanup
+set +e
+rm stdout stderr 2> /dev/null
+set -e
+
+cat > test.slurm <<EOF
+#!/bin/bash
+#SBATCH -p batch
+#SBATCH -J test_job
+#SBATCH -N 1
+#SBATCH -n 8
+#SBATCH -t 00:01:00
+#SBATCH -e {{ mpi_test_path }}/slurm/stderr
+#SBATCH -o {{ mpi_test_path }}/slurm/stdout
+# -W causes sbatch to wait until completion
+#SBATCH -W
+{{ slurm_sbatch_extras }}
+
+module load mpi
+cd {{ mpi_test_path }}/slurm
+
+mpirun {{ mpi_test_path }}/mpi/hellompi
+EOF
+
+timeout 120 sbatch test.slurm
+
+# test if the expected output files exist
+ls stdout stderr
+

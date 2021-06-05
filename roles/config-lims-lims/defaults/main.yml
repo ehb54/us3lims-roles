@@ -9,6 +9,7 @@ www_base: "/srv/www/htdocs"
 www_common: "{{ www_base }}/common"
 www_uslims: "{{ www_base }}/uslims3"
 www_newlims: "{{ www_uslims }}/uslims3_newlims"
+www_uslims3_data: "{{ www_uslims }}/uslims3_data"
 db_configured: "yes"
 
 ### Defaults for config.php

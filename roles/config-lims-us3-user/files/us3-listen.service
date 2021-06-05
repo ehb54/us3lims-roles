@@ -6,6 +6,13 @@ After=network-online.target
 [Service]
 User=us3
 
-Type=simple
+Type=oneshot
 
-ExecStart=php /home/us3/lims/bin/listen.php
+ExecStart=php /home/us3/lims/bin/services.php start
+ExecReload=php /home/us3/lims/bin/services.php restart
+ExecStop=php /home/us3/lims/bin/services.php stop
+
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

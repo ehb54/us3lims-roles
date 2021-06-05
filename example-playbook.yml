@@ -3,34 +3,71 @@
   remote_user: usadmin
 
   pre_tasks:
-       - name: disable selinux
-         selinux:
-            state: disabled
-       - name: update system
-         yum: name=* state=latest
-         when: ansible_facts['os_family'] == "RedHat"
-       - name: install EPEL repo
-         yum: name=epel-release state=present
-         when: ansible_facts['os_family'] == "RedHat"
+      - name: set www_user for Debian
+        set_fact:
+          www_user: "www-data"
+        when: ansible_os_family == "Debian"
+
+      - name:  set www_user for RedHat
+        set_fact:
+          www_user: "apache"
+        when: ansible_os_family == "RedHat"
+
+      - name: disable selinux
+        selinux:
+           state: disabled
+
+      - name: update system
+        yum: name=* state=latest
+        when: ansible_facts['os_family'] == "RedHat"
+
+      - name: install EPEL repo for CentOS
+        yum: name=epel-release state=present
+        when: ansible_facts['distribution'] == "CentOS"
+
+      - name: enable codeready for RedHat
+        command:
+           cmd: subscription-manager repos --enable "codeready-builder-for-rhel-8-x86_64-rpms"
+        when: ansible_facts['distribution'] == "RedHat"
+
+      - name: install EPEL repo for RedHat
+        yum:
+           name: https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm
+           state: present
+        when: ansible_facts['distribution'] == "RedHat"
 
   roles:
-        - config-lims-admin
-        - config-lims-firewall
-        - config-lims-repo
-        - config-lims-us3-user
-        - config-lims-database
-        - config-lims-apache
-        - config-lims-php
-        - config-lims-lims
-        - config-lims-slurm
-#        - build-qt
-#        - build-qwt
-#        - build-us3
-#        - install-vncserver
-#        - install-postfix
+      - config-lims-gui
+      - config-lims-admin
+      - config-lims-firewall
+      - config-lims-repo
+      - config-lims-us3-user
+      - config-lims-database
+      - config-lims-apache
+      - config-lims-php
+      - config-lims-lims
+      - config-lims-slurm
+      - build-qt
+      - build-qwt
+      - build-us3
+      - build-us-mpi
+      - install-vncserver
+      - install-postfix
+      - install-chrony
+      - install-google-fonts
+      - install-msttcore-fonts
+      - install-reverse-tunnel
 
   become: yes
   vars:
+        - install_workstation: false
+        - install_commercial: true
+
+        # uncomment one of the below for default allowed submissions
+        - submit_localonly: true
+        # - submit_remoteonly : true
+        # - submit_localandremote : true
+
         # Required variables to define:
         # N.B. once you set these, you can't change them simply by rerunning ansible-playbook for the same remote host!
         - us3_db_pass: "foobar-demo"
@@ -38,7 +75,6 @@
         - admins_db_pass: "foobar-admin"
         - gbl_db_pass: "foobar-global"
         - us3php_db_pass: "foobar-php"
-        
         - limsadmin_db_pass: "foobar-iam-admin" 
 
         - admin_email: "example@email.org"
@@ -54,11 +90,22 @@
         - qwt_version: "6.1.5"
         - cores_for_parallel_compile: 4
         - us3_branch: "master"
+        - gridctl_branch: "ehb-dev"
+        - common_branch: "ehb-dev"
+        - newinst_branch: "ehb-dev"
+        - webinfo_branch: "ehb-dev"
 
         - postfix_relay_smtp_host: smtp.gmail.com
         - postfix_relay_smtp_port: 587
         - postfix_relay_smtp_user: us.etc.tests@gmail.com
         - postfix_relay_smtp_password: put_app_password_here
+
+        # required if install-reverse-tunnel role run
+        # you will manually need to install usadmin's public key on the rtunnel_user @ rtunnel_ip's authorized keys
+        - rtunnel_user: "ultrascan"
+        - rtunnel_ip: "142.66.17.9"
+        # assign unique port
+        - rtunnel_port: "220XX"
 
         # set this to a specific value (could be numeric ip) instead of {{ ansible_fqdn }} if you with, e.g. if the host is private
         # N.B. you can only configure one host per ansible-playbook run if you do not use {{ ansible_fqdn }}
@@ -82,7 +129,14 @@
 
         - slurm_ver: 20.02.3 # Change to appropriate version 
         - slurm_md5: c71a300d6c5d33ef8ca60e52a203bb1e
+
+        # N.B. slurm_cores can not exceed available cores, if it does, the node will be stuck "draining" (waiting for available resources)
+        #      if you want to develop (not production!) on a smaller system
+        #         add "#SBATCH -O" to your sbatch submission scripts to allow overcommitting
+        #         set - slurm_sbatch_extras : "#SBATCH -O\n" for slurm testing scripts via ansible
         - slurm_cores : 2
+        - slurm_sbatch_extras : ""
+        # - slurm_sbatch_extras : "#SBATCH -O\n"
 
         # Overrride variables that are default
         - lims_admin: "John Smith"

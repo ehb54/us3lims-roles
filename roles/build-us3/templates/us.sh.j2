@@ -1,3 +1,3 @@
 #!/bin/sh
 
-env LD_LIBRARY_PATH=/opt/qt-{{ qt_version }}/lib:/opt/qt-{{ qt_version }}-qwt-{{ qwt_version }}/lib:/opt/ultrascan3/lib /opt/ultrascan3/bin/us
+exec env PATH=/opt/ultrascan3/lib:$PATH LD_LIBRARY_PATH=/opt/qt-{{ qt_version }}/lib:/opt/qt-{{ qt_version }}-qwt-{{ qwt_version }}/lib:/opt/ultrascan3/lib /opt/ultrascan3/bin/us

@@ -1,0 +1,19 @@
+---
+# tasks file for install-google-fonts
+
+- name: Create directory /usr/share/fonts/google-fonts-full if it does not already exist
+  ansible.builtin.file:
+    path: /usr/share/fonts/google-fonts-full
+    state: directory
+    mode: '0755'
+
+- name: Download and unzip google fonts
+  ansible.builtin.unarchive:
+    src: https://github.com/google/fonts/archive/main.zip
+    dest: /usr/share/fonts/google-fonts-full
+    remote_src: yes
+
+- name: Run fc-cache -f
+  command:
+    cmd: fc-cache -f
+    

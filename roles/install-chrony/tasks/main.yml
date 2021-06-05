@@ -1,0 +1,25 @@
+---
+# tasks file for install-chrony
+
+- name: Install chrony (ntp)  RedHat
+  yum:
+    name:
+      - chrony
+    state: present
+  when: ansible_facts['os_family'] == "RedHat"
+
+- name: Install chrony (ntp)  Debain
+  apt:
+    name:
+      - chrony
+    state: present
+  when: ansible_facts['os_family'] == "Debian"
+
+- name: Enable chronyd
+  service:
+    name : chronyd
+    enabled: yes
+    state: started
+    
+    
+     

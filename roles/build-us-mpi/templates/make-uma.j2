@@ -1,0 +1,62 @@
+#!/bin/sh
+#	make-uma	Make Us_Mpi_Analysis (update,build,install)
+
+US3BASE={{ us3_nodb_path }}
+UTILDIR=$US3BASE/utils
+PROGDIR=$US3BASE/programs/us_mpi_analysis
+ULIBDIR={{ us3_cluster_path }}/lib/
+UBINDIR={{ us3_cluster_path }}/bin/
+
+QTDIR=/opt/qt-{{ qt_version }}
+QWTDIR=/opt/qt-{{ qt_version }}-qwt-{{ qwt_version }}
+QMAKESPEC=linux-g++-64
+
+PROG=us_mpi_analysis
+LNAM=libus_utils
+LIBR=${LNAM}.so.10
+ARGA="$@"
+if [ "$ARGA" = "all" ]; then
+  ARGA="update build install"
+fi
+
+ARGI="$1"
+for ARGI in $ARGA; do
+ 
+case "$ARGI" in
+
+  update)
+    cd ${US3BASE}
+    git pull
+    git checkout {{ us3_branch }}
+  ;;
+
+  build)
+    cd ${UTILDIR}
+    ${QTDIR}/bin/qmake
+    make -j {{ cores_for_parallel_compile }}
+    cd ${PROGDIR}
+    ${QTDIR}/bin/qmake
+    make -j {{ cores_for_parallel_compile }}
+  ;;
+
+  install|copy)
+    cd ${PROGDIR}
+    echo "cp --preserve=timestamps ${PROG} ${UBINDIR}"
+    echo "cp --preserve=timestamps ../../lib/${LIBR} ${ULIBDIR}"
+    cp --preserve=timestamps ${PROG} ${UBINDIR}
+    cp --preserve=timestamps ../../lib/${LIBR} ${ULIBDIR}
+    chown -R us3 ${UBINDIR} ${ULIBDIR}
+    ls -l ${UBINDIR} ${ULIBDIR}
+  ;;
+
+  *)
+    echo "make-uma    -    Make Us_Mpi_Analysis"
+    echo "   usage:"
+    echo "make-uma update     (do git pull)"
+    echo "make-uma build      (build ${LNAM} and ${PROG})"
+    echo "make-uma install    (install ${LNAM} and ${PROG} in us3 dirs)"
+    exit 1
+  ;;
+esac
+
+done

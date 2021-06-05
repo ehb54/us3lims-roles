@@ -1,0 +1,36 @@
+---
+- name: Install rasmol for RedHat
+  block:
+    - name: Git clone rasmol-centos repository
+      git:
+       repo: https://github.com/ehb54/rasmol-centos.git
+       dest: "/tmp/rasmol-centos"
+
+    - name: Copy rasmol bin files to /opt/ultrascan3/
+      ansible.builtin.copy:
+        remote_src: yes
+        src: /tmp/rasmol-centos/bin/
+        dest: /opt/ultrascan3/bin/
+
+    - name: Copy rasmol lib files to /opt/ultrascan3/
+      ansible.builtin.copy:
+        remote_src: yes
+        src: /tmp/rasmol-centos/lib/
+        dest: /opt/ultrascan3/lib/
+
+    - name: Changing perm of /opt/ultrascan3/bin/rasmol
+      ansible.builtin.file:
+        path: /opt/ultrascan3/bin/rasmol
+        owner: us3
+        group: us3
+        mode: '0755'
+  
+    - name: make sure bin64 is symlinked
+      ansible.builtin.file:
+        src: /opt/ultrascan3/bin
+        dest: /opt/ultrascan3/bin64
+        owner: us3
+        group: us3
+        state: link
+        
+  when: ansible_facts['os_family'] == "RedHat"

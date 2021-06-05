@@ -1,0 +1,47 @@
+<?php
+# cluster configuration
+
+$cluster_configuration =
+    [
+     "us3iab-node0" => [
+         "active" => true
+         ,"type"   => "local"
+     ]
+     ,"us3iab-node1" => [
+         "active" => false
+         ,"type"   => "local"
+     ]
+     ,"us3iab-devel" => [
+         "active" => false
+         ,"type"   => "local"
+     ]
+     ,"lonestar5" => [
+         "active" => true
+         ,"type"   => "local"
+     ]
+     ,"stampede2" => [
+         "active" => true
+         ,"type"   => "local"
+     ]
+     ,"jetstream" => [
+         "active" => true
+         ,"type"   => "local"
+     ]
+     ,"jetstream-local" => [
+         "active" => true
+         ,"type"   => "local"
+     ]
+     ,"juwels" => [
+         "active" => false
+         ,"type"   => "local"
+     ]
+     ,"bridges2" => [
+         "active" => true
+         ,"type"   => "local"
+     ]
+     ,"expanse" => [
+         "active" => true
+         ,"type"   => "local"
+     ]
+    ]
+    ;

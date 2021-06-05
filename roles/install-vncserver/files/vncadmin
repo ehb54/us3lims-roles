@@ -1,0 +1,166 @@
+#!/usr/bin/perl
+
+### user defines
+$serverfile = '/etc/tigervnc/vncserver.users';
+
+$vncconfig = 'session=gnome
+geometry=1920x1200
+localhost
+alwaysshared
+';
+
+$MIN_PORT = 2;
+$MAX_PORT = 2000;
+
+### end user defines
+
+%okargs = (
+    "add" => 1,
+    "remove" => 1,
+    "info" => 1,
+    "list" => 1,
+    );
+
+%oneargs = (
+    "list" => 1,
+    );
+
+$notes = "usage: $0 {" . ( join '|', sort keys %okargs ) . "} [user]
+
+administers vnc server for user
+
+options:
+    list            : lists all currently registered vnc users
+    add username    : adds user to vnc
+    remove username : removes user from vnc
+    info username   : lists a specific user
+";
+
+$runuser = $ENV{'USER'};
+die "$0: must be run as a root (or sudo)\n" if !$runuser || $runuser ne 'root';
+die "$0: $serverfile does not exist\n" if !-e $serverfile;
+die "$0: $serverfile is not readable\n" if !-r $serverfile;
+
+$arg = shift || die $notes;
+$user = shift || $oneargs{ $arg } || die "Option '$arg' requires a user be specified.\n\n" . $notes;
+
+die $notes if @ARGV;
+
+die "Invalid argument '$arg'\n\n$notes" if !$okargs{ $arg };
+
+@vncusers = `grep -v ^\# $serverfile`;
+grep chomp, @vncusers;
+@vncusers = grep /^\s*:\d+\s*=\s*\S+\s*$/, @vncusers;
+
+for $l ( @vncusers ) {
+    ( $vport, $vuser ) = $l =~ /\s*:(\d+)\s*=\s*(\S+)\s*$/, $l;
+    $vports{ $vuser } = $vport;
+    $existingports{ $vport }++;
+}        
+
+$userinfohdr =
+    "vncport | vnc user name | linux user | vncdirectory | vncpasswd | vncconfig\n"
+    . '-'x81 . "\n"
+    ;
+    
+sub userinfo {
+    my $user         = shift;
+    my @userinfo     = `egrep -i '^$user:' /etc/passwd`;
+    my ( $userhome ) = $userinfo[0] =~ /[^:]*:[^:]*:[^:]*:[^:]*:([^:]*):[^:]*$/;
+    my $uservncd     = "$userhome/.vnc";
+    my $uservncc     = "$uservncd/config";
+    my $uservncccat  = `cat $uservncc 2> /dev/null`;
+    my $uservnccstk  = $vncconfig eq $uservncccat;
+    my $uservncpw    = "$uservncd/passwd";
+    my $userexists   = scalar @userinfo;
+    my $userstatus   = sprintf(
+        " %-6s | %-13s | %-10s | %-12s | %-9s | %-10s\n"
+        , $vports{$user} ? $vports{$user} : "NONE"
+        , $user
+        , $userexists    ? "Exists" : "MISSING"
+        , -e $uservncd   ? "Exists" : "MISSING"
+        , -e $uservncpw  ? "Exists" : "MISSING"
+        , -e $uservncc   ? "Exists" . ( !$uservnccstk ? " - Custom" : "" ) : "MISSING"
+        );
+                          
+    return ( $userstatus, $userexists, $userhome, $uservncd, $uservncc, $uservncpw );
+}
+
+if ( $arg eq 'list' ) {
+    print $userinfohdr;
+    my @lout;
+    for $k ( keys %vports ) {
+        ( $userstatus ) = userinfo( $k );
+        push @lout, $userstatus;
+    }
+    print sort { $a <=> $b } @lout;
+    exit(0);
+}
+
+if ( $arg eq 'info' ) {
+    print $userinfohdr;
+    ( $userstatus ) = userinfo( $user );
+    print $userstatus;
+    exit(0);
+}
+
+( $userstatus, $userexists, $userhome, $uservncd, $uservncc, $uservncpw ) = userinfo( $user );
+
+if ( $arg eq 'add' ) {
+
+    die "$0: Error: user '$user' is already defined with port $vports{$user}\n" if $vports{$user};
+    die "$0: Error: user '$user' does not exist as a linux user\n" if !$userexists;
+
+    print "Info: adding user '$user' to group vncusers.\n";
+    print `usermod -a -G vncusers $user`;
+    
+    die "$0: Error: could not determine user's home directory\n" if !$userhome;
+    die "$0: Error: user '$user' expect home directory $userhome does not exist\n" if !-d $userhome;
+    if ( !-d $uservncd ) {
+        print "Info: creating directory $uservncd\n";
+        print `mkdir $uservncd`;
+        print `chown $user:$user $uservncd`;
+    }
+
+    if ( !-e $uservncc ) {
+        print "Info: creating $uservncc\n";
+        open $fh, ">$uservncc";
+        print $fh $vncconfig;
+        close $fh;
+        print `chown $user:$user $uservncc`;
+    } else {
+        print "Notice: user vnc config file $uservncc already exists, leaving it untouched\n";
+    }
+
+    $assignport = 0;
+    for ( $nextport = $MIN_PORT; $nextport <= $MAX_PORT; ++$nextport ) {
+        if ( !$existingports{$nextport} ) {
+            $assignport = $nextport;
+            last;
+        }
+    }
+    die "$0: no more unused vnc ports available (max $MAX_PORT)\n" if !$assignport;
+    open $fh, ">>$serverfile";
+    print $fh ":$assignport=$user\n";
+    close $fh;
+    print "Notice: user '$user' has been assigned vnc port $assignport\n";
+
+    if ( !-e $uservncpw ) {
+        print "Notice: user '$user' needs to run vncpasswd as their user and enter a password for their vnc on port $assignport to work\n";
+    }
+    exit(0);
+}
+
+if ( $arg eq 'remove' ) {
+    die "$0: Error: user '$user' is not currently assigned a vnc port\n" if !$vports{$user};
+    $cmd = "sed -i 's/^\\s*:$vports{$user}\\s*=\\s*$user\\s*\$//' $serverfile";
+    print `$cmd`;
+    ( $userstatus ) = userinfo( $user );
+    print "\nInfo: user '$user' has been removed from vnc port $vports{$user}\n";
+    print "\nNotice: if an existing vncserver was running, it should be manually terminated.\n";
+    print "Info: " . `gpasswd -d $user vncusers` if $userexists;
+
+    exit(0);
+}
+
+die "$0: Error: unknown option '$arg'\n";

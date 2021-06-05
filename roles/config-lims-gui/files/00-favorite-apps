@@ -1,0 +1,2 @@
+[org/gnome/shell]
+favorite-apps = [ 'ultrascan.desktop', 'us_somo.desktop', 'firefox.desktop', 'org.gnome.Evolution.desktop', 'org.gnome.Nautilus.desktop', 'org.gnome.Software.desktop', 'yelp.desktop', 'org.gnome.Terminal.desktop']

@@ -5,9 +5,70 @@
     path: /opt/ultrascan3/bin/us
   register: us_installed_details
 
+- name: Install environment-modules RedHat
+  yum:
+    name:
+      - environment-modules
+  when: ansible_facts['os_family'] == "RedHat"
+
+- name: Install environment-modules Debian
+  yum:
+    name:
+      - environment-modules
+  when: ansible_facts['os_family'] == "Debian"
+  
+- name: Link /etc/modulefiles to /usr/share/modules/modulefiles for Debian
+  file: 
+    src: /usr/share/modules/modulefiles
+    dest: /etc/modulefiles
+    state: link
+  when: ansible_facts['os_family'] == "Debian"
+
+- name: Create us-gui modulefiles directory
+  file: 
+    path: /etc/modulefiles/ultrascan/
+    mode: '0755'
+    state: directory
+
+- name: Copy over template files for ultrascan/gui modulefiles
+  template: 
+    src: gui.j2
+    dest: /etc/modulefiles/ultrascan/gui
+    mode: '0644'
+
+- name: Copy over template files for ultrascan/gui-build modulefiles for Debian
+  template: 
+    src: gui-build.j2
+    dest: /etc/modulefiles/ultrascan/gui-build
+    mode: '0644'
+  when: ansible_facts['os_family'] == "Debian"
+
+- name: Copy over template files for ultrascan/gui-build modulefiles for RedHat
+  template: 
+    src: gui-build-gcc-toolset-9.j2
+    dest: /etc/modulefiles/ultrascan/gui-build
+    mode: '0644'
+  when: ansible_facts['os_family'] == "RedHat"
+
 - name: Install, configure and compile us3
   become: no
   block:
+
+    - name: install git dependency RedHat
+      dnf:
+        name:
+          - git
+        update_cache: yes
+      become: yes
+      when: ansible_facts['os_family'] == "RedHat"
+
+    - name: install git dependency Debian
+      apt:
+        name:
+          - git
+        state: present
+      become: yes
+      when: ansible_facts['os_family'] == "Debian"
 
     - name: Temporarily change /opt to allow the remote user to create a directory
       file:
@@ -34,7 +95,26 @@
            src: local.pri.j2
            dest: /opt/ultrascan3/local.pri
     
-    - name: make ultrascan3
+    - name: make ultrascan3 for RedHat using gcc-9
+      shell:
+        chdir: /opt/ultrascan3
+        cmd: . /opt/rh/gcc-toolset-9/enable && gcc -v 2> build.gccversion && ./makeall.sh -j {{ cores_for_parallel_compile }} > build.stdout 2> build.stderr
+      environment: 
+        PATH: /opt/qt-{{ qt_version }}/bin/:/usr/bin:/usr/local/bin:/bin
+        QTDIR: /opt/qt-{{ qt_version }}
+        QWTDIR: /opt/qt-{{ qt_version }}-qwt-{{ qwt_version }}
+    
+        US3DIR: /opt/ultrascan3
+        QTBIN: /opt/qt-{{ qt_version }}/bin
+        QTLIB: /opt/qt-{{ qt_version }}/lib
+        QTINC: /opt/qt-{{ qt_version }}/include
+        US3BIN: /opt/ultrascan3/bin
+        US3LIB: /opt/ultrascan3/lib
+        us3 : /opt/ultrascan3
+#        LD_LIBRARY: ${US3LIB}:${QTLIB}:${QWTLIB}:${OLPATH}:${USDIR}
+      when: ansible_facts['os_family'] == "RedHat"
+
+    - name: make ultrascan3 for Debian
       shell:
         chdir: /opt/ultrascan3
         cmd: ./makeall.sh -j {{ cores_for_parallel_compile }} > build.stdout 2> build.stderr
@@ -51,6 +131,8 @@
         US3LIB: /opt/ultrascan3/lib
         us3 : /opt/ultrascan3
 #        LD_LIBRARY: ${US3LIB}:${QTLIB}:${QWTLIB}:${OLPATH}:${USDIR}
+      when: ansible_facts['os_family'] == "Debian"
+
   when: us_installed_details.stat.exists == false
 
 - name: Check if us_somo already installed, using /opt/ultrascan3/bin/us3_somo as a proxy
@@ -95,7 +177,17 @@
         src: somo.local.pri.j2
         dest: /opt/ultrascan3/us_somo/develop/local.pri
     
-    - name: Extra qmakes
+    - name: Extra qmakes for RedHat using gcc-9
+      shell:
+        chdir: /opt/ultrascan3/us_somo/develop/{{ item }}
+        cmd: . /opt/rh/gcc-toolset-9/enable && /opt/qt-{{ qt_version }}/bin/qmake {{ item }}.pro
+      with_items:
+        - us_admin
+        - us_saxs_cmds_t
+        - us3_hydrodyn
+      when: ansible_facts['os_family'] == "RedHat"
+
+    - name: Extra qmakes for Debian
       shell:
         chdir: /opt/ultrascan3/us_somo/develop/{{ item }}
         cmd: /opt/qt-{{ qt_version }}/bin/qmake {{ item }}.pro
@@ -103,8 +195,29 @@
         - us_admin
         - us_saxs_cmds_t
         - us3_hydrodyn
+      when: ansible_facts['os_family'] == "Debian"
 
-    - name: Make somo
+    - name: Make somo for RedHat using gcc-9
+      shell:
+        chdir: /opt/ultrascan3
+        cmd: . /opt/rh/gcc-toolset-9/enable && ./makesomo.sh -j {{ cores_for_parallel_compile }} >> build_somo.stdout 2>> build_somo.stderr
+      environment: 
+        PATH: /opt/qt-{{ qt_version }}/bin/:/usr/bin:/usr/local/bin:/bin
+        QTDIR: /opt/qt-{{ qt_version }}
+        QWTDIR: /opt/qt-{{ qt_version }}-qwt-{{ qwt_version }}
+    
+        US3DIR: /opt/ultrascan3
+        QTBIN: /opt/qt-{{ qt_version }}/bin
+        QTLIB: /opt/qt-{{ qt_version }}/lib
+        QTINC: /opt/qt-{{ qt_version }}/include
+        US3BIN: /opt/ultrascan3/bin
+        US3LIB: /opt/ultrascan3/lib
+        us3 : /opt/ultrascan3
+        ULTRASCAN:  /opt/ultrascan3/
+#        LD_LIBRARY: ${US3LIB}:${QTLIB}:${QWTLIB}:${OLPATH}:${USDIR}
+      when: ansible_facts['os_family'] == "RedHat"
+
+    - name: Make somo for Debian
       shell:
         chdir: /opt/ultrascan3
         cmd: ./makesomo.sh -j {{ cores_for_parallel_compile }} >> build_somo.stdout 2>> build_somo.stderr
@@ -122,6 +235,7 @@
         us3 : /opt/ultrascan3
         ULTRASCAN:  /opt/ultrascan3/
 #        LD_LIBRARY: ${US3LIB}:${QTLIB}:${QWTLIB}:${OLPATH}:${USDIR}
+      when: ansible_facts['os_family'] == "Debian"
 
     - name: Make convenience us.sh, us_somo.sh us_env.sh
       template: 
@@ -134,3 +248,80 @@
         - us_env.sh
 
   when: us_somo_installed_details.stat.exists == false
+
+- name: Install dependencies to build documentation for us3 for RedHat
+  yum:
+    name:
+      - perl-Template-Toolkit
+    state: present
+  when: ansible_facts['os_family'] == "RedHat"
+
+- name: Install dependencies to build documentation for us3 for Debian
+  yum:
+    name:
+      - libtemplate-perl
+    state: present
+  when: ansible_facts['os_family'] == "Debian"
+
+- name: Build documentation for us3 for RedHat using gcc-9
+  shell:
+    chdir: /opt/ultrascan3/doc/manual
+    cmd: . /opt/rh/gcc-toolset-9/enable && gcc -v 2> build_doc.gccversion && make -j {{ cores_for_parallel_compile }} > build_doc.stdout 2> build_doc.stderr
+  environment: 
+    PATH: /opt/qt-{{ qt_version }}/bin/:/usr/bin:/usr/local/bin:/bin
+  when: ansible_facts['os_family'] == "RedHat"
+
+- name: Build documentation for us3 for Debian
+  shell:
+    chdir: /opt/ultrascan3/doc/manual
+    cmd: gcc -v 2> build_doc.gccversion && make -j {{ cores_for_parallel_compile }} > build_doc.stdout 2> build_doc.stderr
+  environment: 
+    PATH: /opt/qt-{{ qt_version }}/bin/:/usr/bin:/usr/local/bin:/bin
+  when: ansible_facts['os_family'] == "Debian"
+
+- name: Create group for us3
+  group:
+    name: us3
+    state: present
+
+- name: Create the ultrascan3 user
+  user:
+    name: us3
+    comment: ultrascan3 system user
+    group: us3
+    shell: /bin/bash
+    state: present
+
+- name: Copy assistant to us3/bin
+  copy:
+    src: /opt/qt-{{ qt_version }}/bin/assistant
+    remote_src: yes
+    dest: /opt/ultrascan3/bin/assistant
+    owner: us3
+    group: us3
+    mode: preserve
+
+- name: Symlink docs for somo
+  file:
+    src: "/opt/ultrascan3/us_somo/somo/doc"
+    dest: "/opt/ultrascan3/somo/doc"
+    state: link
+
+- name: Copy us3.sh to /etc/profile.d
+  copy:
+    src: us3.sh
+    dest: /etc/profile.d/us3.sh
+    owner: root
+    group: root
+    mode: u=rwx,o=rx
+
+- name: Check if rasmol already installed, using /opt/ultrascan3/bin/rasmol
+  stat: 
+    path: /opt/ultrascan3/bin/rasmol
+  register: rasmol_installed
+
+- name: Install rasmol
+  include_role:
+    name: install-rasmol
+  when: rasmol_installed.stat.exists == false
+

@@ -1,0 +1,30 @@
+---
+# tasks file for install-reverse-tunnel
+
+- name: Install reverse tunnel check for RedHat family
+  fail:
+    msg: install-reverse-tunnel requires RedHat family
+  when: ansible_facts['os_family'] != "RedHat"
+
+- name: copy rtunnel to /usr/sbin/rtunnel
+  ansible.builtin.copy:
+    src: rtunnel
+    dest: /usr/sbin/rtunnel
+    owner: root
+    group: root
+    mode: '0700'
+
+- name: add reverse tunnel line to /etc/rc.d/rc.local
+  ansible.builtin.lineinfile:
+    path: /etc/rc.d/rc.local
+    state: present
+    line: /usr/sbin/rtunnel 60 {{ rtunnel_user }} {{ rtunnel_ip }} {{ rtunnel_port }} 2>&1 >> /var/log/rtunnel &
+    
+- name: Turn x bit on /etc/rc.d/rc.local to allow startup
+  ansible.builtin.file:
+    path: /etc/rc.d/rc.local
+    mode: a+x
+
+
+
+

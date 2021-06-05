@@ -1,0 +1,107 @@
+---
+# initial upgrade playbook, carefully add capabilities
+- hosts:        allknownhosts
+  gather_facts: yes
+  remote_user:  usadmin
+  become:       yes
+  
+  pre_tasks:
+#  - name: System details
+#    debug: msg="{{ item }}"
+#    with_items:
+#      - "{{ ansible_os_family }}"
+#      - "{{ ansible_distribution }}"
+#      - "{{ ansible_distribution_version }}"
+#      - "{{ ansible_distribution_major_version }}"
+
+  - name: get qtinfo
+    shell: grep QTDIR /etc/modulefiles/ultrascan/gui-build | awk -F- '{ print $2 }'
+    register: qtinfo
+
+  - name: get qwtinfo
+    shell: grep QWTDIR /etc/modulefiles/ultrascan/gui-build | awk -F- '{ print $4 }'
+    register: qwtinfo
+
+  - name: get mysqlversion
+    shell: 'if [ -e /bin/mysql ]; then mysql --version ; else echo "no /bin/mysql found"; fi'
+    register: mysqlinfo
+
+  - name: get opensslversion
+    shell: openssl version
+    register: opensslinfo
+
+  - name: get phpversion
+    shell: 'if [ -e /usr/bin/php ]; then php -v ; else echo "no /usr/bin/php found"; fi'
+    register: phpinfo
+
+  - name: get mpi version
+    shell: if [ -e /etc/modulefiles/mpi/mpich-x86_64 ]; then cmd=`egrep 'prepend-path\s+PATH\s+' /etc/modulefiles/mpi/mpich-x86_64 | awk '{ print $3 }'` && $cmd/mpicc -v; else echo 'no /etc/modulefiles/mpi/mpich-x86_64 found'; fi
+    register: mpiinfo
+
+  - name: set facts
+    set_fact:
+      qt_version:  "{{ qtinfo.stdout_lines[0] }}"
+      qwt_version: "{{ qwtinfo.stdout_lines[0] }}"
+      os_version:  "{{ ansible_distribution }} {{ ansible_distribution_version }}"
+      mysql_version: "{{ mysqlinfo.stdout_lines[0] }}"
+      openssl_version: "{{ opensslinfo.stdout_lines[0] }}"
+      php_version: "{{ phpinfo.stdout_lines[0] }}"
+      mpi_version: "{{ mpiinfo.stdout_lines[0] }}"
+  - debug: msg="os_version {{ os_version }}\nqt_version {{ qt_version }}\nqwt_version {{ qwt_version }}\nmysql_version {{ mysql_version }}\nopenssl_version {{ openssl_version }}\nphp_version {{ php_version }}\nmpi_version {{ mpi_version }}"
+
+  - name: "check disk space"
+    shell: df -h
+    register: dfinfo
+  - debug: var=dfinfo.stdout_lines
+
+#  - name: "check git repos"
+#    shell: 'for j in {{ ultrascan_path }} /srv ~us3; { for i in `find $j -name "*.git" | sed s/.git$//`; { (printf "%-70s" "$i" && cd $i && RDATE=`git log -1 --shortstat .|grep Date:|sed -e "s/Date:   //"` && SHASH=`git log -1 --oneline .| cut -d" " -f1` && RNUMB=`git log --oneline | sed -n "/$SHASH/,99999p" | wc -l` && LCHNG=`git status -s | grep "^ M" | wc -l` && printf "%-30s  revision: %-6d tracked files with changes: %d\n" "$RDATE" $RNUMB $LCHNG ) }; }'
+#    register: gitversions
+#  - debug: var=gitversions.stdout_lines
+
+  - name: create temporary directory for dbutils clone
+    ansible.builtin.tempfile:
+      state: directory
+      suffix: build
+    register: dbutils_tmp_dir
+
+  - name: clone us3lims_dbutils into temp dir
+    ansible.builtin.git:
+      repo: https://github.com/ehb54/us3lims_dbutils
+      version: "main"
+      dest: "{{ dbutils_tmp_dir.path }}"
+      depth: 1
+
+  - name: run us3lims_git_info.php
+    shell: 'cd {{ dbutils_tmp_dir.path }} && php uslims_git_info.php --skip-unknown --quiet'
+    register: gitinfo
+  - debug: var=gitinfo.stdout_lines
+
+  - name: remove temporary directory  {{ dbutils_tmp_dir.path }}
+    file:
+      path: "{{ dbutils_tmp_dir.path }}"
+      state: absent
+      
+  - name: "check rtunnel"
+    shell: 'RTBIN=`ls -l /sbin/rtunnel`; RTRCL=`grep rtunnel /etc/rc.local | egrep -v "^\s*#"`; printf "rtunnel:\n%s\nrc.local:\n%s\n" "$RTBIN" "$RTRCL"'
+    register: rtunnelinfo
+  - debug: var=rtunnelinfo.stdout_lines
+
+  - name: 'check rasmol'
+    shell: 'if [ -e {{ ultrascan_path }}/bin64/rasmol ] && [ -x {{ ultrascan_path }}/bin64/rasmol ] && [ 0 -eq `env LD_LIBRARY_PATH={{ ultrascan_path }}/lib ldd {{ ultrascan_path }}/bin64/rasmol | grep "not found" | wc -l` ]; then echo "ok"; else echo "failed"; fi'
+    register: rasmolinfo
+  - debug: var=rasmolinfo.stdout_lines
+
+  roles:
+
+  vars:
+    ultrascan_path:    "/opt/ultrascan3"
+    us3_path:          "/home/us3"
+    us3_nodb_path:     "{{ us3_path }}/us3-nodb"
+    us3_cluster_path:  "{{ us3_path }}/cluster"
+
+# further info thoughts
+# mysql version
+# openssl version
+# us3 ldd check
+# us3-mpi ldd check

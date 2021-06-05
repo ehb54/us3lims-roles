@@ -20,7 +20,7 @@
   mysql_user:
         name: 'us3php'
         host: "{{ item }}"
-        priv: '*.*:USAGE/newus3.*:ALL/us3.*:SELECT,INSERT,UPDATE,DELETE'
+        priv: '*.*:USAGE/newus3.*:ALL/us3.*:SELECT,INSERT,UPDATE,DELETE/gfac.*:ALL/uslims3_*.*:SELECT,INSERT,UPDATE,DELETE'
         append_privs: yes
         password: '{{ us3php_db_pass }}'
         login_user: root
@@ -36,7 +36,7 @@
   mysql_user:
         name: '{{ gbl_db_user }}'
         host: "{{ item }}"
-        priv: "{{ gbl_db_name }}.*:SELECT,INSERT,UPDATE,DELETE"
+        priv: "{{ gbl_db_name }}.*:SELECT,INSERT,UPDATE,DELETE/uslims3_*.*:SELECT,UPDATE"
         append_privs: yes
         password: '{{ gbl_db_pass }}'
         login_user: root
@@ -61,3 +61,5 @@
         - 127.0.0.1
         - localhost
         - ::1
+
+

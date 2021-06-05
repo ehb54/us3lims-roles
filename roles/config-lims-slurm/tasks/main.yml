@@ -5,11 +5,12 @@
 
 - name: install slurm dependencies
   dnf:
-        enablerepo: PowerTools
+        enablerepo: powertools
         name:
                 - globus-gram-job-manager-slurm
                 - munge-devel
                 - munge
+                - lua-devel
                 - readline-devel
                 - pam-devel
                 - perl-ExtUtils-MakeMaker
@@ -18,6 +19,7 @@
                 - make
                 - gcc
                 - mariadb-devel
+                - python3
         state: present
         update_cache: yes
 
@@ -54,6 +56,13 @@
       - "{{ slurm_hash }}"
   when: "(slurm_md5 != 'none' or slurm_sha1 != 'none') and slurm_integrity.stat.checksum != slurm_hash"
 
+- name: remove old slurm packages
+  shell:
+    cmd: "rm -fr /root/rpmbuild/RPMS/x86_64/slurm*"
+    warn: false
+  ignore_errors: yes
+  when: "('slurm' not in ansible_facts.packages and slurm_hash == 'none' )  or ('slurm' not in ansible_facts.packages and slurm_integrity.stat.checksum == slurm_hash)"
+
 - name: build slurm packages
   shell: "rpmbuild -ta /tmp/slurm-{{ slurm_ver }}.tar.bz2"
   when: "('slurm' not in ansible_facts.packages and slurm_hash == 'none' )  or ('slurm' not in ansible_facts.packages and slurm_integrity.stat.checksum == slurm_hash)"
@@ -61,7 +70,7 @@
 - name: install built packages
   shell:
     chdir: /root/rpmbuild/RPMS/x86_64
-    cmd: "yum install ./slurm*  -y"
+    cmd: "yum install --allowerasing ./slurm*  -y"
     warn: false
      
 

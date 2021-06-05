@@ -1,0 +1,45 @@
+#!/usr/bin/perl
+
+# $debug++;
+$| = 1;
+
+$identity = "/home/usadmin/.ssh/id_rsa";
+
+die "$0: identify file $identity does not exist or is not readable\n" if !-e $identity || !-r $identity;
+
+$notes = "usage: $0 wait-loop-time user destination port
+
+sets up a reverse ssh tunnel after waiting for the remote ssh port to open
+    ";
+
+$delay = shift || die $notes;
+$user  = shift || die $notes;
+$dest  = shift || die $notes;
+$port  = shift || die $notes;
+
+sub get_date {
+    my $date = `date`;
+    chomp $date;
+    return "[$date] ";
+}
+
+print get_date() . " $0: initializing\n";
+
+# make sure port is accessible
+while(1) {
+    print `nc -z $dest 22`;
+    print "\$\? is $?\n" if $debug;
+    last if !$?;
+    print get_date() . "$0: port not open, sleeping ${delay}s\n";
+    sleep( $delay );
+}
+
+# retry the connection forever
+
+$cmd = "ssh -o StrictHostKeyChecking=no -i /home/usadmin/.ssh/id_rsa -N -R $port:localhost:22 $user\@$dest 2>&1";
+while(1) {
+    print get_date() . "$0: rtunnel starting $cmd $port\n";
+    `$cmd`;
+    print get_date() . "$0: rtunnel ssh exited, sleeping ${delay}s\n";
+    sleep( $delay );
+}

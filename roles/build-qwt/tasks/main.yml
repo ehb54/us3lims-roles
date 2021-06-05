@@ -2,7 +2,7 @@
 
 - name: Check if qwt already installed, using /opt/qt-{{ qt_version }}-qwt-{{ qwt_version }}/lib/libqwt.so as a proxy
   stat: 
-    path: /opt/qwt-{{ qwt_version }}-qt-{{ qt_version }}/lib/libQt5Core.so
+    path: /opt/qt-{{ qt_version }}-qwt-{{ qwt_version }}/lib/libqwt.so
   register: qwt_installed_details
 
 - name: Install, configure and compile qwt
@@ -15,8 +15,10 @@
     - name: Download qwt-{{ qwt_version }}
       get_url: 
 #        url: https://sourceforge.net/project/qwt/files/qwt/{{ qwt_version }}/qwt-{{ qwt_version }}.tar.bz2/download
-        url: https://gigenet.dl.sourceforge.net/project/qwt/qwt/{{ qwt_version }}/qwt-{{ qwt_version }}.tar.bz2
+#        url: https://gigenet.dl.sourceforge.net/project/qwt/qwt/{{ qwt_version }}/qwt-{{ qwt_version }}.tar.bz2
+        url: https://versaweb.dl.sourceforge.net/project/qwt/qwt/{{ qwt_version }}/qwt-{{ qwt_version }}.tar.bz2
         dest: /opt/qwt-{{ qwt_version }}.tar.bz2
+
       when: qwt_src_details.stat.exists == false
 
     - name: Check if qwt-{{ qwt_version }}.tar.bz2 is extracted
@@ -38,15 +40,29 @@
         warn: false
       when: qwt_src_extracted_details.stat.exists == false
 
-    - name: Configure qwt
+    - name: Configure qwt for RedHat using gcc-9
+      shell:
+        chdir: /opt/qt-{{ qt_version }}-qwt-{{ qwt_version }}
+        cmd: . /opt/rh/gcc-toolset-9/enable && /opt/qt-{{ qt_version }}/bin/qmake qwt.pro
+      when: ansible_facts['os_family'] == "RedHat"
+
+    - name: Configure qwt for Debian
       shell:
         chdir: /opt/qt-{{ qt_version }}-qwt-{{ qwt_version }}
         cmd: /opt/qt-{{ qt_version }}/bin/qmake qwt.pro
+      when: ansible_facts['os_family'] == "Debian"
 
-    - name: compile qwt
+    - name: Compile qwt for RedHat using gcc-9
       shell:
         chdir: /opt/qt-{{ qt_version }}-qwt-{{ qwt_version }}
-        cmd: make -j {{ cores_for_parallel_compile }} > build.stdout 2> build.stderr
+        cmd: . /opt/rh/gcc-toolset-9/enable && gcc -v 2> build.gccversion && make -j {{ cores_for_parallel_compile }} > build.stdout 2> build.stderr
+      when: ansible_facts['os_family'] == "RedHat"
+
+    - name: Compile qwt for Debian
+      shell:
+        chdir: /opt/qt-{{ qt_version }}-qwt-{{ qwt_version }}
+        cmd: gcc -v 2> build.gccversion && make -j {{ cores_for_parallel_compile }} > build.stdout 2> build.stderr
+      when: ansible_facts['os_family'] == "Debian"
 
 #    - name: install qwt
 #      shell:

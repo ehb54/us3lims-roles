@@ -2,7 +2,8 @@
 - name: Install dependencies 
   dnf: 
     name: 
-      - firewalld 
+      - firewalld
+      - firewall-config
     update_cache: yes
 
 - name: Ensure firewalld is started 

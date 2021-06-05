@@ -1,0 +1,63 @@
+---
+# tasks file for config-lims-gui
+
+- name: groupinstall workstation
+  command: dnf groupinstall workstation
+  when: install_workstation|default(false)
+
+- name: groupinstall Server with GUI
+  command: dnf groupinstall "Server with GUI"
+  when: install_server_with_gui|default(false)
+
+- name: install xorg-x11-apps
+  dnf:
+    enablerepo: powertools
+    name:
+      - xorg-x11-apps
+    state: present
+
+- name: Create a directory /etc/skel/.local/share/applications
+  file:
+    path: /etc/skel/.local/share/applications
+    state: directory
+    mode: '0755'
+
+- name: install ultrascan & us_somo desktop icons
+  template: 
+    src: "{{ item }}.j2"
+    dest: /etc/skel/.local/share/applications/{{ item }}
+    mode: '0755'
+  with_items:
+    - ultrascan.desktop
+    - us_somo.desktop
+
+- name: install icons for commericial
+  template: 
+    src: "{{ item }}.j2"
+    dest: /etc/skel/.local/share/applications/{{ item }}
+    mode: '0755'
+  with_items:
+    - us_comproject.desktop
+  when: install_commercial|default(false)
+  
+- name: setup gnome default favorites for non-commercial
+  copy:
+    src: 00-favorite-apps
+    dest: /etc/dconf/db/local.d/00-favorite-apps
+    mode: u=rwx,g=rx,o=rx
+    owner: root
+    group: root
+  when: not install_commercial|default(false)
+
+- name: setup gnome default favorites for commercial
+  copy:
+    src: 00-favorite-apps-commercial
+    dest: /etc/dconf/db/local.d/00-favorite-apps
+    mode: u=rwx,g=rx,o=rx
+    owner: root
+    group: root
+  when: install_commercial|default(false)
+
+- name: update dconf database
+  command: dconf update
+  

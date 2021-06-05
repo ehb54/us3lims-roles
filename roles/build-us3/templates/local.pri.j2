@@ -4,8 +4,8 @@
 DEBUGORRELEASE  = release 
 unix {
   # Local flags
-  QMAKE_CXXFLAGS_RELEASE = -O3
-  QMAKE_CFLAGS_RELEASE   = -O3
+  QMAKE_CXXFLAGS_RELEASE = -O3 -march=native
+  QMAKE_CFLAGS_RELEASE   = -O3 -march=native
   QMAKE_CXXFLAGS += -Wno-unused-local-typedefs
 
   MAKEFLAGS   = " -j {{ cores_for_parallel_compile }} -O3"

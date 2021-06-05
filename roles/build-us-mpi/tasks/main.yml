@@ -1,0 +1,207 @@
+---
+# tasks file for build-us-mpi
+
+- name: Install environment-modules, gcc-toolset-9 and mpich RedHat
+  yum:
+    name:
+      - environment-modules
+      - gcc-toolset-9
+      - mpich
+      - mpich-devel
+  when: ansible_facts['os_family'] == "RedHat"
+
+- name: Install environment-modules and mpich Debian
+  yum:
+    name:
+      - environment-modules
+      - mpich
+  when: ansible_facts['os_family'] == "Debian"
+  
+- name: Link /etc/modulefiles to /usr/share/modules/modulefiles for Debian
+  file: 
+    src: /usr/share/modules/modulefiles
+    dest: /etc/modulefiles
+    state: link
+  when: ansible_facts['os_family'] == "Debian"
+
+- name: Create us-mpi modulefiles directory
+  file: 
+    path: /etc/modulefiles/ultrascan/
+    mode: '0755'
+    state: directory
+
+- name: Copy over template files for ultrascan/mpi modulefiles
+  template: 
+    src: mpi.j2
+    dest: /etc/modulefiles/ultrascan/mpi
+    mode: '0644'
+
+- name: Copy over template files for ultrascan/mpi-build modulefiles for Debian
+  template: 
+    src: mpi-build.j2
+    dest: /etc/modulefiles/ultrascan/mpi-build
+    mode: '0644'
+  when: ansible_facts['os_family'] == "Debian"
+
+- name: Copy over template files for ultrascan/mpi-build modulefiles for RedHat
+  template: 
+    src: mpi-build-gcc-toolset-9.j2
+    dest: /etc/modulefiles/ultrascan/mpi-build
+    mode: '0644'
+  when: ansible_facts['os_family'] == "RedHat"
+
+- name: Check if us-mpi already installed, using {{ us3_cluster_path }}/bin/us_mpi_analysis as a proxy
+  stat: 
+    path: "{{ us3_cluster_path }}/bin/us_mpi_analysis"
+  register: us_mpi_installed_details
+
+- name: Install, configure and compile us_mpi_analysis
+  become: yes
+  become_user: us3
+  block:
+    - name: Git clone ultrascan3 repository
+      git:
+       repo: https://github.com/ehb54/ultrascan3.git
+       version: "{{ us3_branch }}"
+       dest: "{{ us3_nodb_path }}"
+
+    - name: Create {{ us3_cluster_path }} directories
+      file: 
+        path: "{{ us3_cluster_path }}/{{ item }}"
+        owner: us3
+        mode: '0755'
+        state: directory
+      with_items:
+        - 
+        - bin
+        - lib
+
+    - name: Copy over template files for building us-mpi
+      template: 
+        src: "{{ item.name }}.j2"
+        dest: "{{ us3_nodb_path }}/{{ item.name }}"
+        mode: "{{ item.mode }}"
+      with_items:
+        - { name: local.pri, mode: '0644' }
+        - { name: make-uma, mode: '0755' }
+
+    - name: Clean up build.stdout, .stderr
+      file:
+        path: "{{ item }}"
+        state: absent
+      with_items:
+        - "{{ us3_nodb_path }}/build.stdout"
+        - "{{ us3_nodb_path }}/build.stderr"
+
+    - name: make us_mpi_analysis for RedHat using gcc-9
+      shell:
+        chdir: "{{ us3_nodb_path }}"
+        cmd: . /opt/rh/gcc-toolset-9/enable && gcc -v 2> build.gccversion && ./make-uma {{ item }} >> build.stdout 2>> build.stderr
+      with_items:
+        - update
+        - build
+        - install
+      when: ansible_facts['os_family'] == "RedHat"
+
+    - name: make us_mpi_analysis for Debian
+      shell:
+        chdir: "{{ us3_nodb_path }}"
+        cmd: gcc -v 2> build.gccversion && ./make-uma {{ item }} >> build.stdout 2>> build.stderr
+      with_items:
+        - update
+        - build
+        - install
+      when: ansible_facts['os_family'] == "Debian"
+
+  when: us_mpi_installed_details.stat.exists == false
+
+- name: Test mpi
+  become: yes
+  become_user: us3
+  block:
+  - name: Empty {{ mpi_test_path }} directories
+    file: 
+      path: "{{ mpi_test_path }}/{{ item }}"
+      state: absent
+    with_items:
+      - mpi
+      - slurm
+      - analysis
+
+  - name: Create {{ mpi_test_path }} directories
+    file: 
+      path: "{{ mpi_test_path }}/{{ item }}"
+      owner: us3
+      mode: '0755'
+      state: directory
+    with_items:
+      - 
+      - mpi
+      - slurm
+      - analysis
+        
+  - name: Copy over template files for mpi tests
+    template: 
+      src: "{{ item.name }}.j2"
+      dest: "{{ mpi_test_path }}/{{ item.subdir }}/{{ item.name }}"
+      mode: '0755'
+    with_items:
+      - { name: testmpi.sh, subdir: mpi }
+      - { name: testslurm.sh, subdir: slurm }
+      - { name: testanalysis.sh, subdir: analysis }
+
+  - name: Copy over non-template files for mpi tests
+    copy: 
+      src: "{{ item.name }}"
+      dest: "{{ mpi_test_path }}/{{ item.subdir }}/{{ item.name }}"
+      mode: '0644'
+    with_items:
+      - { name: hpcinput-localhost-uslims3_test-00001.tar.xz, subdir: analysis }
+
+  - name: Run mpi tests
+    shell:
+      chdir: "{{ mpi_test_path }}/{{ item.subdir }}"
+      cmd: "{{ item.cmd }} > test.stdout 2> test.stderr"
+    with_items:
+      - { subdir: mpi, cmd: ./testmpi.sh }
+      - { subdir: slurm, cmd: ./testslurm.sh }
+      - { subdir: analysis, cmd: ./testanalysis.sh }
+
+  - name: Get stderr status from mpi test
+    stat:
+      path: "{{ mpi_test_path }}/mpi/test.stderr"
+    register: stat_mpi
+
+  - fail: 
+      msg: mpi Test failed
+    when: stat_mpi.stat.isreg is not defined or stat_mpi.stat.size > 0
+    
+  - name: Get stderr status from slurm test
+    stat:
+      path: "{{ mpi_test_path }}/slurm/stderr"
+    register: stat_slurm
+
+  - fail: 
+      msg: slurm Test failed
+    when: stat_slurm.stat.isreg is not defined or stat_slurm.stat.size > 0
+    
+  - name: Get stderr status from analysis test
+    stat:
+      path: "{{ mpi_test_path }}/analysis/test.stderr"
+    register: stat_analysis
+
+  - fail:
+      msg: analysis Test failed
+    when: stat_analysis.stat.isreg is not defined or stat_analysis.stat.size > 0
+
+  - name: Get output status from analysis test
+    stat:
+      path: "{{ mpi_test_path }}/analysis/output/analysis-results.tar"
+    register: stat_analysis_output
+
+  - fail:
+      msg: Test failed - us mpi analysis did not produce expected analysis_results
+    when: stat_analysis_output.stat.isreg is not defined or stat_analysis_output.stat.size == 0
+
+
+

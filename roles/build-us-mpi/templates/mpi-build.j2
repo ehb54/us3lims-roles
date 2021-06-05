@@ -1,0 +1,21 @@
+#%Module 1.0
+#
+#  ultrascan/mpi-build module for use with 'environment-modules' package:
+#
+
+# Only allow one ultrascan/* module to be loaded at a time
+conflict ultrascan
+
+# Define prefix so PATH and MANPATH can be updated.
+setenv        US_MPI        {{ us3_cluster_path }}
+setenv        US_NODB       {{ us3_nodb_path }}
+setenv        QTDIR         /opt/qt-{{ qt_version }}
+setenv        QWTDIR        /opt/qt-{{ qt_version }}-qwt-{{ qwt_version }}
+setenv        QTBIN	    /opt/qt-{{ qt_version }}/bin
+setenv        QTLIB	    /opt/qt-{{ qt_version }}/lib
+setenv        QTINC	    /opt/qt-{{ qt_version }}/include
+
+prepend-path  PATH          {{ us3_cluster_path }}/bin:/opt/qt-{{ qt_version }}/bin
+prepend-path  LD_LIBRARY_PATH {{ us3_cluster_path }}/lib:/opt/qt-{{ qt_version }}/lib
+
+

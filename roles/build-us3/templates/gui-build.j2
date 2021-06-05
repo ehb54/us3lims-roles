@@ -1,0 +1,25 @@
+#%Module 1.0
+#
+#  ultrascan/build module for use with 'environment-modules' package:
+#
+
+# Only allow one ultrascan/* module to be loaded at a time
+conflict ultrascan
+
+# Define prefix so PATH and MANPATH can be updated.
+setenv        US_GUI        /opt/ultrascan3
+setenv        ULTRASCAN     /opt/ultrascan3
+setenv        QTDIR         /opt/qt-{{ qt_version }}
+setenv        QWTDIR        /opt/qt-{{ qt_version }}-qwt-{{ qwt_version }}
+setenv        US3DIR	    /opt/ultrascan3
+setenv        QTBIN	    /opt/qt-{{ qt_version }}/bin
+setenv        QTLIB	    /opt/qt-{{ qt_version }}/lib
+setenv        QTINC	    /opt/qt-{{ qt_version }}/include
+setenv        US3BIN	    /opt/ultrascan3/bin
+setenv        US3LIB	    /opt/ultrascan3/lib
+setenv        us3	    /opt/ultrascan3
+
+prepend-path  PATH          /opt/ultrascan3/bin:/opt/qt-{{ qt_version }}/bin
+prepend-path  LD_LIBRARY_PATH /opt/ultrascan3/lib:/opt/qt-{{ qt_version }}/lib:/opt/qt-{{ qt_version }}-qwt-{{ qwt_version }}/lib
+
+

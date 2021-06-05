@@ -1,6 +1,7 @@
 packages:
   - php
   - php-fpm
+  - php-json
   - php-mysqlnd
   - GraphicsMagick
   - GraphicsMagick-devel

@@ -1,0 +1,7 @@
+---
+- name: Converge
+  hosts: all
+  tasks:
+    - name: "Include config-user-gui"
+      include_role:
+        name: "config-user-gui"

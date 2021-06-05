@@ -1,18 +1,18 @@
 <IfModule mod_ssl.c>
-<VirtualHost *:443>
-   ServerAdmin {{ server_admin }}
-   DocumentRoot "{{ www_uslims }}" 
-   ServerName "{{ server_name }}"
-   ErrorLog "/var/log/httpd/{{ hostname }}-error.log"
-   CustomLog "/var/log/httpd/{{ hostname }}-access.log" combined
+  <VirtualHost *:443>
+    ServerAdmin {{ server_admin }}
+    DocumentRoot "{{ www_uslims }}" 
+    ServerName "{{ server_name }}"
+    ErrorLog "/var/log/httpd/{{ hostname }}-error.log"
+    CustomLog "/var/log/httpd/{{ hostname }}-access.log" combined
 
-SSLEngine on
+    SSLEngine on
 {% if self_signed == "yes" %}
-SSLCertificateFile {{ ssl_self_cert_path }} 
-SSLCertificateKeyFile {{ ssl_self_key_path }}
+    SSLCertificateFile {{ ssl_self_cert_path }} 
+    SSLCertificateKeyFile {{ ssl_self_key_path }}
 {% else %}
-SSLCertificateFile {{ ssl_cert_path }} 
-SSLCertificateKeyFile {{ ssl_key_path }}
+    SSLCertificateFile {{ ssl_cert_path }} 
+    SSLCertificateKeyFile {{ ssl_key_path }}
 {% endif %}
-</VirtualHost>
+  </VirtualHost>
 </IfModule>
