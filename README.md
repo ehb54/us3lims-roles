@@ -2,30 +2,10 @@
 
 This repository is a collection of ansible roles that are used to deploy and keep a us3 lims server up to date. 
 
-[![Build Status](https://travis-ci.com/KJSain/us3lims-roles.svg?branch=master)](https://travis-ci.com/KJSain/us3lims-roles)
-
-current roles travis/molecule tested: 
-- config-lims-php
-- config-lims-lims
-- config-lims-slurm
-- config-lims-us3-user
-- config-lims-database
-- config-lims-firewall
-
 Builds are currently all on Centos8
 
-**This is still in the Work In Progress stage.** 
-
 ## Current State 
-Currently, we still have more testing and fixes to deal with. Particularly related with getting SSL configured to work with US3 for mysql encrypted mysql connections. This has only been tested on CentOS 8 thus far. 
-
-### TODO 
-
-Moved to wiki/issues/project..
-
-## Summary of 'what does it do?' thus far
-
-Please review the wiki 
+In production
 
 ## Getting Started
 
