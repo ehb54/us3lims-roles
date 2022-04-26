@@ -1,0 +1,29 @@
+---
+# template playbook for applying a limited number of roles after updates
+# acacemic/public hosts
+#- hosts:        demeler9 demeler4host latrobe juelichhost umn konstanz
+#- hosts:        demeler9 latrobe umn konstanz
+# - hosts:        demeler4host demeler9
+# - hosts: coriolishost hexalepychost allerganhost alcamihost bayerhost catalenthost zentriforce1host zentriforce2host
+# - hosts: coriolishost hexalepychost allerganhost catalenthost zentriforce1host zentriforce2host
+#- hosts: coriolishost hexalepychost allerganhost catalenthost zentriforce1host zentriforce2host demeler9 demeler4host latrobe juelichhost umn konstanz
+- hosts: demeler9
+  gather_facts: yes
+  remote_user:  usadmin
+  become:       yes
+  
+  pre_tasks:
+#    - name: currentpolicies
+#      command:
+#        cmd : find /etc/polkit-1/localauthority -type f 
+#      register: polkitinfo
+
+#    - debug: msg="{{ polkitinfo.stdout }}"
+#    - debug: msg="{{ polkitinfo.stderr }}"
+
+  roles:
+#      - install-fail2ban
+#      - config-lims-scigap
+     - config-authentication-messages
+     
+  vars:

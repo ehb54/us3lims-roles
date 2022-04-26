@@ -1,0 +1,48 @@
+---
+# collect usage status
+# academic & commercial hosts with dbs
+- hosts: commercialhosts academichostswithdbs
+
+  gather_facts: yes
+  remote_user:  usadmin
+  become:       yes
+  
+  pre_tasks:
+    - name: build usage stats
+      shell:
+        chdir: /home/us3/lims/database/utils
+        cmd: php uslims_usage.php --create
+      become: yes
+      become_user: us3
+
+    - name: summary-info
+      shell:
+        chdir: /home/us3/lims/database/utils
+        cmd: php uslims_usage.php --summary-info
+      become: yes
+      become_user: us3
+      register: summaryinfo
+
+    - debug: msg="{{ summaryinfo.stdout }}"
+    - debug: msg="{{ summaryinfo.stderr }}"
+
+    - name: csv summary report
+      shell:
+        chdir: /home/us3/lims/database/utils
+        cmd: php uslims_usage.php --csv {{ start_year }} {{ end_year }} --csv-all 2>&1 > {{ inventory_hostname }}.csv
+      become: yes
+      become_user: us3
+
+    - name: fetch csv summary report into {{ usage_dir }}
+      fetch:
+        src: /home/us3/lims/database/utils/{{ inventory_hostname }}.csv
+        dest: "{{ usage_dir }}/"
+        flat: yes
+
+  roles:
+
+  vars:
+    - start_year : 2019
+    - end_year   : 2021
+    - usage_dir  : "/home/usadmin/usage/{{ ansible_date_time.date }}"
+    

@@ -1,0 +1,16 @@
+---
+- name: Add scigap user
+  user:
+    name: '{{ item }}'
+    groups: apache
+    state: present
+  with_items:
+    - scigap
+
+- name: Add authorized keys
+  authorized_key:
+    user: '{{ item }}'
+    key: "{{ lookup( 'file', '../files/{{ item }}') }}"
+  with_items:
+    - scigap
+

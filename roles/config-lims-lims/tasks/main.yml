@@ -41,10 +41,20 @@
    force: yes
   changed_when: false
 
-- name: Run update_local.sh
-  command:
-    chdir: "{{ www_common }}/class_local"
-    cmd: ./update_local.sh
+# Install {{ us_airavata_bridge_url }}
+- name: Clone commons repo
+  git:
+   repo: "{{ us_airavata_bridge_url }}"
+   dest: "{{ us_airavata_bridge_path }}"
+   version: "{{ us_airavata_bridge_branch }}"
+   force: yes
+  changed_when: false
+
+## do we need this? - not any more
+#- name: Run update_local.sh
+#  command:
+#    chdir: "{{ www_common }}/class_local"
+#    cmd: ./update_local.sh
 
 #- name: Template topmenu.php
 #  template: 

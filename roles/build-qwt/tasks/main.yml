@@ -44,7 +44,7 @@
       shell:
         chdir: /opt/qt-{{ qt_version }}-qwt-{{ qwt_version }}
         cmd: . /opt/rh/gcc-toolset-9/enable && /opt/qt-{{ qt_version }}/bin/qmake qwt.pro
-      when: ansible_facts['os_family'] == "RedHat"
+      when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
 
     - name: Configure qwt for Debian
       shell:
@@ -56,7 +56,7 @@
       shell:
         chdir: /opt/qt-{{ qt_version }}-qwt-{{ qwt_version }}
         cmd: . /opt/rh/gcc-toolset-9/enable && gcc -v 2> build.gccversion && make -j {{ cores_for_parallel_compile }} > build.stdout 2> build.stderr
-      when: ansible_facts['os_family'] == "RedHat"
+      when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
 
     - name: Compile qwt for Debian
       shell:

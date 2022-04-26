@@ -1,0 +1,101 @@
+---
+
+- name: Check if qt already installed, using {{ target_dir }}/qt-{{ qt_version }}/lib/libQt5Core.so as a proxy
+  stat: 
+    path: '{{ target_dir }}/qt-{{ qt_version }}/lib/libQt5Core.so'
+  register: qt_installed_details
+
+- name: Install, configure and compile qt
+  block:
+    - name: Check if qt-everywhere-src-{{ qt_version }}.tar.xz is downloaded
+      stat:
+        path: '{{ target_dir }}/qt-everywhere-src-{{ qt_version }}.tar.xz'
+      register: qt_src_details
+
+    - name: Download qt-{{ qt_version }}
+      get_url:
+        url: https://download.qt.io/archive/qt/{{ qt_major_version }}/{{ qt_version }}/single/qt-everywhere-src-{{ qt_version }}.tar.xz
+        dest: '{{ target_dir }}/qt-everywhere-src-{{ qt_version }}.tar.xz'
+      when: qt_src_details.stat.exists == false
+
+    - name: Check if qt-everywhere-src-{{ qt_version }}.tar.xz is extracted
+      stat:
+        path: '{{ target_dir }}/qt-everywhere-src-{{ qt_version }}'
+      register: qt_src_extracted_details
+
+    - name: Extract qt-{{ qt_version }}
+      command:
+        chdir: '{{ target_dir }}'
+        cmd: tar Jxf qt-everywhere-src-{{ qt_version }}.tar.xz
+        warn: false
+      when: qt_src_extracted_details.stat.exists == false
+
+    - name: Replace libs in qmake.conf
+      replace:
+        path: '{{ target_dir }}/qt-everywhere-src-{{ qt_version }}/qtbase/mkspecs/linux-g++-64/qmake.conf'
+        regexp: 'X11R6/'
+        replace: ''
+
+    - name: Add -march=native to '{{ target_dir }}/qt-everywhere-src-{{ qt_version }}/qtbase/mkspecs/common/g++-base.conf'
+      blockinfile:
+        path: '{{ target_dir }}/qt-everywhere-src-{{ qt_version }}/qtbase/mkspecs/common/g++-base.conf'
+        block: |
+          QMAKE_CFLAGS            += {{ comp_opt }} -O3
+          QMAKE_CXXFLAGS          += {{ comp_opt }} -O3
+
+    - name: Replace O2 with O3 in relevant qt mkspecs
+      replace:
+        path: '{{ target_dir }}/qt-everywhere-src-{{ qt_version }}/qtbase/mkspecs/common/gcc-base.conf'
+        regexp: '-O2'
+        replace: '-O3'
+       
+    - name: Remove shadow build directory for qt
+      file:
+        path: '{{ target_dir }}/qt-everywhere-src-{{ qt_version }}/shadow-build'
+        state: absent
+
+    - name: Create shadow build directory for qt
+      file:
+        path: '{{ target_dir }}/qt-everywhere-src-{{ qt_version }}/shadow-build'
+        state: directory
+        mode: '0755'
+
+    - name: Configure qt {{ qt_version }}
+      shell:
+        chdir: '{{ target_dir }}/qt-everywhere-src-{{ qt_version }}/shadow-build'
+        cmd: ../configure -prefix {{ target_dir }}/qt-{{ qt_version }} -release -opensource -confirm-license -platform {{ platform }} -nomake tests -nomake examples -D QT_SHAREDMEMORY -D QT_SYSTEMSEMAPHORE -no-icu {{ extra_configs }} > ../last_configure.stdout 2> ../last_configure.stderr
+
+    - name: Build qt-{{ qt_version }}
+      shell:
+        chdir: '{{ target_dir }}/qt-everywhere-src-{{ qt_version }}/shadow-build'
+        cmd: make -j{{ cores_for_parallel_compile }} > {{ target_dir }}/qt-everywhere-src-{{ qt_version }}/build.stdout 2> {{ target_dir }}/qt-everywhere-src-{{ qt_version }}/build.stderr
+
+    - name: Install qt-{{ qt_version }} 
+      shell:
+        chdir: '{{ target_dir }}/qt-everywhere-src-{{ qt_version }}/shadow-build'
+        cmd: make install -j{{ cores_for_parallel_compile }} > {{ target_dir }}/qt-everywhere-src-{{ qt_version }}/install.stdout 2> {{ target_dir }}/qt-everywhere-src-{{ qt_version }}/install.stderr
+
+    - name: remove old symlink from {{ target_dir }}/qt to {{ target_dir }}/qt-{{ qt_version }} if it exists
+      file:
+        path: '{{ target_dir }}/qt'
+        state: absent
+      ignore_errors: true
+
+    - name: create symlink from {{ target_dir }}/qt to {{ target_dir }}/qt-{{ qt_version }}
+      file:
+        src: '{{ target_dir }}/qt-{{ qt_version }}'
+        dest: '{{ target_dir }}/qt'
+        state: link
+
+    - name: remove old symlink from {{ target_dir }}/qt-{{ qt_version }}/fonts to /usr/share/fonts if it exists
+      file:
+        path: '{{ target_dir }}/qt-{{ qt_version }}/lib/fonts'
+        state: absent
+      ignore_errors: true
+
+    - name: Remove shadow build directory for qt to save disk space
+      file:
+        path: '{{ target_dir }}/qt-everywhere-src-{{ qt_version }}/shadow-build'
+        state: absent
+
+  when: qt_installed_details.stat.exists == false or qt_force_rebuild is defined

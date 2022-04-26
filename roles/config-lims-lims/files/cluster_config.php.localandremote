@@ -16,7 +16,7 @@ $cluster_configuration =
          ,"type"   => "local"
      ]
      ,"lonestar5" => [
-         "active" => true
+         "active" => false
          ,"type"   => "local"
      ]
      ,"stampede2" => [
@@ -24,10 +24,6 @@ $cluster_configuration =
          ,"type"   => "local"
      ]
      ,"jetstream" => [
-         "active" => true
-         ,"type"   => "local"
-     ]
-     ,"jetstream-local" => [
          "active" => true
          ,"type"   => "local"
      ]
@@ -41,6 +37,18 @@ $cluster_configuration =
      ]
      ,"expanse" => [
          "active" => true
+         ,"type"   => "local"
+     ]
+     ,"expanse-gamc" => [
+         "active" => true
+         ,"type"   => "local"
+     ]
+     ,"demeler9-local" => [
+         "active" => false
+         ,"type"   => "local"
+     ]
+     ,"demeler1-local" => [
+         "active" => false
          ,"type"   => "local"
      ]
     ]

@@ -1,0 +1,86 @@
+---
+# template playbook for applying a limited number of roles after updates
+# acacemic/public hosts
+- hosts: example-hosts
+  gather_facts: yes
+  remote_user:  usadmin
+  become:       yes
+  
+  pre_tasks:
+#    - name: currentpolicies
+#      command:
+#        cmd : find /etc/polkit-1/localauthority -type f 
+#      register: polkitinfo
+
+#    - debug: msg="{{ polkitinfo.stdout }}"
+#    - debug: msg="{{ polkitinfo.stderr }}"
+
+#    - name: file existence sanity checkes
+#      shell:
+#        cmd: ls {{ item }}
+#      with_items:
+#        - /lib64/libXext.so
+
+    - debug: msg="{{ ansible_processor_vcpus }}"
+
+  roles:
+#      - install-fail2ban
+#      - config-lims-scigap
+#      - config-lims-admin
+#      - config-lims-gui
+#      - config-lims-slurm
+#      - config-authentication-messages
+#      - install-vncserver
+      - build-qt
+#      - build-qwt
+#      - build-us3
+#      - install-reverse-tunnel
+#      - install-reverse-tunnel-service
+     
+  vars:
+        - qt_force_rebuild: true
+        - install_workstation: false
+        - install_commercial: true
+        - comp_opt: "-march=native"
+        #- comp_opt: "-march=m64"
+
+        - qt_major_version: "5.14"
+        - qt_version: "5.14.2"
+        - qwt_version: "6.1.5"
+        - cores_for_parallel_compile: "{{ ansible_processor_vcpus }}"
+        - us3_branch: "master"
+        - gridctl_branch: "master"
+        - common_branch: "master"
+        - newinst_branch: "master"
+        - webinfo_branch: "master"
+        - utils_branch: "main"
+
+        - slurm_ver: 20.02.7 # Change to appropriate version 
+        - slurm_md5: e47e68692354f03db2999ec84fe3f735
+
+#        # N.B. slurm_cores can not exceed available cores, if it does, the node will be stuck "draining" (waiting for available resources)
+#        #      if you want to develop (not production!) on a smaller system
+#        #         add "#SBATCH -O" to your sbatch submission scripts to allow overcommitting
+#        #         set - slurm_sbatch_extras : "#SBATCH -O\n" for slurm testing scripts via ansible
+#        - slurm_cores : 4
+#        - slurm_sbatch_extras : ""
+#        # - slurm_sbatch_extras : "#SBATCH -O\n"
+
+#        # required if install-reverse-tunnel role run
+#        # you will manually need to install usadmin's public key on the rtunnel_user @ rtunnel_ip's authorized keys
+#        - rtunnel_user: "ultrascan"
+#        - rtunnel_ip: "142.66.17.9"
+#        # assign unique port
+#        - rtunnel_port: "22254"
+#        - rtunnel_service_port: "22254"
+
+        # required for role install-reverse-tunnel-service
+        # you will manually need to install usadmin's public key on the rtunnel_user @ rtunnel_ip's authorized keys
+        - rtunnel_user: "ultrascan"
+        - rtunnel_ip: "142.66.17.9"
+        # assign unique port (if both rtunnel & rtunnel service installed, use different ports!
+        - rtunnel_service_port: "22012"
+        ## "no" or "yes"
+        - rtunnel_service_enabled: "no"
+        ## "started" or "stopped" 
+        - rtunnel_service_state: "stopped"

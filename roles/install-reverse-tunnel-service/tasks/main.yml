@@ -1,0 +1,29 @@
+---
+# tasks file for install-reverse-tunnel-service
+
+- name: Install reverse tunnel service check for RedHat family
+  fail:
+    msg: install-reverse-tunnel requires RedHat family
+  when: ansible_facts['os_family'] != "RedHat" and ansible_os_family != "Rocky"
+
+- name: Copy over template reverse tunnel service
+  template: 
+    src: rtunnel.service.j2
+    dest: /etc/systemd/system/rtunnel.service
+    mode: '0644'
+    owner: root
+    group: root
+
+- name: "reload daemon for rtunnel.service, enabled (at bootup) : {{ rtunnel_service_enabled }}, state : {{ rtunnel_service_state }}"
+  ansible.builtin.systemd:
+    name: rtunnel.service
+    daemon_reload: yes
+    enabled: "{{ rtunnel_service_enabled }}"
+    state: "{{ rtunnel_service_state }}"
+    
+  
+
+
+
+
+

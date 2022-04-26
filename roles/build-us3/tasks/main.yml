@@ -9,7 +9,7 @@
   yum:
     name:
       - environment-modules
-  when: ansible_facts['os_family'] == "RedHat"
+  when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
 
 - name: Install environment-modules Debian
   yum:
@@ -48,7 +48,7 @@
     src: gui-build-gcc-toolset-9.j2
     dest: /etc/modulefiles/ultrascan/gui-build
     mode: '0644'
-  when: ansible_facts['os_family'] == "RedHat"
+  when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
 
 - name: Install, configure and compile us3
   become: no
@@ -60,7 +60,7 @@
           - git
         update_cache: yes
       become: yes
-      when: ansible_facts['os_family'] == "RedHat"
+      when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
 
     - name: install git dependency Debian
       apt:
@@ -112,7 +112,7 @@
         US3LIB: /opt/ultrascan3/lib
         us3 : /opt/ultrascan3
 #        LD_LIBRARY: ${US3LIB}:${QTLIB}:${QWTLIB}:${OLPATH}:${USDIR}
-      when: ansible_facts['os_family'] == "RedHat"
+      when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
 
     - name: make ultrascan3 for Debian
       shell:
@@ -185,7 +185,7 @@
         - us_admin
         - us_saxs_cmds_t
         - us3_hydrodyn
-      when: ansible_facts['os_family'] == "RedHat"
+      when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
 
     - name: Extra qmakes for Debian
       shell:
@@ -215,7 +215,7 @@
         us3 : /opt/ultrascan3
         ULTRASCAN:  /opt/ultrascan3/
 #        LD_LIBRARY: ${US3LIB}:${QTLIB}:${QWTLIB}:${OLPATH}:${USDIR}
-      when: ansible_facts['os_family'] == "RedHat"
+      when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
 
     - name: Make somo for Debian
       shell:
@@ -254,7 +254,7 @@
     name:
       - perl-Template-Toolkit
     state: present
-  when: ansible_facts['os_family'] == "RedHat"
+  when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
 
 - name: Install dependencies to build documentation for us3 for Debian
   yum:
@@ -269,7 +269,7 @@
     cmd: . /opt/rh/gcc-toolset-9/enable && gcc -v 2> build_doc.gccversion && make -j {{ cores_for_parallel_compile }} > build_doc.stdout 2> build_doc.stderr
   environment: 
     PATH: /opt/qt-{{ qt_version }}/bin/:/usr/bin:/usr/local/bin:/bin
-  when: ansible_facts['os_family'] == "RedHat"
+  when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
 
 - name: Build documentation for us3 for Debian
   shell:

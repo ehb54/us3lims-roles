@@ -29,7 +29,8 @@ cat > test.slurm <<EOF
 module load mpi
 cd {{ mpi_test_path }}/slurm
 
-mpirun {{ mpi_test_path }}/mpi/hellompi
+# added slurm mpich 3.3.2 bugfix
+mpirun -hosts=\$SLURM_NODELIST -np \$SLURM_NTASKS {{ mpi_test_path }}/mpi/hellompi
 EOF
 
 timeout 120 sbatch test.slurm

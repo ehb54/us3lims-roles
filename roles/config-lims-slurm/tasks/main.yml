@@ -117,4 +117,8 @@
     - munge
     
     
-     
+- name: exclude slurm from dnf/yum updates
+  lineinfile:
+      path: /etc/dnf/dnf.conf
+      insertafter: "^[main]"
+      line: "exclude=slurm*"

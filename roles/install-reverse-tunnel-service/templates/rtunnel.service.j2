@@ -1,0 +1,14 @@
+[Unit]
+Description=Reverse tunnel to AUC Solutions port {{ rtunnel_service_port }} to {{ rtunnel_user }}@{{ rtunnel_ip }}
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=0 
+
+[Service]
+User=usadmin
+ExecStart=ssh -o StrictHostKeyChecking=no -i /home/usadmin/.ssh/id_rsa -N -R {{ rtunnel_service_port }}:localhost:22 {{ rtunnel_user }}@{{ rtunnel_ip }}
+Restart=always
+RestartSec=60
+
+[Install]
+WantedBy=multi-user.target

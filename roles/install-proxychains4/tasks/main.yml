@@ -1,0 +1,27 @@
+---
+# tasks file for install-proxychains4
+
+- name: copy libproxychains4.so to /usr/lib
+  copy:
+    src: libproxychains4.so
+    dest: /usr/lib/libproxychains4.so
+    mode: u=rw,g=r,o=r
+    owner: root
+    group: root
+
+- name: copy proxychains.conf to /etc
+  copy:
+    src: proxychains.conf
+    dest: /etc/proxychains.conf
+    mode: u=rw,g=r,o=r
+    owner: root
+    group: root
+
+- name: copy proxychains4 to /usr/bin
+  copy:
+    src: proxychains4
+    dest: /usr/bin/proxychains4
+    mode: u=rwx,g=rx,o=rx
+    owner: root
+    group: root
+

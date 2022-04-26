@@ -3,6 +3,11 @@
   remote_user: usadmin
 
   pre_tasks:
+# uncomment to get all ansible_facts for target host
+#      - name: Print all available facts
+#        ansible.builtin.debug:
+#          var: ansible_facts
+
       - name: set www_user for Debian
         set_fact:
           www_user: "www-data"
@@ -30,11 +35,16 @@
            cmd: subscription-manager repos --enable "codeready-builder-for-rhel-8-x86_64-rpms"
         when: ansible_facts['distribution'] == "RedHat"
 
+      - name: enable codeready for Oracle
+        command:
+           cmd: dnf config-manager --set-enabled ol8_codeready_builder
+        when: ansible_facts['distribution'] == "OracleLinux"
+
       - name: install EPEL repo for RedHat
         yum:
            name: https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm
            state: present
-        when: ansible_facts['distribution'] == "RedHat"
+        when: ansible_facts['distribution'] == "RedHat" or ansible_os_family == "Rocky" or ansible_facts['distribution'] == "OracleLinux"
 
   roles:
       - config-lims-gui
@@ -56,12 +66,33 @@
       - install-chrony
       - install-google-fonts
       - install-msttcore-fonts
-      - install-reverse-tunnel
-
+#deprecated use the service instead       - install-reverse-tunnel
+      - install-reverse-tunnel-service
+      - renice-mariadb
+      - renice-slurmd
+      - restart-php-fpm
+      - install-demo-dbinst
+      - config-lims-backup
+      - install-xrdp
+      - install-proxychains4
+#optional    - install-fail2ban
+#scigap-only - config-lims-scigap
+      - config-authentication-messages
+      
   become: yes
   vars:
         - install_workstation: false
         - install_commercial: true
+
+        # set the desired compiler optimization
+        # for hardware installs
+        - comp_opt: "-march=native"
+        # perhaps for VM installs if qt core dumps
+        # - comp_opt: "-m64"
+        
+        # innodb_buffer_pool_size
+        - innodb_buffer_pool_size: "2G"
+        # - innodb_buffer_pool_size: "8G"
 
         # uncomment one of the below for default allowed submissions
         - submit_localonly: true
@@ -88,24 +119,40 @@
         - qt_major_version: "5.14"
         - qt_version: "5.14.2"
         - qwt_version: "6.1.5"
-        - cores_for_parallel_compile: 4
-        - us3_branch: "master"
-        - gridctl_branch: "ehb-dev"
-        - common_branch: "ehb-dev"
-        - newinst_branch: "ehb-dev"
-        - webinfo_branch: "ehb-dev"
+        - cores_for_parallel_compile: "{{ ansible_processor_vcpus }}"
+        - us3_branch: "release-2022-Q1"
+        - sql_branch: "release-2022-Q1"
+        - dbinst_branch: "master"
+        - gridctl_branch: "master"
+        - common_branch: "master"
+        - newinst_branch: "master"
+        - webinfo_branch: "master"
+        - airavata_branch: "master"
+        - utils_branch: "main"
 
         - postfix_relay_smtp_host: smtp.gmail.com
         - postfix_relay_smtp_port: 587
         - postfix_relay_smtp_user: us.etc.tests@gmail.com
         - postfix_relay_smtp_password: put_app_password_here
 
-        # required if install-reverse-tunnel role run
+        # use install-reverse-tunnel-service instead
+        ### required if install-reverse-tunnel role run
+        ### you will manually need to install usadmin's public key on the rtunnel_user @ rtunnel_ip's authorized keys
+        ##- rtunnel_user: "ultrascan"
+        ##- rtunnel_ip: "secure.aucsolutions.com"
+        ### assign unique port
+        ##- rtunnel_port: "220XX"
+
+        # required for role install-reverse-tunnel-service
         # you will manually need to install usadmin's public key on the rtunnel_user @ rtunnel_ip's authorized keys
         - rtunnel_user: "ultrascan"
-        - rtunnel_ip: "142.66.17.9"
-        # assign unique port
-        - rtunnel_port: "220XX"
+        - rtunnel_ip: "secure.aucsolutions.com"
+        # assign unique port (if both rtunnel & rtunnel service installed, use different ports!
+        - rtunnel_service_port: "220XX"
+        ## enabled at boot up - "no" or "yes"
+        - rtunnel_service_enabled: "yes"
+        ## current state -  "started" or "stopped" 
+        - rtunnel_service_state: "started"
 
         # set this to a specific value (could be numeric ip) instead of {{ ansible_fqdn }} if you with, e.g. if the host is private
         # N.B. you can only configure one host per ansible-playbook run if you do not use {{ ansible_fqdn }}
@@ -127,14 +174,14 @@
         - certbot_auto_renew_minute: "30" 
         - cerbot_auto_renew_options: "--quiet --no-self-upgrade"
 
-        - slurm_ver: 20.02.3 # Change to appropriate version 
-        - slurm_md5: c71a300d6c5d33ef8ca60e52a203bb1e
+        - slurm_ver: 20.02.7 # Change to appropriate version 
+        - slurm_md5: e47e68692354f03db2999ec84fe3f735
 
         # N.B. slurm_cores can not exceed available cores, if it does, the node will be stuck "draining" (waiting for available resources)
         #      if you want to develop (not production!) on a smaller system
         #         add "#SBATCH -O" to your sbatch submission scripts to allow overcommitting
         #         set - slurm_sbatch_extras : "#SBATCH -O\n" for slurm testing scripts via ansible
-        - slurm_cores : 2
+        - slurm_cores : "{{ ansible_processor_vcpus }}"
         - slurm_sbatch_extras : ""
         # - slurm_sbatch_extras : "#SBATCH -O\n"
 

@@ -1,0 +1,44 @@
+#!/usr/bin/bash
+
+# **** test analysis
+
+set -e
+
+# . /etc/profile
+
+cd {{ mpi_test_path }}/performance
+
+# temporarily allow errors (files do not exist) during initial cleanup
+set +e
+rm hpcinput-localhost-uslims3_Demo-00256.tar stdout stderr 2> /dev/null
+set -e
+
+tar Jxf hpcinput-localhost-uslims3_Demo-00256.tar.xz
+
+cat > test.slurm <<EOF
+#!/bin/bash
+#SBATCH -p {{ queue }}
+#SBATCH -J US3_test_1
+#SBATCH -N 1
+#SBATCH -n {{ cores_performance }}
+#SBATCH -t 02:00:00
+#SBATCH -e {{ mpi_test_path }}/performance/stderr
+#SBATCH -o {{ mpi_test_path }}/performance/stdout
+{{ slurm_sbatch_extras }}
+
+{{ module_loads }}
+LD_LIBRARY_PATH={{ us3_cluster_path}}/lib:\$LD_LIBRARY_PATH 
+
+# export UCX_LOG_LEVEL=error
+# export OMPI_MCA_btl=self,sm,tcp
+export QT_LOGGING_RULES='*.debug=true'
+
+cd {{ mpi_test_path }}/performance
+
+# added slurm mpich 3.3.2 bugfix
+time {{ mpirun }} -hosts=\$SLURM_NODELIST -np \$SLURM_NTASKS {{ us3_cluster_path}}/bin/us_mpi_analysis -walltime 2880 -mgroupcount 1 hpcinput-localhost-uslims3_Demo-00256.tar
+EOF
+
+# no wait for performance runs
+sbatch test.slurm
+

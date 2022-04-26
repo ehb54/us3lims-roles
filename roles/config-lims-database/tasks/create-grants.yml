@@ -7,6 +7,7 @@
         append_privs: yes
         priv: '*.*:USAGE/newus3.*:ALL'
         password: "{{ us3_db_pass }}"
+        login_unix_socket: /var/lib/mysql/mysql.sock
         login_user: root
         login_password: "{{ root_db_pass }}"
   with_items:
@@ -23,6 +24,7 @@
         priv: '*.*:USAGE/newus3.*:ALL/us3.*:SELECT,INSERT,UPDATE,DELETE/gfac.*:ALL/uslims3_*.*:SELECT,INSERT,UPDATE,DELETE'
         append_privs: yes
         password: '{{ us3php_db_pass }}'
+        login_unix_socket: /var/lib/mysql/mysql.sock
         login_user: root
         login_password: "{{ root_db_pass }}"
   with_items:
@@ -36,9 +38,10 @@
   mysql_user:
         name: '{{ gbl_db_user }}'
         host: "{{ item }}"
-        priv: "{{ gbl_db_name }}.*:SELECT,INSERT,UPDATE,DELETE/uslims3_*.*:SELECT,UPDATE"
+        priv: "{{ gbl_db_name }}.*:SELECT,INSERT,UPDATE,DELETE/uslims3_*.*:SELECT,UPDATE/uslims3_*.*:INSERT"
         append_privs: yes
         password: '{{ gbl_db_pass }}'
+        login_unix_socket: /var/lib/mysql/mysql.sock
         login_user: root
         login_password: "{{ root_db_pass }}"
   with_items:
@@ -54,6 +57,7 @@
         host: "{{ item }}"
         priv: "us3_notice.*:SELECT"
         append_privs: yes
+        login_unix_socket: /var/lib/mysql/mysql.sock
         login_user: root
         login_password: "{{ root_db_pass }}"
   with_items:

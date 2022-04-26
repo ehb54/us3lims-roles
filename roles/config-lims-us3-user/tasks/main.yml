@@ -7,7 +7,7 @@
       - httpd
       - php
     update_cache: yes
-  when: ansible_facts['os_family'] == "RedHat"
+  when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
 
 - name: install dependencies Debian
   apt:
@@ -69,8 +69,16 @@
 - name: git clone us3lims_dbutils repository
   git:
    repo: https://github.com/ehb54/us3lims_dbutils.git
-   version: "{{ branch }}"
+   version: "{{ utils_branch }}"
    dest: "/home/us3/lims/database/utils"
+
+- name: Change ownership of us3lims_dbutils
+  ansible.builtin.file:
+    path: "/home/us3/lims/database/utils"
+    state: directory
+    recurse: yes
+    owner: us3
+    group: us3
 
 - set_fact:
     gridctl_branch: "{{ branch }}"
@@ -81,6 +89,15 @@
    repo: https://github.com/ehb54/us3lims_gridctl.git
    version: "{{ gridctl_branch }}"
    dest: "/home/us3/lims/bin"
+
+- name: copy cluster_config.php.template to cluser_config.php
+  ansible.builtin.copy:
+   remote_src: yes
+   src: /home/us3/lims/bin/cluster_config.php.template
+   dest: /home/us3/lims/bin/cluster_config.php
+   owner: us3
+   group: us3
+   mode: 0644
 
 - name: Change permissions in gridctl
   file:

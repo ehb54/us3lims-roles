@@ -1,0 +1,70 @@
+---
+# playbook for installing a new cluster
+- hosts: demeler9host
+# uncomment if running on localhost
+#  connection: local
+  
+  gather_facts: yes
+  
+  pre_tasks:
+
+    - name: validate compiler choice
+      fail:
+        msg: "use -e \"compiler_choice=X\" where X is currently 'gcc_rh_9' or 'intel'"
+      when: compiler_choice is not defined or ( compiler_choice != "gcc_rh_9" and compiler_choice != "intel" )
+    - name: validate optimization
+      fail:
+        msg: "use -e \"optimization='X'\" where X contains your desired optimization flags"
+      when: optimization is not defined
+
+  roles:
+
+#    - build-qt-cluster
+    - build-us-mpi-cluster
+     
+  vars:
+    qt_force_rebuild           : true
+    rebuild_us_mpi             : true
+    target_dir                 : /home/usadmin/perftest
+    qt_dir                     : /opt
+    mpirun                     : "mpirun"
+    queue                      : "batch"
+    comp_opt                   : '{{ optimization }}'
+
+    compilers:
+      gcc_rh_9:
+        compiler       : g++
+        qmake_cc       : /opt/rh/gcc-toolset-9/root/usr/bin/gcc
+        qmake_cxx      : /opt/rh/gcc-toolset-9/root/usr/bin/g++
+        qmake_link     : /opt/rh/gcc-toolset-9/root/usr/bin/g++
+        platform       : linux-g++-64
+        module_loads   : "module purge; module load ultrascan/mpi-build; module load mpi"
+      intel:
+        compiler       : icc
+        qmake_cc       : icc
+        qmake_cxx      : icpc
+        qmake_link     : icpc
+        platform       : linux-icc-64
+        module_loads   : "module purge; module load ultrascan/mpi-build; . /opt/intel/oneapi/setvars.sh; module load mpi"
+
+    extra_configs              : "-no-gui -no-pch"
+    compiler                   : "{{ compilers[compiler_choice].compiler }}"
+    qmake_cc                   : "{{ compilers[compiler_choice].qmake_cc }}"
+    qmake_cxx                  : "{{ compilers[compiler_choice].qmake_cxx }}"
+    qmake_link                 : "{{ compilers[compiler_choice].qmake_link }}"
+    platform                   : "{{ compilers[compiler_choice].platform }}"
+    module_loads               : "{{ compilers[compiler_choice].module_loads }}"
+    mpi_path                   : "/usr/lib64/mpich"
+    mpi_libs                   : "-L{{ mpi_path }}/lib -lmpi"
+    include_path               : "/usr/include/mpich-x86_64"
+    cores_performance          : 16
+    cores_for_parallel_compile : 3
+
+    qt_major_version           : "5.14"
+    qt_version                 : "5.14.2"
+    qwt_version                : "6.1.5"
+    us3_branch                 : "master"
+    slurm_cores                : 128
+    slurm_sbatch_extras        : ""
+
+      

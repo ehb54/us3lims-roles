@@ -24,3 +24,8 @@
     - http
     - ssh
     - mysql
+
+- name: reload firewall
+  ansible.builtin.shell:
+    cmd: firewall-cmd --reload
+    

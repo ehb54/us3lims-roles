@@ -1,0 +1,35 @@
+---
+# tasks file to install fail2ban
+
+- name: Install fail2ban & whois RedHat
+  dnf:
+    enablerepo: powertools
+    name:
+     - fail2ban
+     - whois
+    update_cache: yes
+  when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
+
+- name: Create jail.local for fail2ban
+  copy:
+    src: jail.local
+    dest: /etc/fail2ban/jail.local
+    mode: u=rw,g=r,o=r
+    owner: root
+    group: root
+
+- name: Enable fail2ban
+  service:
+    name : '{{ item }}'
+    enabled: yes
+    state: started
+  with_items:
+    - fail2ban
+    
+- name: Restart fail2ban in case of a config change
+  service:
+    name : '{{ item }}'
+    enabled: yes
+    state: restarted
+  with_items:
+    - fail2ban

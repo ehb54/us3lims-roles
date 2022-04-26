@@ -38,7 +38,8 @@ export QT_LOGGING_RULES='*.debug=true'
 
 cd {{ mpi_test_path }}/analysis
 
-mpirun us_mpi_analysis -walltime 2880 -mgroupcount 1 hpcinput-localhost-uslims3_test-00001.tar
+# added slurm mpich 3.3.2 bugfix
+mpirun -hosts=\$SLURM_NODELIST -np \$SLURM_NTASKS us_mpi_analysis -walltime 2880 -mgroupcount 1 hpcinput-localhost-uslims3_test-00001.tar
 EOF
 
 # we are giving it three minutes to complete

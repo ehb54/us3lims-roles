@@ -1,0 +1,78 @@
+---
+# collect usage status
+# academic & commercial hosts with dbs
+- hosts: commercialhosts academichostswithdbs
+
+  vars_prompt:
+
+    - name: pw
+      prompt: 'Encryption password [paste from pass {{ pass_from }}] '
+      private: yes
+      confirm: yes
+
+  gather_facts: yes
+  remote_user:  usadmin
+  become:       yes
+  
+  pre_tasks:
+
+    - name: graceful exit
+      block: 
+        - name: store pw temporarily
+          delegate_to: localhost
+          run_once: true
+          become: no
+          shell: echo '{{ pw }}' > {{ tmp_pass_file }} && chmod 600 {{ tmp_pass_file }}
+    
+        - name: fetch config files {{ config_dir }}
+          fetch:
+            src: '{{ item }}'
+            dest: "{{ config_dir }}/"
+            flat: yes
+          with_items: '{{ config_files_full_path }}'
+
+        - name: set permissions of downloaded files {{ config_dir }}
+          delegate_to: localhost
+          ansible.builtin.file :
+            dest: "{{ config_dir }}"
+            recurse: true
+            mode: g-rwx,o-rwx
+            owner: usadmin
+    
+        - name: encrypt files
+          delegate_to: localhost
+          become: no
+          shell:
+            chdir: '{{ config_dir }}'
+            cmd: gpg -c --batch --yes --passphrase-file ~/.config_pass {{ item }}
+          with_items: '{{ config_files }}'
+
+        - name: remove unencrypted files
+          delegate_to: localhost
+          ansible.builtin.file:
+            path: '{{ config_dir }}/{{ item }}'
+            state: absent
+          with_items: '{{ config_files }}'
+
+      always:
+        - name: remove temporary pw file
+          delegate_to: localhost
+          run_once: true
+          become: no
+          ansible.builtin.file:
+            path: '{{ tmp_pass_file }}'
+            state: absent
+
+  roles:
+
+  vars:
+    - config_dir    : "/home/usadmin/configs/{{ inventory_hostname }}"
+    - pass_from     : "ansible/vault"
+    - tmp_pass_file : "/home/usadmin/.config_pass"
+    - config_files_full_path :
+        - /home/us3/lims/bin/listen-config.php
+        - /home/us3/lims/database/utils/db_config.php
+    - config_files :
+        - listen-config.php
+        - db_config.php
+    

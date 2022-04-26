@@ -1,0 +1,15 @@
+---
+# tasks file for authentication messages
+
+- name: copy files to 
+  copy:
+    src: "{{ item }}"
+    dest: /etc/polkit-1/localauthority/50-local.d/{{ item }}
+    mode: u=rw,g=r,o=r
+    owner: root
+    group: root
+  loop:
+    - 50-wifiscans.pkla
+    - 51-sys-repos.pkla
+    - 52-color-device.pkla
+    - 53-pc_sc_daemon.pkla

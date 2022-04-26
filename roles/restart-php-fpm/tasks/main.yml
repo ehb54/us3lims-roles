@@ -1,0 +1,14 @@
+---
+# tasks file for restart-php-fpm
+
+- name: restart php-fpm
+  service:
+       name: php-fpm
+       enabled: yes
+       state: restarted
+
+- name: restart httpd
+  service:
+       name: httpd
+       enabled: yes
+       state: restarted

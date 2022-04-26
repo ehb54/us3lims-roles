@@ -1,0 +1,27 @@
+---
+# tasks file for renice-slurmd
+
+- name: copy /usr/lib/systemd/system/slurmd.service to /etc/systemd/system/
+  ansible.builtin.copy:
+    src: /usr/lib/systemd/system/slurmd.service
+    dest: /etc/systemd/system/slurmd.service
+    remote_src: yes
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: add nice to /etc/systemd/system/slurmd.service
+  ansible.builtin.lineinfile:
+    path: /etc/systemd/system/slurmd.service
+    insertafter: '^\[Service\]'
+    line: 'Nice=10'
+
+- name: reload systemd daemon
+  systemd:
+       daemon_reload: yes
+
+- name: restart slurmd
+  service:
+       name: slurmd
+       enabled: yes
+       state: restarted

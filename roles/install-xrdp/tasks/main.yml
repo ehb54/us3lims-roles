@@ -1,0 +1,38 @@
+---
+# tasks file for install-xrdp
+
+- name: install xrdp
+  dnf:
+      name: xrdp
+      update_cache: yes
+
+- name: config xrdp X11 display offset
+  lineinfile:
+      path: /etc/xrdp/sesman.ini
+      regexp: "^X11DisplayOffset="
+      line: X11DisplayOffset=100
+
+- name: config xrdp listen to 0.0.0.0
+  lineinfile:
+      path: /etc/xrdp/sesman.ini
+      regexp: "^ListenAddress="
+      line: ListenAddress=0.0.0.0
+
+- name: add xrdp (3350) to firewall
+  firewalld:
+      zone: public
+      port: 3350/tcp
+      permanent: true
+      state: enabled
+
+- name: Enable xrdp
+  service:
+    name : '{{ item }}'
+    enabled: yes
+    state: started
+  with_items:
+    - xrdp
+
+- name: reload firewall
+  ansible.builtin.shell:
+    cmd: firewall-cmd --reload

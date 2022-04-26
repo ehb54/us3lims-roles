@@ -4,7 +4,7 @@
 - name: Install reverse tunnel check for RedHat family
   fail:
     msg: install-reverse-tunnel requires RedHat family
-  when: ansible_facts['os_family'] != "RedHat"
+  when: ansible_facts['os_family'] != "RedHat" and ansible_os_family != "Rocky"
 
 - name: copy rtunnel to /usr/sbin/rtunnel
   ansible.builtin.copy:

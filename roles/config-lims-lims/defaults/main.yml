@@ -12,6 +12,11 @@ www_newlims: "{{ www_uslims }}/uslims3_newlims"
 www_uslims3_data: "{{ www_uslims }}/uslims3_data"
 db_configured: "yes"
 
+# airavata defaults
+us_airavata_bridge_url: "https://github.com/SciGaP/ultrascan-airavata-bridge.git"
+us_airavata_bridge_branch: "master"
+us_airavata_bridge_path: "{{ www_common }}/class/ultrascan-airavata-bridge"
+
 ### Defaults for config.php
 org_name: "LIMS Portal"
 site_author: "Borries Demeler, University of Lethbridge"

@@ -1,0 +1,93 @@
+---
+# tasks file for install-demo-dbinst
+
+- name: copy over demo data to ~us3/lims/database/utils/dbmigrate
+  ansible.builtin.copy:
+    src: export-full-uslims4.aucsolutions.com.tar
+    dest: /home/us3/lims/database/utils/dbmigrate/export-full-uslims4.aucsolutions.com.tar
+    owner: us3
+    group: us3
+    mode: '0644'
+
+- name: create my.cnf in ~us3/lims/database/utils
+  template:
+    src: my.cnf.j2
+    dest: /home/us3/lims/database/utils/my.cnf
+    owner: us3
+    group: us3
+    mode: '0600'
+    
+- name: create my.cnf in ~us3/lims/database/utils/dbmigrate
+  template:
+    src: my.cnf.j2
+    dest: /home/us3/lims/database/utils/dbmigrate/my.cnf
+    owner: us3
+    group: us3
+    mode: '0600'
+
+- name: copy ~us3/lims/database/utils/db_config.php.template to db_config.php
+  ansible.builtin.copy:
+    src: /home/us3/lims/database/utils/db_config.php.template
+    dest: /home/us3/lims/database/utils/db_config.php
+    remote_src: yes
+    owner: us3
+    group: us3
+    mode: '0600'
+  
+- name: replace SET_HOSTNAME ~us3/lims/database/utils/db_config.php
+  ansible.builtin.replace:
+    path: /home/us3/lims/database/utils/db_config.php
+    regexp: "SET_HOSTNAME"
+    replace: "{{ hostname }}"
+
+- name: replace SET_HOST ~us3/lims/database/utils/db_config.php
+  ansible.builtin.replace:
+    path: /home/us3/lims/database/utils/db_config.php
+    regexp: "SET_HOST"
+    replace: "localhost"
+
+- name: replace SET_USER ~us3/lims/database/utils/db_config.php
+  ansible.builtin.replace:
+    path: /home/us3/lims/database/utils/db_config.php
+    regexp: "SET_USER"
+    replace: "root"
+
+- name: replace SET_PASSWORD ~us3/lims/database/utils/db_config.php
+  ansible.builtin.replace:
+    path: /home/us3/lims/database/utils/db_config.php
+    regexp: "SET_PASSWORD"
+    replace: "{{ root_db_pass }}"
+
+- name: replace SET_EMAIL ~us3/lims/database/utils/db_config.php
+  ansible.builtin.replace:
+    path: /home/us3/lims/database/utils/db_config.php
+    regexp: "SET_EMAIL"
+    replace: "{{ admin_email }}"
+
+- name: replace SET_US3_BRANCH ~us3/lims/database/utils/db_config.php
+  ansible.builtin.replace:
+    path: /home/us3/lims/database/utils/db_config.php
+    regexp: "SET_US3_BRANCH"
+    replace: "{{ us3_branch }}"
+
+- name: replace SET_SQL_BRANCH ~us3/lims/database/utils/db_config.php
+  ansible.builtin.replace:
+    path: /home/us3/lims/database/utils/db_config.php
+    regexp: "SET_SQL_BRANCH"
+    replace: "{{ sql_branch }}"
+
+- name: import data
+  ansible.builtin.shell:
+    chdir: /home/us3/lims/database/utils/dbmigrate
+    cmd: "yes | php -d mysqli.allow_local_infile=On stage3_import_databases.php uslims4.aucsolutions.com {{ hostname }} {{ ipaddr_ext }}"
+
+- name: update passwords
+  ansible.builtin.shell:
+    chdir: /home/us3/lims/database/utils
+    cmd: "php uslims_people.php --update --db uslims3_Demo"
+
+- name: run ~us3/lims/bin/set_cluster_authorizations.php uslims3_Demo updatepeople
+  ansible.builtin.shell:
+    chdir: /home/us3/lims/bin
+    cmd: "php set_cluster_authorizations.php uslims3_Demo updatepeople"
+

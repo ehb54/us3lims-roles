@@ -5,7 +5,7 @@ $serverfile = "/etc/tigervnc/vncserver.users";
 
 ### end user defines
 
-$notes = "usage: $0 {status|start|restart|stop|enable|disable}
+$notes = "usage: $0 {status|start|restart|stop|enable|disable} {quick}
 
 controls vnc server for user
 
@@ -18,6 +18,7 @@ options:
     enable        : enables the vnc service for user at system boot
     disable       : disables the vnc service for user at system boot
 
+    quick         : disable startup check
 ";
 
 %okargs = (
@@ -46,6 +47,11 @@ die "$0: $serverfile does not exist\n" if !-e $serverfile;
 die "$0: $serverfile is not readable\n" if !-r $serverfile;
 
 $arg = shift || die $notes;
+if ( @ARGV ) {
+    $quick = shift;
+    die $notes if $quick ne 'quick';
+}
+
 die $notes if @ARGV;
 
 die "Invalid argument '$arg'\n\n$notes" if !$okargs{ $arg };
@@ -87,6 +93,31 @@ if ( $startargs{$arg} ) {
     
 
 print `systemctl $arg vncserver\@:$vports{$user}\n`;
+
+if ( !$quick && $arg =~ /^(start|restart)$/ ) {
+    sleep 30; # give it time to fail
+    my @status = `systemctl status vncserver\@:$vports{$user} 2>&1\n`;
+    my @test   = grep /^\s*Active:/, @status;
+    if ( @test != 1 ||
+         $test[0] !~ /^\s*Active: active/ ) {
+        print
+            "
+********************************************************************************
+ERROR: Your VNC server was unable to start
+
+This can be caused by:
+1. another graphical session running under your user name 
+   (possibly on the system console)
+2. a corrupt ~/.vnc/config file
+3. some other process using the same display number
+
+If you can not resolve this,
+please contact your system administrator or UltraScan support.
+********************************************************************************
+";
+        exit(-1);
+    }
+}
 
 if ( $infoargs{$arg} ) {
     $nport = $vports{$user} + 5900;

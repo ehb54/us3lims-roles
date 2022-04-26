@@ -3,6 +3,7 @@
   mysql_db:
         name: "{{ us3_db_name }}"
         state: present
+        login_unix_socket: /var/lib/mysql/mysql.sock
         login_user: root
         login_password: "{{ root_db_pass }}"
 
@@ -10,6 +11,7 @@
   mysql_db:
         name: "{{ gbl_db_name }}"
         state: present
+        login_unix_socket: /var/lib/mysql/mysql.sock
         login_user: root
         login_password: "{{ root_db_pass }}"
 
@@ -17,6 +19,7 @@
   mysql_db:
         name: "us3"
         state: present
+        login_unix_socket: /var/lib/mysql/mysql.sock
         login_user: root
         login_password: "{{ root_db_pass }}"
 
@@ -24,6 +27,7 @@
   mysql_db:
         name: us3_notice
         state: present
+        login_unix_socket: /var/lib/mysql/mysql.sock
         login_user: root
         login_password: "{{ root_db_pass }}"
 
@@ -38,6 +42,7 @@
 
 - name: Inject tables for us3_notice
   mysql_db:
+        login_unix_socket: /var/lib/mysql/mysql.sock
         login_user: root
         login_password: "{{ root_db_pass }}"
         name: us3_notice
@@ -55,6 +60,7 @@
 
 - name: Inject metadata file for newus3
   mysql_db:
+        login_unix_socket: /var/lib/mysql/mysql.sock
         login_user: root
         login_password: "{{ root_db_pass }}"
         name: newus3
@@ -71,6 +77,7 @@
 
 - name: Inject the people_create file into newus3
   mysql_db:
+        login_unix_socket: /var/lib/mysql/mysql.sock
         login_user: root
         login_password: "{{ root_db_pass }}"
         name: newus3
@@ -87,6 +94,7 @@
 
 - name: Inject gfac-db file into gfac
   mysql_db:
+        login_unix_socket: /var/lib/mysql/mysql.sock
         login_user: root
         login_password: "{{ root_db_pass }}"
         name: gfac
@@ -103,6 +111,7 @@
 
 - name: Inject the temp people sql file
   mysql_db:
+        login_unix_socket: /var/lib/mysql/mysql.sock
         login_user: root
         login_password: "{{ root_db_pass }}"
         name: newus3
@@ -125,6 +134,7 @@
 
 - name: Inject global-db file into uslims3_global
   mysql_db:
+        login_unix_socket: /var/lib/mysql/mysql.sock
         login_user: root
         login_password: "{{ root_db_pass }}"
         name: uslims3_global
@@ -136,6 +146,7 @@
 #- name: Populate us3 tables
 #  mysql_db:
 #        chdir: /home/us3/lims/database/sql
+#        login_unix_socket: /var/lib/mysql/mysql.sock
 #        login_user: root
 #        login_password: "{{ root_db_pass }}"
 #        name: us3
@@ -145,15 +156,15 @@
 
 - name: Create us3 db
   mysql_db:
+    login_unix_socket: /var/lib/mysql/mysql.sock
     login_user: root
     login_password: "{{ root_db_pass }}"
     name: us3
     state: present
-#  when: root_pwd_check.rc == 0
+  when: root_pwd_check.rc == 0
 
 - name: Populate us3 tables
   shell:
     chdir: /home/us3/lims/database/sql
     cmd: mysql -u root -p'{{ root_db_pass }}' us3 < /home/us3/lims/database/sql/us3.sql
-#  when: root_pwd_check.rc == 0
-    
+  when: root_pwd_check.rc == 0

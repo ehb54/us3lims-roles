@@ -27,10 +27,6 @@ $cluster_configuration =
          "active" => false
          ,"type"   => "local"
      ]
-     ,"jetstream-local" => [
-         "active" => false
-         ,"type"   => "local"
-     ]
      ,"juwels" => [
          "active" => false
          ,"type"   => "local"
@@ -40,6 +36,18 @@ $cluster_configuration =
          ,"type"   => "local"
      ]
      ,"expanse" => [
+         "active" => false
+         ,"type"   => "local"
+     ]
+     ,"expanse-gamc" => [
+         "active" => false
+         ,"type"   => "local"
+     ]
+     ,"demeler9-local" => [
+         "active" => false
+         ,"type"   => "local"
+     ]
+     ,"demeler1-local" => [
          "active" => false
          ,"type"   => "local"
      ]

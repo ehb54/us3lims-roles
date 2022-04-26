@@ -1,0 +1,67 @@
+[DEFAULT] 
+ignoreip = 127.0.0.1/8 142.66.17.9 71.41.148.17
+bantime  = 21600
+findtime  = 1000
+maxretry = 3
+banaction = iptables-multiport
+backend = systemd
+mta = sendmail
+protocol = tcp
+# destemail = emre.brookes@umt.edu
+# sender = emre.brookes@umt.edu
+# senderName = Fail2ban
+# action = %(action_mwl)s
+
+[sshd] 
+enabled = true
+bantime  = -1
+
+# detect password authentication failures
+[apache]
+enabled  = true
+port     = http,https
+filter   = apache-auth
+logpath  = /var/log/httpd/*error_log
+maxretry = 6
+
+# detect spammer robots crawling email addresses
+[apache-badbots]
+enabled  = true
+port     = http,https
+filter   = apache-badbots
+logpath  = /var/log/httpd/*access_log
+bantime  = 172800
+maxretry = 1
+
+# detect potential search for exploits and php vulnerabilities
+[apache-noscript]
+enabled  = true
+port     = http,https
+filter   = apache-noscript
+logpath  = /var/log/httpd/*error_log
+maxretry = 6
+
+# detect Apache overflow attempts
+[apache-overflows]
+enabled  = true
+port     = http,https
+filter   = apache-overflows
+logpath  = /var/log/httpd/*error_log
+maxretry = 2
+
+# detect failures to find a home directory on a server
+[apache-nohome]
+enabled  = true
+port     = http,https
+filter   = apache-nohome
+logpath  = /var/log/httpd/*error_log
+maxretry = 2
+
+[apache-botsearch]
+# detect failures to execute non-existing scripts that
+# are associated with several popular web services
+# e.g. webmail, phpMyAdmin, WordPress
+port     = http,https
+filter   = apache-botsearch
+logpath  = /var/log/httpd/*error_log
+maxretry = 2

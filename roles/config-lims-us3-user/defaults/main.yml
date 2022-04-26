@@ -6,10 +6,8 @@ cron_enable_pro: 'yes'
 
 submit_dir: '/srv/www/htdocs/uslims3/uslims3_data'
 
-# class_dir_p: '/srv/www/htdocs/common/class/'
-# class_dir_d: '/srv/www/htdocs/common/class_devel/'
-class_dir_p: '/srv/www/htdocs/common/class_local/'
-class_dir_d: '/srv/www/htdocs/common/class_local/'
+class_dir_p: '/srv/www/htdocs/common/class/'
+class_dir_d: '/srv/www/htdocs/common/class_devel/'
 class_dir_l: '/srv/www/htdocs/common/class_local/'
 
 org_name: 'Ultrascan3 Admin'
