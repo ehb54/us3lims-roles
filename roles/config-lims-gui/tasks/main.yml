@@ -58,6 +58,12 @@
     group: root
   when: install_commercial|default(false)
 
+- name: install evolution mail client
+  dnf:
+      name: evolution
+      state: present
+      update_cache: yes
+
 - name: update dconf database
   command: dconf update
   

@@ -1,0 +1,67 @@
+---
+# collect emails
+# academic hosts with dbs
+- hosts: academichostswithdbs
+# commerical hosts
+#- hosts: commercialhosts
+
+  gather_facts: yes
+  remote_user:  usadmin
+  become:       yes
+  
+  pre_tasks:
+    - name        : get local date
+      shell       : date +%Y-%m-%d
+      register    : local_date
+      delegate_to : localhost
+
+    - name: update uslims3_dbutils for latest version of uslims_people.php
+      shell:
+        chdir: /home/us3/lims/database/utils
+        cmd: git pull
+      become: yes
+      become_user: us3
+      when: update_git == true
+
+    - name: ensure directory to retrieve emails
+      ansible.builtin.file:
+        state : directory
+        path  : '{{ email_dir }}/{{ local_date.stdout }}'
+        mode  : '0640'
+        owner : usadmin
+        group : usadmin
+      delegate_to: localhost
+      run_once: true
+
+    - name: collect emails
+      shell:
+        chdir: /home/us3/lims/database/utils
+        cmd: php uslims_people.php --emails
+      become: yes
+      become_user: us3
+      register: email_output
+
+    - name: save emails locally
+      copy:
+        content: "{{ email_output.stdout }}\n"
+        dest: '{{ email_dir }}/{{ local_date.stdout }}/{{ inventory_hostname }}.txt'
+        mode  : '0640'
+        owner : usadmin
+        group : usadmin
+      delegate_to: localhost
+
+    - name: create unified emails
+      shell:
+        chdir: "{{ email_dir }}/{{ local_date.stdout }}"
+        cmd: umask 640 && cat * | sort -u > email_summary.txt
+      become: yes
+      become_user: usadmin
+      delegate_to : localhost
+      run_once: true
+
+  roles:
+
+  vars:
+    - email_dir                   : "/home/usadmin/emails/academic"
+#    - email_dir                   : "/home/usadmin/emails/commercial"
+    - update_git                  : false

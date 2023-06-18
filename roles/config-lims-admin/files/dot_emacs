@@ -311,6 +311,7 @@
   )
 
 (global-set-key "\C-cg" 'goto-line)
+(global-set-key "\C-ci" 'indent-to)
 (global-set-key "\C-cl" 'global-font-lock-mode)
 (global-set-key "\C-cT" 'transient-mark-mode)
 (global-set-key "\C-cu" 'rename-uniquely)

@@ -76,12 +76,20 @@
 
   when: "'slurm' not in ansible_facts.packages"
 
+- name: Create slurm group
+  group:
+        name: slurm
+        state: present
+        system: yes
+        gid: 21001
 
 - name: Create slurm user
   user:
         name: slurm
         state: present
         system: yes
+        uid: 21001
+        group: slurm
 
 - name: create slurm log dir
   file:
@@ -105,6 +113,18 @@
   notify:
         - restart slurmd
         - restart slurmctld
+
+- name: Copy over slurmctld.service with restart
+  copy:
+    src: slurmctld.service
+    dest: /etc/systemd/system/slurmctld.service
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: reload systemd daemon
+  systemd:
+       daemon_reload: yes
 
 - name: Enable slurm
   service:

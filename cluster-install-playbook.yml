@@ -1,6 +1,8 @@
 ---
 # playbook for installing a new cluster
-- hosts: demeler9host
+- hosts: ls6host
+  remote_user: us3
+
 # uncomment if running on localhost
 #  connection: local
   
@@ -19,17 +21,19 @@
 
   roles:
 
-#    - build-qt-cluster
+    - build-qt-cluster
     - build-us-mpi-cluster
+#    - install-cluster-status
      
   vars:
     qt_force_rebuild           : true
     rebuild_us_mpi             : true
-    target_dir                 : /home/usadmin/perftest
-    qt_dir                     : /opt
-    mpirun                     : "mpirun"
-    queue                      : "batch"
+    target_dir                 : /work/01623/us3/ls6
+    qt_dir                     : /work/01623/us3/ls6
+    mpirun                     : "ibrun"
+    queue                      : "development"
     comp_opt                   : '{{ optimization }}'
+    cores_for_parallel_compile : 4
 
     compilers:
       gcc_rh_9:
@@ -40,12 +44,12 @@
         platform       : linux-g++-64
         module_loads   : "module purge; module load ultrascan/mpi-build; module load mpi"
       intel:
-        compiler       : icc
-        qmake_cc       : icc
-        qmake_cxx      : icpc
-        qmake_link     : icpc
+        compiler       : mpicc
+        qmake_cc       : mpicc
+        qmake_cxx      : mpicxx
+        qmake_link     : mpicxx
         platform       : linux-icc-64
-        module_loads   : "module purge; module load ultrascan/mpi-build; . /opt/intel/oneapi/setvars.sh; module load mpi"
+        module_loads   : ""
 
     extra_configs              : "-no-gui -no-pch"
     compiler                   : "{{ compilers[compiler_choice].compiler }}"
@@ -54,11 +58,10 @@
     qmake_link                 : "{{ compilers[compiler_choice].qmake_link }}"
     platform                   : "{{ compilers[compiler_choice].platform }}"
     module_loads               : "{{ compilers[compiler_choice].module_loads }}"
-    mpi_path                   : "/usr/lib64/mpich"
-    mpi_libs                   : "-L{{ mpi_path }}/lib -lmpi"
-    include_path               : "/usr/include/mpich-x86_64"
+    mpi_path                   : ""
+    mpi_libs                   : ""
+    include_path               : ""
     cores_performance          : 16
-    cores_for_parallel_compile : 3
 
     qt_major_version           : "5.14"
     qt_version                 : "5.14.2"

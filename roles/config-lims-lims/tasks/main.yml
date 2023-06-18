@@ -41,6 +41,15 @@
    force: yes
   changed_when: false
 
+- name: copy global_config.php.template to global_config.php
+  ansible.builtin.copy:
+   remote_src: yes
+   src: "{{ www_common }}/global_config.php.template"
+   dest: "{{ www_common }}/global_config.php"
+   owner: us3
+   group: us3
+   mode: 0644
+
 # Install {{ us_airavata_bridge_url }}
 - name: Clone commons repo
   git:

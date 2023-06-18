@@ -6,7 +6,7 @@ StartLimitIntervalSec=0
 
 [Service]
 User=usadmin
-ExecStart=ssh -o StrictHostKeyChecking=no -i /home/usadmin/.ssh/id_rsa -N -R {{ rtunnel_service_port }}:localhost:22 {{ rtunnel_user }}@{{ rtunnel_ip }}
+ExecStart=ssh -o StrictHostKeyChecking=no {{ rtunnel_service_ssh_extras }} -i /home/usadmin/.ssh/id_rsa -N -R {{ rtunnel_service_port }}:localhost:22 {{ rtunnel_user }}@{{ rtunnel_ip }}
 Restart=always
 RestartSec=60
 

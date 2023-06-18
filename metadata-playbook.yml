@@ -1,0 +1,109 @@
+---
+# collect usage status
+# academic hosts with dbs
+#- hosts: demeler9
+- hosts: academichostswithdbs
+
+  gather_facts: yes
+  remote_user:  usadmin
+  become:       yes
+  
+  pre_tasks:
+    - name        : get local date
+      shell       : date +%Y-%m-%d
+      register    : local_date
+      delegate_to : localhost
+
+    - name: update uslims3_dbutils for latest version of metadata
+      shell:
+        chdir: /home/us3/lims/database/utils
+        cmd: git pull
+      become: yes
+      become_user: us3
+      when: update_git == true
+
+    - name: collect metadata string variants
+      shell:
+        chdir: /home/us3/lims/database/utils
+        cmd: php uslims_job_metadata.php --db-exclude uslims3_Demo --limit {{ limit_results }} --list-string-variants 2>&1 > {{ inventory_hostname }}_metadata.txt
+      become: yes
+      become_user: us3
+      when: collect_metadata_string_variants == true
+
+    - name: metadata log into {{ metadata_dir }}/{{ local_date.stdout }}
+      fetch:
+        src: /home/us3/lims/database/utils/{{ inventory_hostname }}_metadata.txt
+        dest: "{{ metadata_dir }}/{{ local_date.stdout }}/"
+        flat: yes
+      when: collect_metadata_string_variants == true
+
+    - name: ensure directory to retrieve metadata
+      ansible.builtin.file:
+        state : directory
+        path  : '{{ metadata_dir }}/{{ local_date.stdout }}'
+        mode  : '0755'
+        owner : usadmin
+        group : usadmin
+
+      delegate_to: localhost
+      when: get_metadata == true or collect_metadata_string_variants == true
+
+    - name: make training data directory
+      ansible.builtin.file:
+        path: '{{ training_directory }}'
+        state: directory
+        mode: '0755'
+        owner: us3
+        group: us3
+
+    - name: collect metadata
+      shell:
+        chdir: /home/us3/lims/database/utils
+        cmd: php uslims_job_metadata.php --db-exclude uslims3_Demo --limit {{ limit_results }} --metadata-csv {{ inventory_hostname }}_metadata.csv --metadata-output-directory '{{ training_directory }}' --metadata-format-file {{ metadata_format_file }} --dataset-count-range 1 {{ max_datasets }} 2>&1 > {{ inventory_hostname }}_metadata.txt
+      become: yes
+      become_user: us3
+      when: get_metadata == true
+
+    - name: retrieve metadata
+      synchronize:
+        mode : pull
+        src  : '{{ training_directory }}'
+        dest : '{{ metadata_dir }}/{{ local_date.stdout }}/{{ inventory_hostname }}'
+      become: yes
+      become_user: us3
+      when: get_metadata == true
+
+    - name: cleanup metadata
+      ansible.builtin.file:
+        state : absent
+        path  : '{{ training_directory }}'
+      become: yes
+      become_user: us3
+      when: cleanup_metadata == true
+
+    - name: create unified csv
+      shell:
+        chdir: "{{ metadata_dir }}/{{ local_date.stdout }}"
+        cmd: head -1 `ls */*/*_metadata.csv | head -1` > summary_metadata.csv && for i in */*/*_metadata.csv; { sed 1d $i | sed '/^\s*$/d' >> summary_metadata.csv; }
+      become: yes
+      become_user: usadmin
+      delegate_to : localhost
+      run_once: true
+
+  roles:
+
+  vars:
+    - metadata_dir                       : "/home/usadmin/metadata"
+    - update_git                         : true
+    - collect_metadata_string_variants   : false
+    - training_directory                 : "/tmp/training"
+    - get_metadata                       : true
+    - cleanup_metadata                   : true
+# set limit results to non-zero for testing with a limited number of results per database
+    - limit_results                      : 0
+#    - metadata_format_file               : "uslims_metadata_format.json"
+#    - max_datasets                       : 9999
+# for testing, limit datasets
+    - metadata_format_file               : "uslims_metadata_format_max10datasets.json"
+    - max_datasets                       : 10
+

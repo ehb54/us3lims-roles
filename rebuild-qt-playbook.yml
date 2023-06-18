@@ -1,7 +1,7 @@
 ---
 # template playbook for applying a limited number of roles after updates
 # acacemic/public hosts
-- hosts: example-hosts
+- hosts: umnhost
   gather_facts: yes
   remote_user:  usadmin
   become:       yes
@@ -42,7 +42,7 @@
         - install_workstation: false
         - install_commercial: true
         - comp_opt: "-march=native"
-        #- comp_opt: "-march=m64"
+        #- comp_opt: "-m64"
 
         - qt_major_version: "5.14"
         - qt_version: "5.14.2"

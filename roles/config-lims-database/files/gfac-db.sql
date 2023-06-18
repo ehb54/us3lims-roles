@@ -34,6 +34,7 @@ CREATE TABLE `analysis` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `gfacID` varchar(80) DEFAULT NULL,
   `cluster` varchar(64) DEFAULT NULL,
+  `metaschedulerClusterExecuting` varchar(64) DEFAULT NULL,
   `us3_db` varchar(32) DEFAULT NULL,
   `autoflowAnalysisID` int(11) DEFAULT NULL,
   `stdout` longtext,

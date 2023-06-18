@@ -9,9 +9,9 @@ unix {
 
   #If you want your compiles to do a globus run on bcf, uncomment the following lines:
   # Be sure to add the environment variable MAKEFLAGS=-j44
-  QMAKE_CFLAGS_RELEASE   = -O3 -march=native
-  QMAKE_CXXFLAGS_RELEASE = -O3 -march=native
-  QMAKE_LFLAGS_RELEASE   = -O3 -march=native
+  QMAKE_CFLAGS_RELEASE   = -O3 {{ comp_opt }}
+  QMAKE_CXXFLAGS_RELEASE = -O3 {{ comp_opt }}
+  QMAKE_LFLAGS_RELEASE   = -O3 {{ comp_opt }}
 
   QMAKE_CXXFLAGS_RELEASE += -Wno-unused-local-typedefs
   QMAKE_CFLAGS_RELEASE   += -Wno-unused-local-typedefs

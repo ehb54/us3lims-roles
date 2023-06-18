@@ -16,23 +16,15 @@
     cron_file: /etc/crontab
     user: root
 
-- name: Set gridctl_pro cronjob
-  cron:
-    name: gridctl_pro cronjob
-    minute: "*/1"
-    job: /usr/bin/cronic php /home/us3/lims/bin/gridctl_pro.php
-    user: us3
-    cron_file: /etc/crontab
-  when: cron_enable_pro == 'yes'
-
-- name: set gridctl_dev cronjob
-  cron:
-    name: gridctl_dev cronjob
-    minute: "*/1"
-    job: /usr/bin/cronic php /home/us3/lims/bin/gridctl_dev.php
-    user: us3
-    cron_file: /etc/crontab
-  when: cron_enable_dev == 'yes'
+# - deprecated
+#- name: Set gridctl_pro cronjob
+#  cron:
+#    name: gridctl_pro cronjob
+#    minute: "*/1"
+#    job: /usr/bin/cronic php /home/us3/lims/bin/gridctl_pro.php
+#    user: us3
+#    cron_file: /etc/crontab
+#  when: cron_enable_pro == 'yes'
 
 - name: set cluster_status cronjob
   cron:

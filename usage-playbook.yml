@@ -42,7 +42,7 @@
   roles:
 
   vars:
-    - start_year : 2019
-    - end_year   : 2021
+    - start_year : 2020
+    - end_year   : 2022
     - usage_dir  : "/home/usadmin/usage/{{ ansible_date_time.date }}"
     

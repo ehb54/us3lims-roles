@@ -66,7 +66,6 @@
       - install-chrony
       - install-google-fonts
       - install-msttcore-fonts
-#deprecated use the service instead       - install-reverse-tunnel
       - install-reverse-tunnel-service
       - renice-mariadb
       - renice-slurmd
@@ -101,47 +100,39 @@
 
         # Required variables to define:
         # N.B. once you set these, you can't change them simply by rerunning ansible-playbook for the same remote host!
-        - us3_db_pass: "foobar-demo"
-        - root_db_pass: "foobar-super"
-        - admins_db_pass: "foobar-admin"
-        - gbl_db_pass: "foobar-global"
-        - us3php_db_pass: "foobar-php"
+        - us3_db_pass:       "foobar-demo"
+        - root_db_pass:      "foobar-super"
+        - admins_db_pass:    "foobar-admin"
+        - gbl_db_pass:       "foobar-global"
+        - us3php_db_pass:    "foobar-php"
         - limsadmin_db_pass: "foobar-iam-admin" 
 
-        - admin_email: "example@email.org"
-        - cron_admin: "example@email.org" # root@localhost 
+        - admin_email:       "example@email.org"
+        - cron_admin:        "example@email.org" # root@localhost 
         
-        - ipaddr_ext: "192.168.5.30"
-        - ipaddr_int: "192.168.5.30"
+        - ipaddr_ext:        "192.168.5.30"
+        - ipaddr_int:        "192.168.5.30"
         
         - self_signed: 'yes' # change to 'no' to use certbot 
 
-        - qt_major_version: "5.14"
-        - qt_version: "5.14.2"
-        - qwt_version: "6.1.5"
+        - qt_major_version:  "5.15"
+        - qt_version:        "5.15.9"
+        - qwt_version:       "6.1.6"
         - cores_for_parallel_compile: "{{ ansible_processor_vcpus }}"
-        - us3_branch: "release-2022-Q1"
-        - sql_branch: "release-2022-Q1"
-        - dbinst_branch: "master"
-        - gridctl_branch: "master"
-        - common_branch: "master"
-        - newinst_branch: "master"
-        - webinfo_branch: "master"
-        - airavata_branch: "master"
-        - utils_branch: "main"
+        - us3_branch:        "release-2023-Q1"
+        - sql_branch:        "release-2023-Q1"
+        - dbinst_branch:     "release-2023-Q1"
+        - gridctl_branch:    "release-2023-Q1"
+        - common_branch:     "release-2023-Q1"
+        - newinst_branch:    "release-2023-Q1"
+        - webinfo_branch:    "release-2023-Q1"
+        - airavata_branch:   "master"
+        - utils_branch:      "main"
 
         - postfix_relay_smtp_host: smtp.gmail.com
         - postfix_relay_smtp_port: 587
         - postfix_relay_smtp_user: us.etc.tests@gmail.com
         - postfix_relay_smtp_password: put_app_password_here
-
-        # use install-reverse-tunnel-service instead
-        ### required if install-reverse-tunnel role run
-        ### you will manually need to install usadmin's public key on the rtunnel_user @ rtunnel_ip's authorized keys
-        ##- rtunnel_user: "ultrascan"
-        ##- rtunnel_ip: "secure.aucsolutions.com"
-        ### assign unique port
-        ##- rtunnel_port: "220XX"
 
         # required for role install-reverse-tunnel-service
         # you will manually need to install usadmin's public key on the rtunnel_user @ rtunnel_ip's authorized keys
@@ -149,6 +140,8 @@
         - rtunnel_ip: "secure.aucsolutions.com"
         # assign unique port (if both rtunnel & rtunnel service installed, use different ports!
         - rtunnel_service_port: "220XX"
+        # any extra command options required to ssh, e.g. "-J user@jumpserver" etc.
+        - rtunnel_service_ssh_extras: ""
         ## enabled at boot up - "no" or "yes"
         - rtunnel_service_enabled: "yes"
         ## current state -  "started" or "stopped" 
@@ -174,8 +167,8 @@
         - certbot_auto_renew_minute: "30" 
         - cerbot_auto_renew_options: "--quiet --no-self-upgrade"
 
-        - slurm_ver: 20.02.7 # Change to appropriate version 
-        - slurm_md5: e47e68692354f03db2999ec84fe3f735
+        - slurm_ver: 20.11.9 # Change to appropriate version
+        - slurm_md5: 79b39943768ef21b83585e2f5087d9af
 
         # N.B. slurm_cores can not exceed available cores, if it does, the node will be stuck "draining" (waiting for available resources)
         #      if you want to develop (not production!) on a smaller system
