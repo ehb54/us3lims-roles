@@ -1,0 +1,3 @@
+# Web url defaults
+www_base: "/srv/www/htdocs"
+www_logs: "/var/log/httpd"

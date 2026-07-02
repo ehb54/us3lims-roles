@@ -1,8 +1,8 @@
 - name: install misc packages
   dnf: 
-    enablerepo: powertools
+    enablerepo: "{{ powertools }}"
     name: "{{ packages }}" 
 
 
 - name: install gpref via shell
-  shell: dnf --enablerepo=powertools install gperf -y
+  shell: dnf --enablerepo={{ powertools }} install gperf -y

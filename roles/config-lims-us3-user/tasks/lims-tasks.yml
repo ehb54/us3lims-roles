@@ -1,0 +1,93 @@
+---
+# lims-tasks.yml : additional tasks when usiab/lims is being created.
+#                  this provides allows role reuse when creating the aucsol site
+
+- name: create instances folder
+  file:
+    path: '{{ user_home }}/us3/lims/database/instances'
+    state: directory
+    owner: us3
+    group: "{{ www_user }}"
+
+- name: Make sure work folder exists
+  file:
+    path: '{{ user_home }}/us3/lims/work'
+    state: directory
+    owner: us3
+    group: "{{ www_user }}"
+
+- name: Make sure scripts folder exists
+  file:
+    path: '{{ user_home }}/us3/lims/scripts'
+    state: directory
+    owner: us3
+    group: us3
+
+- name: Copy over make-uma-uiab script
+  copy:
+    src: 'make-uma-uiab'
+    dest: '{{ user_home }}/us3/lims/scripts/make-uma-uiab'
+    owner: us3
+    group: us3
+    mode: 0755
+
+- name: copy cluster_config.php.template to cluser_config.php
+  ansible.builtin.copy:
+   remote_src: yes
+   src: '{{ user_home }}/us3/lims/bin/cluster_config.php.template'
+   dest: '{{ user_home }}/us3/lims/bin/cluster_config.php'
+   owner: us3
+   group: us3
+   mode: 0644
+
+- name: Change permissions in gridctl
+  file:
+      path: '{{ user_home }}/us3/lims/bin'
+      state: directory
+      recurse: yes
+  changed_when: false
+
+- name: Set us3 ownership of us3/lims/bin
+  command:
+    chdir: "{{ user_home }}/us3/lims/bin"
+    cmd: chown -R us3:us3 .
+    warn: false
+
+- name: Set us3 ownership of us3/lims/database/sql
+  command:
+    chdir: "{{ user_home }}/us3/lims/database/sql"
+    cmd: chown -R us3:us3 .
+    warn: false
+
+- name: check if us3-pipe exists
+  stat:
+    path: "{{ user_home }}/us3/lims/etc/us3-pipe"
+  register: us3pipe
+
+- name: Create us3-pipe
+  shell:
+    cmd: mkfifo {{ user_home }}/us3/lims/etc/us3-pipe
+  become_user: us3
+  become: yes
+  when: us3pipe.stat.exists == false
+
+- name: Include cron related tasks
+  include: cron-tasks.yml
+
+- name: Copy over us3-listen.service
+  template:
+    src: us3-listen.service.j2
+    dest: /etc/systemd/system/us3-listen.service
+
+- name: Reload systemd daemon
+  systemd:
+    daemon_reload: yes
+
+- name: Start us3-listen service
+  service:
+    name: us3-listen
+    enabled: yes
+    state: restarted
+  changed_when: false
+
+

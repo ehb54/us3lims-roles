@@ -1,0 +1,12 @@
+---
+- name: Clean utils directory
+  command: make clean
+  args:
+    chdir: "{{ user_home }}/us3/us3-nodb/utils"
+  become: true
+
+- name: Clean us_mpi_analysis directory
+  command: make clean
+  args:
+    chdir: "{{ user_home }}/us3/us3-nodb/programs/us_mpi_analysis"
+  become: true

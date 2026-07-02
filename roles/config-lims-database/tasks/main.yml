@@ -15,7 +15,7 @@
     
 - name: Install mariadb & additionals
   dnf:
-    enablerepo: powertools
+    enablerepo: "{{ powertools }}"
     name:
       - mariadb-server
       - mariadb
@@ -59,6 +59,20 @@
        - server-cert.pem
        - server-key.pem
        - ca-cert.pem
+  when: NO_LIMS is undefined or NO_LIMS == false or NO_LIMS == ''
+
+- name: Copy over mysql ssl files from ultrascan - new CERTS 2024
+  copy:
+    src: "{{ item }}-2024"
+    dest: /etc/my.cnf.d/ssl/{{ item }}
+    owner: mysql
+    group: mysql
+    mode: 0640
+  with_items:
+       - server-cert.pem
+       - server-key.pem
+       - ca-cert.pem
+  when: NO_LIMS is defined and NO_LIMS == true
 
 - name: Template /etc/my.cnf
   template:
@@ -124,7 +138,7 @@
   failed_when: false
   register: root_pwd_check
 
-- name: Set intial MariaDB root password
+- name: Set initial MariaDB root password
   shell: /usr/bin/mysqladmin -u root password "{{ root_db_pass }}"
   when: root_pwd_check.rc == 0
 

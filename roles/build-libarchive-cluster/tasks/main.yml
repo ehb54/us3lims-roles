@@ -1,0 +1,52 @@
+---
+# tasks file for build-libarchive-cluster
+
+- name: Check if libarchive already installed, using {{ target_dir }}/libarchive/lib/libarchive.so as a proxy
+  stat: 
+    path: "{{ target_dir }}/libarchive/lib/libarchive.so"
+  register: libarchive_installed_details
+
+- name: Install, configure and compile libarchive
+  block:
+    - name: Check if libarchive already downloaded
+      stat: 
+        path: "{{ target_dir }}/libarchive-{{ libarchive_vers }}.tar.gz"
+      register: libarchive_downloaded_details
+
+    - name: Download libarchive-{{ libarchive_vers }}
+      get_url:
+        url: "https://github.com/libarchive/libarchive/releases/download/v{{ libarchive_vers }}/libarchive-{{ libarchive_vers }}.tar.gz"
+        dest: "{{ target_dir }}/libarchive-{{ libarchive_vers }}.tar.gz"
+      when: libarchive_downloaded_details.stat.exists == false
+
+    - name: Extract libarchive-{{ libarchive_vers }}
+      command:
+        chdir: '{{ target_dir }}'
+        cmd: tar zxf libarchive-{{ libarchive_vers }}.tar.gz
+        warn: false
+
+    - name: Configure libarchive-{{ libarchive_vers }}
+      command:
+        chdir: '{{ target_dir }}/libarchive-{{ libarchive_vers }}'
+        cmd: ./configure --prefix={{ target_dir }}/libarchive --disable-bsdtar --disable-bsdcpio
+        warn: false
+
+    - name: Make libarchive-{{ libarchive_vers }}
+      command:
+        chdir: '{{ target_dir }}/libarchive-{{ libarchive_vers }}'
+        cmd: make -j {{ cores_for_parallel_compile }}
+        warn: false
+
+    - name: check libarchive-{{ libarchive_vers }}
+      command:
+        chdir: '{{ target_dir }}/libarchive-{{ libarchive_vers }}'
+        cmd: make -j {{ cores_for_parallel_compile }} check
+        warn: false
+
+    - name: install libarchive-{{ libarchive_vers }}
+      command:
+        chdir: '{{ target_dir }}/libarchive-{{ libarchive_vers }}'
+        cmd: make -j {{ cores_for_parallel_compile }} install
+        warn: false
+
+  when: libarchive_installed_details.stat.exists == false

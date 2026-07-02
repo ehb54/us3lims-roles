@@ -1,4 +1,8 @@
 ---
+- set_fact:
+    user_home: "/home"
+  when: user_home is undefined
+
 - name: Create newus3 database
   mysql_db:
         name: "{{ us3_db_name }}"
@@ -30,6 +34,26 @@
         login_unix_socket: /var/lib/mysql/mysql.sock
         login_user: root
         login_password: "{{ root_db_pass }}"
+
+# AUCSOL database... tables created by import from sqldump
+- name: Create US_References database
+  mysql_db:
+        name: US_References
+        state: present
+        login_unix_socket: /var/lib/mysql/mysql.sock
+        login_user: root
+        login_password: "{{ root_db_pass }}"
+  when: NO_LIMS is defined and NO_LIMS == true
+
+# AUCSOL database... tables created by import from sqldump
+- name: Create us3_register database
+  mysql_db:
+        name: us3_register
+        state: present
+        login_unix_socket: /var/lib/mysql/mysql.sock
+        login_user: root
+        login_password: "{{ root_db_pass }}"
+  when: NO_LIMS is defined and NO_LIMS == true
 
 #start table creation process
 
@@ -145,7 +169,7 @@
 # Ansible's mysql_db does not support a "chdir" option, so need to use the shell
 #- name: Populate us3 tables
 #  mysql_db:
-#        chdir: /home/us3/lims/database/sql
+#        chdir: "{{ user_home }}/us3/lims/database/sql"
 #        login_unix_socket: /var/lib/mysql/mysql.sock
 #        login_user: root
 #        login_password: "{{ root_db_pass }}"
@@ -165,6 +189,6 @@
 
 - name: Populate us3 tables
   shell:
-    chdir: /home/us3/lims/database/sql
-    cmd: mysql -u root -p'{{ root_db_pass }}' us3 < /home/us3/lims/database/sql/us3.sql
+    chdir: "{{ user_home }}/us3/lims/database/sql"
+    cmd: mysql -u root -p'{{ root_db_pass }}' us3 < {{ user_home }}/us3/lims/database/sql/us3.sql
   when: root_pwd_check.rc == 0

@@ -1,5 +1,9 @@
 ---
 # 1009 was picked just to follow the uid on demeler3
+- set_fact:
+    user_home: "/home"
+  when: user_home is undefined
+
 - name: install dependencies RedHat
   dnf:
     name:
@@ -31,50 +35,29 @@
     shell: /bin/bash
     state: present
 
-- name: create instances folder
-  file:
-    path: '/home/us3/lims/database/instances'
-    state: directory
-    owner: us3
-    group: "{{ www_user }}"
-
-- name: Make sure work folder exists
-  file:
-    path: '/home/us3/lims/work'
-    state: directory
-    owner: us3
-    group: "{{ www_user }}"
-
-- name: Make sure scripts folder exists
-  file:
-    path: '/home/us3/lims/scripts'
-    state: directory
-    owner: us3
-    group: us3
-
-- name: Copy over make-uma-uiab script
-  copy:
-    src: 'make-uma-uiab'
-    dest: '/home/us3/lims/scripts/make-uma-uiab'
-    owner: us3
-    group: us3
-    mode: 0755
+- name: make {{ user_home }}/us3/lims/database/sql safe
+  shell:
+    cmd: "git config --global --add safe.directory {{ user_home }}/us3/lims/database/sql"
 
 - name: git clone us3_mysql repository
   git:
    repo: https://github.com/ehb54/us3_sql.git
-   version: "{{ branch }}"
-   dest: "/home/us3/lims/database/sql"
+   version: "{{ sql_branch }}"
+   dest: "{{ user_home }}/us3/lims/database/sql"
+
+- name: make {{ user_home }}/us3/lims/database/utils safe
+  shell:
+    cmd: "git config --global --add safe.directory {{ user_home }}/us3/lims/database/utils"
 
 - name: git clone us3lims_dbutils repository
   git:
    repo: https://github.com/ehb54/us3lims_dbutils.git
    version: "{{ utils_branch }}"
-   dest: "/home/us3/lims/database/utils"
+   dest: "{{ user_home }}/us3/lims/database/utils"
 
 - name: Change ownership of us3lims_dbutils
   ansible.builtin.file:
-    path: "/home/us3/lims/database/utils"
+    path: "{{ user_home }}/us3/lims/database/utils"
     state: directory
     recurse: yes
     owner: us3
@@ -84,24 +67,19 @@
     gridctl_branch: "{{ branch }}"
   when: gridctl_branch is undefined
     
+- name: make {{ user_home }}/us3/lims/database/utils safe
+  shell:
+    cmd: "git config --global --add safe.directory {{ user_home }}/us3/lims/bin"
+
 - name: git clone gridctl repository to bin
   git:
    repo: https://github.com/ehb54/us3lims_gridctl.git
    version: "{{ gridctl_branch }}"
-   dest: "/home/us3/lims/bin"
-
-- name: copy cluster_config.php.template to cluser_config.php
-  ansible.builtin.copy:
-   remote_src: yes
-   src: /home/us3/lims/bin/cluster_config.php.template
-   dest: /home/us3/lims/bin/cluster_config.php
-   owner: us3
-   group: us3
-   mode: 0644
+   dest: "{{ user_home }}/us3/lims/bin"
 
 - name: Change permissions in gridctl
   file:
-      path: /home/us3/lims/bin
+      path: "{{ user_home }}/us3/lims/bin"
       state: directory
       recurse: yes
   changed_when: false
@@ -109,56 +87,21 @@
 - name: template listen-config.php
   template:
     src: listen-config.php.j2
-    dest: /home/us3/lims/bin/listen-config.php
+    dest: "{{ user_home }}/us3/lims/bin/listen-config.php"
     
 - name: Set us3 ownership of us3/lims/bin
   command:
-    chdir: "/home/us3/lims/bin"
-    cmd: chown -R us3:us3 .
-    warn: false
-
-- name: Set us3 ownership of us3/lims/database/sql
-  command:
-    chdir: "/home/us3/lims/database/sql"
+    chdir: "{{ user_home }}/us3/lims/bin"
     cmd: chown -R us3:us3 .
     warn: false
 
 - name: Create us3/etc
   file:
-    path: /home/us3/lims/etc
+    path: "{{ user_home }}/us3/lims/etc"
     state: directory
     owner: us3
     group: us3
 
-- name: check if us3-pipe exists
-  stat:
-    path: /home/us3/lims/etc/us3-pipe
-  register: us3pipe
-
-- name: Create us3-pipe
-  shell:
-    cmd: mkfifo /home/us3/lims/etc/us3-pipe
-  become_user: us3
-  become: yes
-  when: us3pipe.stat.exists == false
-
-- name: Include cron related tasks
-  include: cron-tasks.yml
-
-- name: Copy over us3-listen.service
-  copy:
-    src: us3-listen.service
-    dest: /etc/systemd/system/us3-listen.service
-
-- name: Reload systemd daemon
-  systemd:
-    daemon_reload: yes
-
-- name: Start us3-listen service
-  service:
-    name: us3-listen
-    enabled: yes
-    state: restarted
-  changed_when: false
-
-
+- name: Run LIMS related tasks
+  include: lims-tasks.yml
+  when: NO_LIMS is undefined or NO_LIMS == false or NO_LIMS == ''

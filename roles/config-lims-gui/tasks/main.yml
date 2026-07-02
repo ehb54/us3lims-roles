@@ -11,7 +11,7 @@
 
 - name: install xorg-x11-apps
   dnf:
-    enablerepo: powertools
+    enablerepo: "{{ powertools }}"
     name:
       - xorg-x11-apps
     state: present

@@ -1,0 +1,214 @@
+---
+
+- name: Check if qt already installed, using /opt/qt-{{ qt_version }}/lib/libQt5Core.so as a proxy
+  stat: 
+    path: /opt/qt-{{ qt_version }}/lib/libQt5Core.so
+  register: qt_installed_details
+
+- name: Install, configure and compile qt
+  block:
+    - name: Check if qt-everywhere-src-{{ qt_version }}.tar.xz is downloaded
+      stat:
+        path: /opt/qt-everywhere-src-{{ qt_version }}.tar.xz
+      register: qt_src_details
+
+    - name: Download qt-{{ qt_version }}
+      get_url:
+        url: https://download.qt.io/archive/qt/{{ qt_major_version }}/{{ qt_version }}/single/qt-everywhere-opensource-src-{{ qt_version }}.tar.xz
+        dest: /opt/qt-everywhere-src-{{ qt_version }}.tar.xz
+      when: qt_src_details.stat.exists == false
+
+    - name: Check if qt-everywhere-src-{{ qt_version }}.tar.xz is extracted
+      stat:
+        path: /opt/qt-everywhere-src-{{ qt_version }}
+      register: qt_src_extracted_details
+
+    - name: Extract qt-{{ qt_version }}
+      command:
+        chdir: /opt
+        cmd: tar Jxf qt-everywhere-src-{{ qt_version }}.tar.xz
+        warn: false
+      when: qt_src_extracted_details.stat.exists == false
+
+    - name: Install yum-builddep for RedHat
+      yum:
+        name:
+          - yum-utils
+      when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
+
+    - name: Install mariadb-devel RedHat
+      dnf:
+        enablerepo: "{{ powertools }}"
+        name:
+          - mariadb-devel
+        update_cache: yes
+      when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
+
+    - name: Install missing dependencies RedHat
+      yum:
+        name:
+          - gcc-toolset-9
+          - glib2-devel
+          - libxcb
+          - fontconfig-devel
+          - libxcb-devel
+          - libjpeg-devel
+          - xcb-util
+          - xcb-util-devel
+          - mesa-libGL-devel
+          - libxkbcommon-devel
+          - libxkbcommon-x11-devel
+          - openssl-devel
+          - postgresql-devel
+          - subversion
+          - python3
+          - at-spi2-core-devel
+          - xcb-util-wm-devel
+          - xcb-util-image-devel
+          - xcb-util-renderutil-devel
+          - xcb-util-keysyms-devel
+          - libarchive-devel
+          - bison
+          - flex
+          - gperf
+#          - libglvnd-devel
+#          - libglvnd-glx
+#          - libglvnd-egl
+#          - libglvnd-gles
+#          - libglvnd-opengl
+#          - libglvnd-core-devel
+#          - mesa-vulkan-devel
+#          - libvkd3d
+#          - vulkan-loader-devel
+#          - mesa-vulkan-drivers
+#          - vulkan-tools
+#          - mesa-libEGL-devel
+#          - libwayland-egl
+#          - gegl04-devel
+#          - mesa-libGLw-devel
+#          - mesa-libgbm-devel
+          - mesa-libGLU-devel
+#          - mesa-libOSMesa-devel
+          - clang
+          - llvm
+          - llvm-toolset
+          - llvm-devel
+          - clang-devel
+          - clang-libs
+          - clang-tools-extra-devel
+        state: present
+      when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
+
+    - name: Set python alternative for RedHat
+      command:
+        cmd: alternatives --set python /usr/bin/python3
+      when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
+
+    - name: Install qt5 dependencies RedHat
+      command:
+        cmd: yum-builddep qt5-devel
+      when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
+
+# this next step fails, might have install source repos for ubuntu, e.g.
+# sudo cp /etc/apt/sources.list /etc/apt/sources.list~
+# sudo sed -Ei 's/^# deb-src /deb-src /' /etc/apt/sources.list
+# sudo apt-get update
+
+    - name: Install qt5 build-dep dependencies Debian
+      apt:
+        pkg: qt5-default
+        state: build-dep
+      when: ansible_facts['os_family'] == "Debian"
+
+    - name: Install qt5 dependencies Debian
+      apt:
+        pkg:
+        - libxcb-xinerama0-dev
+        - python
+        - subversion
+        state: present
+      when: ansible_facts['os_family'] == "Debian"
+
+    - name: Replace libs in qmake.conf
+      replace:
+        path: /opt/qt-everywhere-src-{{ qt_version }}/qtbase/mkspecs/linux-g++-64/qmake.conf
+        regexp: 'X11R6/'
+        replace: ''
+
+    - name: Add -march=native to /opt/qt-everywhere-src-{{ qt_version }}/qtbase/mkspecs/common/g++-base.conf
+      blockinfile:
+        path: /opt/qt-everywhere-src-{{ qt_version }}/qtbase/mkspecs/common/g++-base.conf
+        block: |
+          QMAKE_CFLAGS            += {{ comp_opt }} -O3
+          QMAKE_CXXFLAGS          += {{ comp_opt }} -O3
+
+    - name: Replace O2 with O3 in relevant qt mkspecs
+      replace:
+        path: /opt/qt-everywhere-src-{{ qt_version }}/qtbase/mkspecs/common/gcc-base.conf
+        regexp: '-O2'
+        replace: '-O3'
+       
+    - name: Remove shadow build directory for qt
+      file:
+        path: /opt/qt-everywhere-src-{{ qt_version }}/shadow-build
+        state: absent
+
+    - name: Create shadow build directory for qt
+      file:
+        path: /opt/qt-everywhere-src-{{ qt_version }}/shadow-build
+        state: directory
+        mode: '0755'
+
+    - name: file existence sanity checkes
+      shell:
+        cmd: ls {{ item }}
+      with_items:
+        - /lib64/libXext.so
+
+    - name: Configure qt {{ qt_version }} for RedHat using gcc-9
+      shell:
+        chdir: /opt/qt-everywhere-src-{{ qt_version }}/shadow-build
+        cmd: . /opt/rh/gcc-toolset-9/enable && gcc -v 2> ../last_configure.gccversion && export MAKEFLAGS=-j{{ cores_for_parallel_compile }} && ../configure -prefix /opt/qt-{{ qt_version }} -release -opensource -confirm-license -platform linux-g++-64 -nomake tests -nomake examples -no-icu -xcb -xcb-xlib -plugin-sql-mysql -plugin-sql-psql -openssl-linked -system-proxies -D QT_SHAREDMEMORY -D QT_SYSTEMSEMAPHORE > ../last_configure.stdout 2> ../last_configure.stderr
+# n.b. had to add  PSQL_PREFIX=/usr/pgsql-16 for gsk-eu
+# worked for qt-5.14.2, but not qt-5.15.5
+#        cmd: . /opt/rh/gcc-toolset-9/enable && gcc -v 2> ../last_configure.gccversion && ../configure -prefix /opt/qt-{{ qt_version }} -release -opensource -confirm-license -platform linux-g++-64 -nomake tests -nomake examples -system-xcb -qpa xcb -plugin-sql-mysql -plugin-sql-psql -openssl-linked -system-proxies -D QT_SHAREDMEMORY -D QT_SYSTEMSEMAPHORE -no-icu > ../last_configure.stdout 2> ../last_configure.stderr
+# with -xcb-xlib:
+#        cmd: . /opt/rh/gcc-toolset-9/enable && gcc -v 2> ../last_configure.gccversion && ../configure -prefix /opt/qt-{{ qt_version }} -release -opensource -confirm-license -platform linux-g++-64 -nomake tests -nomake examples -system-xcb -xcb-xlib -qpa xcb -plugin-sql-mysql -plugin-sql-psql -openssl-linked -system-proxies -D QT_SHAREDMEMORY -D QT_SYSTEMSEMAPHORE -no-icu > ../last_configure.stdout 2> ../last_configure.stderr
+      when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
+
+    - name: Configure qt {{ qt_version }} for Debian
+      shell:
+        chdir: /opt/qt-everywhere-src-{{ qt_version }}/shadow-build
+        cmd: gcc -v 2> ../last_configure.gccversion && ../configure -prefix /opt/qt-{{ qt_version }} -release -opensource -confirm-license -platform linux-g++-64 -nomake tests -nomake examples -opengl desktop -fontconfig -system-freetype -system-xcb -xcb-xlib -qpa xcb -plugin-sql-mysql -plugin-sql-psql -openssl-linked -system-proxies -D QT_SHAREDMEMORY -D QT_SYSTEMSEMAPHORE -no-icu > ../last_configure.stdout 2> ../last_configure.stderr
+      when: ansible_facts['os_family'] == "Debian"
+
+    - name: Build qt-{{ qt_version }} for RedHat using gcc-9
+      shell:
+        chdir: /opt/qt-everywhere-src-{{ qt_version }}/shadow-build
+        cmd: . /opt/rh/gcc-toolset-9/enable && gcc -v 2> /opt/qt-everywhere-src-{{ qt_version }}/build.gccversion && make -j{{ cores_for_parallel_compile }} > /opt/qt-everywhere-src-{{ qt_version }}/build.stdout 2>> /opt/qt-everywhere-src-{{ qt_version }}/build.stderr
+      when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
+
+    - name: Build qt-{{ qt_version }} for Debian
+      shell:
+        chdir: /opt/qt-everywhere-src-{{ qt_version }}/shadow-build
+        cmd: gcc -v 2> /opt/qt-everywhere-src-{{ qt_version }}/build.gccversion && make -j{{ cores_for_parallel_compile }} > /opt/qt-everywhere-src-{{ qt_version }}/build.stdout 2>> /opt/qt-everywhere-src-{{ qt_version }}/build.stderr
+      when: ansible_facts['os_family'] == "Debian"
+
+    - name: Install qt-{{ qt_version }} for RedHat using gcc-9
+      shell:
+        chdir: /opt/qt-everywhere-src-{{ qt_version }}/shadow-build
+        cmd: . /opt/rh/gcc-toolset-9/enable && gcc -v 2> /opt/qt-everywhere-src-{{ qt_version }}/install.gccversion && make install -j{{ cores_for_parallel_compile }} > /opt/qt-everywhere-src-{{ qt_version }}/install.stdout 2> /opt/qt-everywhere-src-{{ qt_version }}/install.stderr
+      when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
+
+    - name: Install qt-{{ qt_version }} for Debian
+      shell:
+        chdir: /opt/qt-everywhere-src-{{ qt_version }}/shadow-build
+        cmd: gcc -v 2> /opt/qt-everywhere-src-{{ qt_version }}/install.gccversion && make install -j{{ cores_for_parallel_compile }} > /opt/qt-everywhere-src-{{ qt_version }}/install.stdout 2> /opt/qt-everywhere-src-{{ qt_version }}/install.stderr
+      when: ansible_facts['os_family'] == "Debian"
+
+    - name: Remove shadow build directory for qt to save disk space
+      file:
+        path: /opt/qt-everywhere-src-{{ qt_version }}/shadow-build
+        state: absent
+
+  when: qt_installed_details.stat.exists == false or qt_force_rebuild is defined

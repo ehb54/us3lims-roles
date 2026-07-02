@@ -1,0 +1,82 @@
+---
+# playbook for installing a new cluster
+- hosts: localhost
+  remote_user: us3
+
+# uncomment if running on localhost
+  connection: local
+  
+  gather_facts: yes
+  
+  pre_tasks:
+
+    - name: validate compiler choice
+      fail:
+        msg: "use -e \"compiler_choice=X\" where X is currently 'gcc_rh_9' or 'intel' or 'mpi_gcc'"
+      when: compiler_choice is not defined or ( compiler_choice != "gcc_rh_9" and compiler_choice != "intel" and compiler_choice != "mpi_gcc" )
+    - name: validate optimization
+      fail:
+        msg: "use -e \"optimization='X'\" where X contains your desired optimization flags"
+      when: optimization is not defined
+
+  roles:
+
+    - build-qt-cluster
+    - build-libarchive-cluster
+    - build-us-mpi-cluster
+#    - install-cluster-status
+     
+  vars:
+    qt_force_rebuild           : true
+    rebuild_us_mpi             : true
+    target_dir                 : /anvil/projects/x-mcb070039n
+    qt_dir                     : /anvil/projects/x-mcb070039n
+    mpirun                     : "mpirun"
+    queue                      : "development"
+    comp_opt                   : '{{ optimization }}'
+    cores_for_parallel_compile : 128
+
+    compilers:
+      gcc_rh_9:
+        compiler       : g++
+        qmake_cc       : /opt/rh/gcc-toolset-9/root/usr/bin/gcc
+        qmake_cxx      : /opt/rh/gcc-toolset-9/root/usr/bin/g++
+        qmake_link     : /opt/rh/gcc-toolset-9/root/usr/bin/g++
+        platform       : linux-g++-64
+        module_loads   : "module purge; module load ultrascan/mpi-build; module load mpi"
+      intel:
+        compiler       : mpicc
+        qmake_cc       : mpicc
+        qmake_cxx      : mpicxx
+        qmake_link     : mpicxx
+        platform       : linux-icc-64
+        module_loads   : ""
+      mpi_gcc:
+        compiler       : mpicc
+        qmake_cc       : mpicc
+        qmake_cxx      : mpicxx
+        qmake_link     : mpicxx
+        platform       : linux-g++-64
+        module_loads   : ""
+
+    extra_configs              : "-no-gui -no-pch"
+    compiler                   : "{{ compilers[compiler_choice].compiler }}"
+    qmake_cc                   : "{{ compilers[compiler_choice].qmake_cc }}"
+    qmake_cxx                  : "{{ compilers[compiler_choice].qmake_cxx }}"
+    qmake_link                 : "{{ compilers[compiler_choice].qmake_link }}"
+    platform                   : "{{ compilers[compiler_choice].platform }}"
+    module_loads               : "{{ compilers[compiler_choice].module_loads }}"
+    mpi_path                   : ""
+    mpi_libs                   : ""
+    include_path               : ""
+    cores_performance          : 16
+
+    qt_major_version           : "5.15"
+    qt_version                 : "5.15.16"
+    qwt_version                : "6.1.6"
+    us3_branch                 : "master"
+    slurm_cores                : 128
+    slurm_sbatch_extras        : ""
+
+    libarchive_vers            : "3.7.9"
+      

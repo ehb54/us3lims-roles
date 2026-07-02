@@ -1,0 +1,15 @@
+<VirtualHost *:80>
+  DocumentRoot "{{ www_base }}/{{ item }}"
+  ServerAdmin {{ admin_email }}
+  ServerName {{ item }}.{{ domain_base }}
+  ErrorLog "{{ www_logs }}/{{ item }}-error.log"
+  CustomLog "{{ www_logs }}/{{ item }}-access.log" combined
+</VirtualHost>
+
+<VirtualHost *:80>
+  DocumentRoot "{{ www_base }}/{{ item }}"
+  ServerAdmin {{ admin_email }}
+  ServerName www.{{ item }}.{{ domain_base }}
+  ErrorLog "{{ www_logs }}/{{ item }}-error.log"
+  CustomLog "{{ www_logs }}/{{ item }}-access.log" combined
+</VirtualHost>

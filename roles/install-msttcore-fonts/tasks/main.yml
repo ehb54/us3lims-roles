@@ -20,6 +20,8 @@
     cmd: ./configure --prefix=/usr && make -j {{ cores_for_parallel_compile }} && make install
     chdir: /tmp/cabextract-1.9.1
 
+# there is also dnf install cabextract
+
 - name: Download mscorefont2 rpm from sourceforge
   ansible.builtin.get_url:
     url: https://downloads.sourceforge.net/project/mscorefonts2/rpms/msttcore-fonts-installer-2.6-1.noarch.rpm

@@ -1,0 +1,108 @@
+---
+# tasks file for install-aucsol-virtual-hosts
+# common directory needs setup as well as content
+
+# ? vars web_root etc
+# get basic setup from js2.genapp.rocks
+
+- name: certbot modules
+  yum:
+    name:
+      - certbot
+      - python3-certbot-apache
+      - mod_ssl
+      - subversion
+    state: present
+
+# - name: find /etc/httpd/conf.d/http*.conf
+# - find:
+#    paths: /etc/httpd/conf.d
+#    patterns: "http*.conf"
+#    register: find_results
+
+#- name: remove /etc/httpd/conf.d/http*.conf
+#- file:
+#    path: "{{ item['path'] }}"
+#    state: absent
+#    with_items: "{{ find_results['files'] }}"
+
+- name: Copy over template /etc/httpd/conf.d/{{ item }}.conf
+  template: 
+    src: virthost.conf.j2
+    dest: /etc/httpd/conf.d/{{ item }}.conf
+    mode: '0644'
+    owner: root
+    group: root
+  loop:
+    - somo
+    - ultrascan
+    - ultrascan2
+    - ultrascan3
+    - resources
+    - ca
+    - aucsolutions
+
+# certbot loop
+
+- name: run certbot
+  shell:
+    cmd: certbot --quiet --expand --apache -d {{ item }}.{{ domain_base }} -d www.{{ item }}.{{ domain_base }}
+  loop:
+    - somo
+    - ultrascan
+    - ultrascan2
+    - ultrascan3
+    - resources
+    - ca
+    - aucsolutions
+
+# - name: fix /etc/httpd/conf.d/ssl.conf SSLCertificateKeyFile & SSLCertificateFile
+# - name: fix /etc/httpd/conf/httpd.conf DocRoot
+
+- name: Create web root directory
+  ansible.builtin.file:
+    path: "{{ www_base }}/{{ item }}"
+    state: directory
+    owner: "us3"
+    group: "{{ www_user }}"
+    mode: 0775
+    recurse: yes
+  loop:
+    - common
+    - somo
+    - ultrascan
+    - ultrascan2
+    - ultrascan3
+    - resources
+    - ca
+    - aucsolutions
+
+- name: Copy initial index.php 
+  template: 
+    src: index.php.j2
+    dest: "{{ www_base }}/{{ item }}/index.php"
+    mode: 0755
+    owner: "us3"
+    group: "{{ www_user }}"
+  loop:
+    - somo
+    - ultrascan
+    - ultrascan2
+    - ultrascan3
+    - resources
+    - ca
+    - aucsolutions
+
+
+- name: "reload daemon for httpd & restart"
+  ansible.builtin.systemd:
+    name: httpd
+    state: restarted
+    daemon_reload: yes
+    
+  
+
+
+
+
+

@@ -1,0 +1,18 @@
+---
+# tasks file for update-users-dotlocal
+
+- set_fact:
+    user_home: "/home"
+  when: user_home is undefined
+
+- name: "Get home directories"
+  shell: ls -d {{ user_home }}/*/.local | sed 's/\/.local//' | sed 's/^.*\///'
+  register: home_dirs
+
+- name: "Update .local"
+  shell:
+    chdir: "{{ user_home }}/{{ item }}"
+    cmd: cp -rp /etc/skel/.local/* .local && chown -R {{ item }}:{{ item }} .local
+  loop: "{{ home_dirs.stdout_lines }}"
+
+

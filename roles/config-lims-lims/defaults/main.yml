@@ -50,9 +50,9 @@ thr_clust_excls: "us3iab-node0"
 thr_clust_incls: "comet"
 
 class_dir: "class_local"
-output_dir: "/home/us3/lims/database/instances"
-sql_dir: "/home/us3/lims/database/sql"
+output_dir: "{{ user_home }}/us3/lims/database/instances"
+sql_dir: "{{ user_home }}/us3/lims/database/sql"
 time_zone: "America/Edmonton"
 
 # ini config file path
-ini_cfg_path: "/home/us3/lims/.us3lims.ini"
+ini_cfg_path: "{{ user_home }}/us3/lims/.us3lims.ini"

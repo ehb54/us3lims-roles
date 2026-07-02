@@ -29,10 +29,11 @@ unix {
   DEFINES     += NO_DB
   QMAKE_CC    = {{ qmake_cc }}
   QMAKE_CXX   = {{ qmake_cxx }}
-  QMAKE_LINK  = {{ qmake_link }}
+  QMAKE_LINK  = {{ qmake_link }} -L{{ target_dir }}/libarchive/lib -larchive
   MPIPATH     = {{ mpi_path }}
   MPILIBS     = {{ mpi_libs }}
   INCLUDEPATH += {{ include_path }}
+  INCLUDEPATH += {{ target_dir }}/libarchive/include
   QMAKESPEC   = {{ platform }}
 }
 

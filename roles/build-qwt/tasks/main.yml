@@ -5,6 +5,11 @@
     path: /opt/qt-{{ qt_version }}-qwt-{{ qwt_version }}/lib/libqwt.so
   register: qwt_installed_details
 
+- name: Set default gcc_toolset_version if not defined
+  set_fact:
+    gcc_toolset_version: 9
+  when: gcc_toolset_version is not defined
+        
 - name: Install, configure and compile qwt
   block:
     - name: Check if qwt-{{ qwt_version }}.tar.bz2 is downloaded
@@ -14,12 +19,16 @@
 
     - name: Download qwt-{{ qwt_version }}
       get_url: 
-#        url: https://sourceforge.net/project/qwt/files/qwt/{{ qwt_version }}/qwt-{{ qwt_version }}.tar.bz2/download
-#        url: https://gigenet.dl.sourceforge.net/project/qwt/qwt/{{ qwt_version }}/qwt-{{ qwt_version }}.tar.bz2
-        url: https://versaweb.dl.sourceforge.net/project/qwt/qwt/{{ qwt_version }}/qwt-{{ qwt_version }}.tar.bz2
+        url: https://downloads.sourceforge.net/project/qwt/qwt/{{ qwt_version }}/qwt-{{ qwt_version }}.tar.bz2
         dest: /opt/qwt-{{ qwt_version }}.tar.bz2
 
       when: qwt_src_details.stat.exists == false
+
+    - name: remove old qwt if qt_force_rebuild is defined
+      file:
+        path: /opt/qt-{{ qt_version }}-qwt-{{ qwt_version }}
+        state: absent
+      when: qt_force_rebuild is defined
 
     - name: Check if qwt-{{ qwt_version }}.tar.bz2 is extracted
       stat:
@@ -40,10 +49,10 @@
         warn: false
       when: qwt_src_extracted_details.stat.exists == false
 
-    - name: Configure qwt for RedHat using gcc-9
+    - name: Configure qwt for RedHat using gcc-toolset-{{ gcc_toolset_version }}
       shell:
         chdir: /opt/qt-{{ qt_version }}-qwt-{{ qwt_version }}
-        cmd: . /opt/rh/gcc-toolset-9/enable && /opt/qt-{{ qt_version }}/bin/qmake qwt.pro
+        cmd: . /opt/rh/gcc-toolset-{{ gcc_toolset_version }}/enable && /opt/qt-{{ qt_version }}/bin/qmake qwt.pro
       when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
 
     - name: Configure qwt for Debian
@@ -52,10 +61,10 @@
         cmd: /opt/qt-{{ qt_version }}/bin/qmake qwt.pro
       when: ansible_facts['os_family'] == "Debian"
 
-    - name: Compile qwt for RedHat using gcc-9
+    - name: Compile qwt for RedHat using gcc-{{ gcc_toolset_version }}
       shell:
         chdir: /opt/qt-{{ qt_version }}-qwt-{{ qwt_version }}
-        cmd: . /opt/rh/gcc-toolset-9/enable && gcc -v 2> build.gccversion && make -j {{ cores_for_parallel_compile }} > build.stdout 2> build.stderr
+        cmd: . /opt/rh/gcc-toolset-{{ gcc_toolset_version }}/enable && gcc -v 2> build.gccversion && make -j {{ cores_for_parallel_compile }} > build.stdout 2> build.stderr
       when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
 
     - name: Compile qwt for Debian
@@ -70,4 +79,4 @@
 #        cmd: make install 
 #      when: false == true
 
-  when: qwt_installed_details.stat.exists == false
+  when: qwt_installed_details.stat.exists == false or qt_force_rebuild is defined

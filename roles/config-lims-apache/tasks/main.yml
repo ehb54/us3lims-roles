@@ -68,6 +68,7 @@
         backup: yes
   notify:
         - restart apache
+  when: NO_LIMS is undefined or NO_LIMS == false or NO_LIMS == ''
 
 - name: configure Virtual host for ssl
   template:
@@ -76,3 +77,4 @@
         backup: yes
   notify:
         - restart apache
+  when: NO_LIMS is undefined or NO_LIMS == false or NO_LIMS == ''

@@ -1,0 +1,29 @@
+---
+# tasks file for install-demo-dbinst
+- set_fact:
+    user_home: "/home"
+  when: user_home is undefined
+
+- name: copy over demo data to ~us3/lims/database/utils/dbmigrate
+  ansible.builtin.copy:
+    src: export-full-uslims4.aucsolutions.com.tar
+    dest: "{{ user_home }}/us3/lims/database/utils/dbmigrate/export-full-uslims4.aucsolutions.com.tar"
+    owner: us3
+    group: us3
+    mode: '0644'
+
+- name: import data
+  ansible.builtin.shell:
+    chdir: "{{ user_home }}/us3/lims/database/utils/dbmigrate"
+    cmd: "yes | php -d mysqli.allow_local_infile=On stage3_import_databases.php uslims4.aucsolutions.com {{ hostname }} {{ ipaddr_ext }}"
+
+- name: update passwords
+  ansible.builtin.shell:
+    chdir: "{{ user_home }}/us3/lims/database/utils"
+    cmd: "php uslims_people.php --update --db uslims3_Demo"
+
+- name: run ~us3/lims/bin/set_cluster_authorizations.php uslims3_Demo updatepeople
+  ansible.builtin.shell:
+    chdir: "{{ user_home }}/us3/lims/bin"
+    cmd: "php set_cluster_authorizations.php uslims3_Demo updatepeople"
+

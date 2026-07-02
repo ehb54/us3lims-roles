@@ -1,0 +1,202 @@
+---
+
+- name: Check free space on the filesystem that backs a path
+  vars:
+    df_mount: "/opt"     # path to check
+    df_min_gb: 70        # minimum required free space in GB
+  block:
+    - name: Get free bytes for filesystem containing {{ df_mount }}
+      ansible.builtin.command: df -B1 --output=avail,target "{{ df_mount }}"
+      register: df_out
+      changed_when: false
+
+    # Pick the data line (skip header); be tolerant if output formatting varies
+    - name: Extract the numeric 'avail' field (bytes)
+      ansible.builtin.set_fact:
+        df_line: "{{ (df_out.stdout_lines | select('match','^[0-9]') | list | first) | default('') }}"
+
+    - name: Fail clearly if parsing df output failed
+      ansible.builtin.fail:
+        msg: >-
+          Could not parse 'df' output for {{ df_mount }}. Output was:
+          {{ df_out.stdout_lines | to_nice_json }}
+      when: df_line == ''
+
+    - name: Save free bytes and GB (typed)
+      ansible.builtin.set_fact:
+        df_free_bytes: "{{ df_line.split()[0] | int }}"
+        df_free_gb: "{{ (df_line.split()[0] | int) // 1073741824 }}"
+
+    - name: Fail if not enough free space (unless override_df_limit=true)
+      ansible.builtin.fail:
+        msg: >-
+          Not enough free space on filesystem containing {{ df_mount }}.
+          Required: {{ df_min_gb }} GB; Available: {{ df_free_gb | int }} GB.
+          To bypass this check, run with: -e override_df_limit=true
+      when:
+        - not (override_df_limit | default(false) | bool)
+        - (df_free_gb | int) < (df_min_gb | int)
+
+    - name: Report free space (informational)
+      ansible.builtin.debug:
+        msg: "Free space on {{ df_mount }}: {{ df_free_gb }} GB (min {{ df_min_gb }} GB)"
+      when: (df_free_gb | int) >= (df_min_gb | int)
+
+- name: Check if qt already installed, using /opt/qt-{{ qt_version }}/lib/libQt6Core.so as a proxy
+  stat: 
+    path: /opt/qt-{{ qt_version }}/lib/libQt6Core.so
+  register: qt_installed_details
+
+- name: Install, configure and compile qt
+  block:
+    - name: Check if qt-everywhere-src-{{ qt_version }}.tar.xz is downloaded
+      stat:
+        path: /opt/qt-everywhere-src-{{ qt_version }}.tar.xz
+      register: qt_src_details
+
+    - name: Download qt-{{ qt_version }}
+      get_url:
+        url: https://download.qt.io/archive/qt/{{ qt_major_version }}/{{ qt_version }}/single/qt-everywhere-src-{{ qt_version }}.tar.xz
+        dest: /opt/qt-everywhere-src-{{ qt_version }}.tar.xz
+      when: qt_src_details.stat.exists == false
+
+    - name: Check if qt-everywhere-src-{{ qt_version }}.tar.xz is extracted
+      stat:
+        path: /opt/qt-everywhere-src-{{ qt_version }}
+      register: qt_src_extracted_details
+
+    - name: Extract qt-{{ qt_version }}
+      command:
+        chdir: /opt
+        cmd: tar Jxf qt-everywhere-src-{{ qt_version }}.tar.xz
+        warn: false
+      when: qt_src_extracted_details.stat.exists == false
+
+    - name: Install missing dependencies RedHat
+      yum:
+        name:
+          - gcc-toolset-{{ gcc_toolset_version }}
+          - git
+          - ca-certificates
+          - curl
+          - cmake
+          - python3
+          - python3-pip
+          - ninja-build
+          - bison
+          - flex
+          - gperf
+          - pkgconf-pkg-config
+          - libX11-devel
+          - libXext-devel
+          - libXi-devel
+          - libXrandr-devel
+          - libXrender-devel
+          - libxcb-devel
+          - xcb-util*-devel
+          - libxkbcommon-devel
+          - libxkbcommon-x11-devel
+          - wayland-devel
+          - wayland-protocols-devel
+          - mesa-libGL-devel
+          - mesa-libEGL-devel
+          - libdrm-devel
+          - mesa-libgbm-devel
+          - mesa-libGLU-devel
+          - freetype-devel
+          - harfbuzz-devel
+          - libjpeg-turbo-devel
+          - libpng-devel
+          - zlib-devel
+          - brotli-devel
+          - pcre2-devel
+          - openssl-devel
+          - dbus
+          - dbus-devel
+          - cups-devel
+          - glib2-devel
+          - libicu-devel
+          - alsa-lib-devel
+          - pipewire-devel
+          - gstreamer1-devel
+          - gstreamer1-plugins-base-devel
+          - gstreamer1-plugins-bad-free-devel
+          - at-spi2-core
+          - at-spi2-atk
+          - mariadb-devel
+          - libarchive-devel
+          - postgresql-devel
+        state: present
+      when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
+
+#    - name: Set python alternative for RedHat
+#      command:
+#        cmd: alternatives --set python /usr/bin/python3
+#      when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
+
+    - name: Remove shadow build directory for qt
+      file:
+        path: /opt/qt-everywhere-src-{{ qt_version }}/build
+        state: absent
+
+    - name: file existence sanity checkes
+      shell:
+        cmd: ls {{ item }}
+      with_items:
+        - /lib64/libXext.so
+
+    - name: Configure qt {{ qt_version }} for RedHat using gcc-{{ gcc_toolset_version }}
+      shell:
+        chdir: /opt/qt-everywhere-src-{{ qt_version }}/
+        cmd: . /opt/rh/gcc-toolset-{{ gcc_toolset_version }}/enable && gcc -v 2> last_configure.gccversion && export MAKEFLAGS=-j{{ cores_for_parallel_compile }} && ( rm -rf qtwebengine* qtpdf* qtvirtualkeyboard* qtwebview* || true ) && cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/opt/qt-{{ qt_version }} -DQT_BUILD_TESTS=OFF -DQT_BUILD_EXAMPLES=OFF  -DFEATURE_clang=OFF -DFEATURE_clangcpp=OFF -DCMAKE_DISABLE_FIND_PACKAGE_Clang=ON  -DCMAKE_DISABLE_FIND_PACKAGE_LLVM=ON   -DCMAKE_C_FLAGS="-O3 -DNDEBUG -g0 -pipe {{ comp_opt }}" -DCMAKE_CXX_FLAGS="-O3 -DNDEBUG -g0 -pipe {{ comp_opt }}" -DQT_BUILD_TOOLS=ON -DQT_BUILD_QTHELP=ON -DQT_FEATURE_sql_psql=ON
+
+# -DBUILD_SHARED_LIBS=ON -DFEATURE_static=OFF
+# if we want to test UNITY BUILDS add -DCMAKE_UNITY_BUILD=ON -DCMAKE_UNITY_BUILD_BATCH_SIZE=8
+
+    - name: Build qt-{{ qt_version }} for RedHat using gcc-{{ gcc_toolset_version }}
+      shell:
+        chdir: /opt/qt-everywhere-src-{{ qt_version }}
+        cmd: . /opt/rh/gcc-toolset-{{ gcc_toolset_version }}/enable && gcc -v 2> build.gccversion && ninja -C build -j {{ cores_for_parallel_compile }}
+      when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
+
+    - name: Install qt-{{ qt_version }} for RedHat using gcc-{{ gcc_toolset_version }}
+      shell:
+        chdir: /opt/qt-everywhere-src-{{ qt_version }}
+        cmd: . /opt/rh/gcc-toolset-{{ gcc_toolset_version }}/enable && ninja -C build install
+      when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
+
+    - name: Define Qt source path
+      ansible.builtin.set_fact:
+        qt_src_path: "/opt/qt-everywhere-src-{{ qt_version }}"
+    
+    - name: Check if {{ qt_src_path }} exists
+      ansible.builtin.stat:
+        path: "{{ qt_src_path }}"
+      register: qt_src_stat
+    
+    - name: Get disk usage in bytes (du -sB1)
+      ansible.builtin.command:
+        cmd: du -sB1 "{{ qt_src_path }}"
+      register: qt_src_du
+      changed_when: false
+      failed_when: qt_src_stat.stat.exists and qt_src_du.rc != 0
+      when: qt_src_stat.stat.exists
+    
+    - name: Compute size in GB (2 decimals)
+      ansible.builtin.set_fact:
+        qt_src_gb: "{{ (qt_src_du.stdout.split()[0] | int / (1024**3)) | round(2) }}"
+      when: qt_src_stat.stat.exists
+
+    - name: Report Qt source disk usage
+      ansible.builtin.debug:
+        msg: >-
+          {{ qt_src_stat.stat.exists
+             | ternary(qt_src_gb ~ ' GB used at ' ~ qt_src_path,
+                       'Path not found: ' ~ qt_src_path) }}
+    
+    - name: Remove shadow build directory for qt to save disk space
+      file:
+        path: /opt/qt-everywhere-src-{{ qt_version }}/build
+        state: absent
+
+  when: qt_installed_details.stat.exists == false or qt_force_rebuild is defined

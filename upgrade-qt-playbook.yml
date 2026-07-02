@@ -1,6 +1,13 @@
 ---
 # initial upgrade playbook, carefully add capabilities
-- hosts:        examplehost
+- hosts:
+## done after llvm/clang
+## umontanahost  demeler9host
+
+#to do separately canterbury2host
+## done:
+## ndsu, catalent, umn, latrobe, juelich, demeler2, hexalepyc, hexalryzen, konstanzhost, novavaxhost, rochehost, pennstatehost, zentriforce1host, zentriforce2host
+
   gather_facts: yes
   remote_user:  usadmin
   become:       yes
@@ -13,6 +20,53 @@
 #      - "{{ ansible_distribution }}"
 #      - "{{ ansible_distribution_version }}"
 #      - "{{ ansible_distribution_major_version }}"
+
+## cli example, but double check esp. user_home, us3_branch & optimization
+## ansible-playbook upgrade-qt-playbook.yml -e "optimization='-march=native'" -e "us3_branch='release-2024-Q4'" -e "qt_force_rebuild=1" -e "user_home='/home'" -e "install_commercial=XXXtrue or falseXXX" -e "run=1"
+## ansible-playbook upgrade-qt-playbook.yml -e "optimization='-march=native'" -e "us3_branch='main'" -e "qt_force_rebuild=1" -e "user_home='/home'" -e "install_commercial=true" -e "run=1"
+
+  - name: Usage
+    ansible.builtin.debug:
+      msg: "\
+      Options:\n\
+      -e \"run=1\"                : actually run the build roles, otherwise, just gleaned info is displayed\n\
+      -e \"optimization='X'\"     : set optimization level. X contains your desired optimization flags (e.g. -m64,-march=native)\n\
+      _________________________ : note that VMs may need -m64 as on some vm hosts -march=native fails\n\
+      -e \"qt_force_rebuild=1\"   : recommended unless you *know* your qt,qwt & ultrascan are all compiled correctly\n\
+      -e \"us3_branch='X'\"       : required branch specification. typically 'release-YYYY-Q#', perhaps 'master' on some systems\n\
+      -e \"user_home='X'\"        : required home directory specification. typically '/home', but some client system have alternate home\n\
+      -e \"install_commercial=X\" : required true or false, no quotes. If true, will install/update us_comproject icon\n\
+      "
+
+  - name: validate optimization
+    fail:
+      msg: "use -e \"optimization='X'\" where X contains your desired optimization flags (-m64,-march=native)"
+    when: optimization is not defined and run is defined
+
+  - name: validate branch
+    fail:
+      msg: "use -e \"us3_branch='X'\" required branch specification. typically 'release-YYYY-Q#', perhaps 'master' on some systems"
+    when: us3_branch is not defined and run is defined
+
+  - name: validate user_home
+    fail:
+      msg: "use -e \"user_home='X'\" required home directory specification. typically '/home', but some client system have alternate home"
+    when: user_home is not defined and run is defined
+
+  - name: validate install_commercial
+    fail:
+      msg: "use -e \"install_commercial=X\". Required true or false, no quotes. If true, will install/update us_comproject icon"
+    when: install_commercial is not defined and run is defined
+
+  - name: set powertools / crb
+    set_fact:
+      powertools: "crb"
+    when: ansible_facts['distribution_major_version'] == '9'
+
+  - name: set powertools / crb
+    set_fact:
+      powertools: "powertools"
+    when: ansible_facts['distribution_major_version'] == '8'
 
   - name: get qtinfo
     shell: grep QTDIR /etc/modulefiles/ultrascan/gui-build | awk -F- '{ print $2 }'
@@ -54,36 +108,30 @@
     register: dfinfo
   - debug: var=dfinfo.stdout_lines
 
-  - name: Warning
-    ansible.builtin.debug:
-      msg: "*** If you change qt versions, then each users .local needs updating for proper .desktop environment setup ***"
+  - name: exit if not run
+    meta: end_play
+    when: run is not defined
 
   roles:
   # lims-gui updates the desktop apps for the new path
-      - config-lims-gui 
-      - build-qt
-      - build-qwt
-      - build-us3
-      - build-us-mpi
+  #  - config-lims-gui 
+    - build-qt
+    - build-qwt
+    - build-us3
+    - install-rasmol
+    - update-users-dotlocal
+### N.B. comment this next line for systems without mpi (GUI only sync'd systems)
+    - build-us-mpi
 
   vars:
-        # for hardware installs
-        # - comp_opt: "-march=native"
-        # perhaps for VM installs if qt core dumps
-        - comp_opt: "-m64"
+    - comp_opt: "{{ optimization }}"
+    - qt_major_version:  "5.15"
+    - qt_version:        "5.15.19"
+    - qwt_version:       "6.3.0"
+    - cores_for_parallel_compile: "{{ ansible_processor_vcpus }}"
 
-        - qt_major_version:  "5.15"
-        - qt_version:        "5.15.9"
-        - qwt_version:       "6.1.6"
-        - cores_for_parallel_compile: "{{ ansible_processor_vcpus }}"
-        - us3_branch:        "master"
+    - slurm_cores : "{{ ansible_processor_vcpus }}"
+    - slurm_sbatch_extras : ""
+    # - slurm_sbatch_extras : "#SBATCH -O\n"
 
-        - slurm_cores : "{{ ansible_processor_vcpus }}"
-        - slurm_sbatch_extras : ""
-        # - slurm_sbatch_extras : "#SBATCH -O\n"
-
-# further upgrade thoughts
-# us3
-# us3-mpi
-# qt, qwt (ugh)
-
+    

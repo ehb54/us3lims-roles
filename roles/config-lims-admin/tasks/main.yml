@@ -1,9 +1,14 @@
 ---
+- set_fact:
+    user_home: "/home"
+  when: user_home is undefined
+
 - name: Add users
   user:
     name: '{{ item }}'
     groups: wheel
     state: present
+    home: '{{ user_home }}/{{ item }}'
   with_items:
     - gegorbet
     - demeler

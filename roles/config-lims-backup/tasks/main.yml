@@ -1,11 +1,21 @@
 ---
 # tasks file for config-lims-backup
+- set_fact:
+    user_home: "/home"
+  when: user_home is undefined
 
 - name: Check if db_config setup
   stat: 
-    path: /home/us3/lims/database/utils/db_config.php
+    path: "{{ user_home }}/us3/lims/database/utils/db_config.php"
   register: db_config_details
   failed_when: not db_config_details.stat.exists
+
+# needed for backup to run
+- name: Check if {{ user_home }}/us3/lims/bin/listen-config.php exists
+  stat: 
+    path: "{{ user_home }}/us3/lims/bin/listen-config.php"
+  register: listen_config_details
+  failed_when: not listen_config_details.stat.exists
 
 - name: make directory /srv/data directories if non existant
   file:
@@ -23,4 +33,4 @@
   ansible.builtin.lineinfile:
     path: /etc/crontab
     insertafter: EOF
-    line: "# Ansible: daily backup\n10 0 * * * root /usr/bin/cronic php /home/us3/lims/database/utils/uslims_daily_backup.php"
+    line: "# Ansible: daily backup\n10 0 * * * root /usr/bin/cronic php {{ user_home }}/us3/lims/database/utils/uslims_daily_backup.php"

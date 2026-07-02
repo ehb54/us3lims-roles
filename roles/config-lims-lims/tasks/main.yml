@@ -1,4 +1,8 @@
 ---
+- set_fact:
+    user_home: "/home"
+  when: user_home is undefined
+
 # We do this because no default passwords are supplied
 - name: assert password variables are defined
   assert:
@@ -9,12 +13,6 @@
 #       - root_db_pass is defined
        - limsadmin_db_pass is defined
 
-- name: install depedencies
-  dnf:
-    name:
-      - git
-    update_cache: yes
-
 # Create ini file
 - name: Create LIMS ini file
   template:
@@ -24,123 +22,7 @@
       group: "{{ www_user }}"
       mode: "0640"
 
-- set_fact:
-    common_branch: "{{ branch }}"
-  when: common_branch is undefined
+- name: Run LIMS related tasks
+  include: lims-tasks.yml
+  when: NO_LIMS is undefined or NO_LIMS == false or NO_LIMS == ''
 
-- set_fact:
-    webinfo_branch: "{{ branch }}"
-  when: webinfo_branch is undefined
-
-# Common dir.
-- name: Clone commons repo
-  git:
-   repo: "{{ common_url }}"
-   dest: "{{ www_common }}"
-   version: "{{ common_branch }}"
-   force: yes
-  changed_when: false
-
-- name: copy global_config.php.template to global_config.php
-  ansible.builtin.copy:
-   remote_src: yes
-   src: "{{ www_common }}/global_config.php.template"
-   dest: "{{ www_common }}/global_config.php"
-   owner: us3
-   group: us3
-   mode: 0644
-
-# Install {{ us_airavata_bridge_url }}
-- name: Clone commons repo
-  git:
-   repo: "{{ us_airavata_bridge_url }}"
-   dest: "{{ us_airavata_bridge_path }}"
-   version: "{{ us_airavata_bridge_branch }}"
-   force: yes
-  changed_when: false
-
-## do we need this? - not any more
-#- name: Run update_local.sh
-#  command:
-#    chdir: "{{ www_common }}/class_local"
-#    cmd: ./update_local.sh
-
-#- name: Template topmenu.php
-#  template: 
-#      src: topmenu.php.j2
-#      dest: "{{ www_common }}/topmenu.php"
-#  changed_when: false
-
-# Web info dir.
-- name: clone webinfo repo
-  git:
-   repo: "{{ webinfo_url }}"
-   dest: "{{ www_uslims }}"
-   version: "{{ webinfo_branch }}"
-
-- name: Template webinfo config
-  template:
-    src: "webinfo-config.php.j2"
-    dest: "{{ www_uslims }}/config.php"
-    backup: yes
-
-- set_fact:
-    newinst_branch: "{{ branch }}"
-  when: newinst_branch is undefined
-
-# Newlims dir.
-- name: Clone newinst repo
-  git:
-    repo: "{{ newinst_url }}"
-    version: "{{ newinst_branch }}"
-    dest: "{{ www_newlims }}"
-
-- name: Template newinst config
-  template:
-    src: "newinst-config.php.j2"
-    dest: "{{ www_newlims }}/config.php"
-    backup: yes
-
-- name: Install cluster_config.php local submit only
-  copy:
-    src: "cluster_config.php.localonly"
-    dest: "{{ www_newlims }}/cluster_config.php"
-    mode: '0644'
-    owner: "us3"
-  when: submit_localonly|default(false)
-
-- name: Install cluster_config.php remote submit only
-  copy:
-    src: "cluster_config.php.remoteonly"
-    dest: "{{ www_newlims }}/cluster_config.php"
-    mode: '0644'
-    owner: "us3"
-  when: submit_remoteonly|default(false)
-
-- name: Install cluster_config.php local and remote submit
-  copy:
-    src: "cluster_config.php.localandremote"
-    dest: "{{ www_newlims }}/cluster_config.php"
-    mode: '0644'
-    owner: "us3"
-  when: submit_localandremote|default(false)
-
-- name: Create uslims3_data directory
-  file:
-    path: "{{ www_uslims3_data }}"
-    state: directory
-    mode: '0755'
-    owner: "us3"
-    group: "{{ www_user }}"
-    
-# looks like one day if we complain enough, git will support chowning within the git module
-# https://github.com/ansible/ansible/issues/51601
-#
-- name: change permissions because ansible >:(
-  file:
-    path: "{{ www_base }}"
-    owner: "us3"
-    group: "{{ www_user }}"
-    recurse: yes
-    state: directory
-  changed_when: false

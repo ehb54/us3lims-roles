@@ -1,0 +1,75 @@
+---
+- name: Ensure previous MPICH RPMs are absent
+  become: true
+  package:
+    name:
+      - mpich
+      - mpich-devel
+    state: absent
+  ignore_errors: yes
+
+- name: Clone MPICH GitHub repository
+  git:
+    repo: https://github.com/pmodels/mpich.git
+    dest: /usr/local/src/mpich
+    version: "{{ mpich_version }}"
+    force: yes
+  become: true
+
+- name: Initialize submodules
+  command: git submodule update --init
+  args:
+    chdir: /usr/local/src/mpich
+  become: true
+
+- name: Run autogen.sh
+  command: ./autogen.sh
+  args:
+    chdir: /usr/local/src/mpich
+  become: true
+
+- name: Configure MPICH
+  command: >
+    ./configure
+    --prefix=/usr/lib64/mpich
+    --libdir=/usr/lib64/mpich/lib
+    --includedir=/usr/include/mpich-x86_64
+    --docdir=/usr/share/doc/mpich
+    --mandir=/usr/share/man/mpich-x86_64
+    --with-pm=hydra
+    --enable-shared
+    --disable-fortran
+  args:
+    chdir: /usr/local/src/mpich
+    creates: /usr/local/src/mpich/Makefile
+  become: true
+
+- name: Compile MPICH
+  command: make -j {{ ansible_processor_vcpus }}
+  args:
+    chdir: /usr/local/src/mpich
+  become: true
+
+- name: Install MPICH
+  command: make install
+  args:
+    chdir: /usr/local/src/mpich
+  become: true
+
+- name: Ensure modulefile directory exists
+  file:
+    path: /usr/share/modulefiles/mpi
+    state: directory
+    mode: '0755'
+  become: true
+
+- name: Deploy MPICH modulefile
+  template:
+    src: mpich-x86_64.module.j2
+    dest: /usr/share/modulefiles/mpi/mpich-x86_64
+    mode: '0644'
+  become: true
+
+- name: Reminder to rebuild dependent software
+  debug:
+    msg: "NOTE: us_mpi_analysis should be rebuilt with the new version of MPICH"

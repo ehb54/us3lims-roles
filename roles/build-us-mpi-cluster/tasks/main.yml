@@ -60,6 +60,12 @@
         - build
         - install
 
+    - name: Copy libarchive.so.13 to {{ us3_cluster_path }}/lib
+      copy: 
+        src: '{{ target_dir }}/libarchive/lib/libarchive.so.13'
+        dest: '{{ us3_cluster_path }}/lib/libarchive.so.13'
+        mode: '0644'
+
   when: us_mpi_installed_details.stat.exists == false or rebuild_us_mpi == true
 
 - name: Test mpi

@@ -1,7 +1,7 @@
 ---
 # defaults file for build-us-mpi
 
-us3_path: "/home/us3"
+us3_path: "{{ user_home }}/us3"
 us3_nodb_path: "{{ us3_path }}/us3-nodb"
 us3_cluster_path: "{{ us3_path }}/cluster"
 gcc_path: "{{ '/opt/rh/gcc-toolset-9/root/bin' if ansible_facts['os_family'] == 'RedHat' else '/usr/bin' }}"

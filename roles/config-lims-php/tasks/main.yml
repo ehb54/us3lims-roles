@@ -1,7 +1,7 @@
 ---
 - name: install php related dependencies
   dnf:
-      enablerepo: powertools
+      enablerepo: "{{ powertools }}"
       name: "{{ packages }}"
       update_cache: yes
 

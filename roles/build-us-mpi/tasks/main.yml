@@ -1,13 +1,28 @@
 ---
 # tasks file for build-us-mpi
+- set_fact:
+    user_home: "/home"
+  when: user_home is undefined
+
+- name: move old {{ us3_nodb_path }} if qt_force_rebuild is defined
+  command: mv {{ us3_nodb_path }} {{ us3_nodb_path }}_qt_rebuild_backup_{{ ansible_date_time.epoch }}
+  args:
+    creates: "{{ us3_nodb_path }}_qt_rebuild_backup_{{ ansible_date_time.epoch }}"
+  when: qt_force_rebuild is defined
+
+- name: move old {{ us3_cluster_path }} if qt_force_rebuild is defined
+  command: mv {{ us3_cluster_path }} {{ us3_cluster_path }}_qt_rebuild_backup_{{ ansible_date_time.epoch }}
+  args:
+    creates: "{{ us3_cluster_path }}_qt_rebuild_backup_{{ ansible_date_time.epoch }}"
+  when: qt_force_rebuild is defined
 
 - name: Install environment-modules, gcc-toolset-9 and mpich RedHat
   yum:
     name:
       - environment-modules
       - gcc-toolset-9
-      - mpich
-      - mpich-devel
+#      - mpich
+#      - mpich-devel
   when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
 
 - name: Install environment-modules and mpich Debian

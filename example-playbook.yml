@@ -46,6 +46,21 @@
            state: present
         when: ansible_facts['distribution'] == "RedHat" or ansible_os_family == "Rocky" or ansible_facts['distribution'] == "OracleLinux"
 
+      - name: set powertools / crb
+        set_fact:
+          powertools: "crb"
+        when: ansible_facts['distribution_major_version'] == '9'
+
+      - name: set powertools / crb
+        set_fact:
+          powertools: "powertools"
+        when: ansible_facts['distribution_major_version'] == '8'
+
+      - name: set user_home
+        set_fact:
+          user_home: "/home"
+        when: user_home is undefined
+
   roles:
       - config-lims-gui
       - config-lims-admin
@@ -60,6 +75,7 @@
       - build-qt
       - build-qwt
       - build-us3
+      - build-mpich
       - build-us-mpi
       - install-vncserver
       - install-postfix
@@ -80,8 +96,10 @@
       
   become: yes
   vars:
+        - user_home:           "/home"
         - install_workstation: false
-        - install_commercial: true
+        - install_commercial:  true
+        - NO_LIMS:             false
 
         # set the desired compiler optimization
         # for hardware installs
@@ -116,17 +134,17 @@
         - self_signed: 'yes' # change to 'no' to use certbot 
 
         - qt_major_version:  "5.15"
-        - qt_version:        "5.15.9"
-        - qwt_version:       "6.1.6"
+        - qt_version:        "5.15.19"
+        - qwt_version:       "6.3.0"
         - cores_for_parallel_compile: "{{ ansible_processor_vcpus }}"
-        - us3_branch:        "release-2023-Q1"
-        - sql_branch:        "release-2023-Q1"
-        - dbinst_branch:     "release-2023-Q1"
-        - gridctl_branch:    "release-2023-Q1"
-        - common_branch:     "release-2023-Q1"
-        - newinst_branch:    "release-2023-Q1"
-        - webinfo_branch:    "release-2023-Q1"
-        - airavata_branch:   "master"
+        - us3_branch:        "release-2026-Q2"
+        - sql_branch:        "release-2026-Q2"
+        - dbinst_branch:     "release-2026-Q2"
+        - gridctl_branch:    "release-2026-Q2"
+        - common_branch:     "release-2026-Q2"
+        - newinst_branch:    "release-2026-Q2"
+        - webinfo_branch:    "release-2026-Q2"
+        - airavata_branch:   "meta-scheduler-prod"
         - utils_branch:      "main"
 
         - postfix_relay_smtp_host: smtp.gmail.com
@@ -167,8 +185,8 @@
         - certbot_auto_renew_minute: "30" 
         - cerbot_auto_renew_options: "--quiet --no-self-upgrade"
 
-        - slurm_ver: 20.11.9 # Change to appropriate version
-        - slurm_md5: 79b39943768ef21b83585e2f5087d9af
+        - slurm_ver: 25.11.5 # Change to appropriate version
+        - slurm_md5: 5bf9efcb4ec746cf31c22e723e42f909
 
         # N.B. slurm_cores can not exceed available cores, if it does, the node will be stuck "draining" (waiting for available resources)
         #      if you want to develop (not production!) on a smaller system

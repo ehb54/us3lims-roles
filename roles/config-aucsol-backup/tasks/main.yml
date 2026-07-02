@@ -1,0 +1,99 @@
+---
+# tasks file for config-aucsol-backup
+- set_fact:
+    user_home: "/home"
+  when: user_home is undefined
+
+- name: Check if db_config_aucsol.php.template exists
+  stat: 
+    path: "{{ user_home }}/us3/lims/database/utils/db_config_aucsol.php.template"
+  register: db_config_details
+  failed_when: not db_config_details.stat.exists
+
+# needed for backup to run (methinks exclusively for $lock_dir)
+- name: Check if {{ user_home }}/us3/lims/bin/listen-config.php exists
+  stat: 
+    path: "{{ user_home }}/us3/lims/bin/listen-config.php"
+  register: listen_config_details
+  failed_when: not listen_config_details.stat.exists
+
+- name: create my.cnf in ~us3/lims/database/utils
+  template:
+    src: my.cnf.j2
+    dest: "{{ user_home }}/us3/lims/database/utils/my.cnf"
+    owner: us3
+    group: us3
+    mode: '0600'
+
+- name: copy ~us3/lims/database/utils/db_config_aucsol.php.template to db_config_aucsol.php
+  ansible.builtin.copy:
+    src: "{{ user_home }}/us3/lims/database/utils/db_config_aucsol.php.template"
+    dest: "{{ user_home }}/us3/lims/database/utils/db_config_aucsol.php"
+    remote_src: yes
+    owner: us3
+    group: us3
+    mode: '0600'
+
+- name: replace SET_HOSTNAME ~us3/lims/database/utils/db_config_aucsol.php
+  ansible.builtin.replace:
+    path: "{{ user_home }}/us3/lims/database/utils/db_config_aucsol.php"
+    regexp: "SET_HOSTNAME"
+    replace: "{{ hostname }}"
+
+- name: replace SET_HOST ~us3/lims/database/utils/db_config_aucsol.php
+  ansible.builtin.replace:
+    path: "{{ user_home }}/us3/lims/database/utils/db_config_aucsol.php"
+    regexp: "SET_HOST"
+    replace: "localhost"
+
+- name: replace SET_USER ~us3/lims/database/utils/db_config_aucsol.php
+  ansible.builtin.replace:
+    path: "{{ user_home }}/us3/lims/database/utils/db_config_aucsol.php"
+    regexp: "SET_USER"
+    replace: "root"
+
+- name: replace SET_PASSWORD ~us3/lims/database/utils/db_config_aucsol.php
+  ansible.builtin.replace:
+    path: "{{ user_home }}/us3/lims/database/utils/db_config_aucsol.php"
+    regexp: "SET_PASSWORD"
+    replace: "{{ root_db_pass }}"
+
+- name: replace SET_EMAIL ~us3/lims/database/utils/db_config_aucsol.php
+  ansible.builtin.replace:
+    path: "{{ user_home }}/us3/lims/database/utils/db_config_aucsol.php"
+    regexp: "SET_EMAIL"
+    replace: "{{ admin_email }}"
+
+- name: replace SET-{{ item }} in ~us3/lims/database/utils/db_config_aucsol.php
+  ansible.builtin.replace:
+    path: "{{ user_home }}/us3/lims/database/utils/db_config_aucsol.php"
+    regexp: "SET-{{ item }}"
+    replace: "{{ lookup('vars', '{{ item }}' ) }}"
+  loop:
+    - us3_branch
+    - sql_branch
+    - dbinst_branch
+    - gridctl_branch
+    - common_branch
+    - newinst_branch
+    - webinfo_branch
+    - airavata_branch
+    - utils_branch
+
+- name: make directory /srv/data directories if non existant
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: 0755
+    group: usadmin
+    owner: usadmin
+  loop:
+    - /srv/data
+    - /srv/data/sqldumps
+    - /srv/data/log
+
+- name: install in cronic
+  ansible.builtin.lineinfile:
+    path: /etc/crontab
+    insertafter: EOF
+    line: "# Ansible: daily backup\n10 0 * * * root /usr/bin/cronic php {{ user_home }}/us3/lims/database/utils/uslims_daily_backup.php /home/us3/lims/database/utils/db_config_aucsol.php"

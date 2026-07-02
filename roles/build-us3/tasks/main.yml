@@ -1,5 +1,11 @@
 ---
 
+- name: move old us if qt_force_rebuild is defined
+  command: mv /opt/ultrascan3 /opt/ultrascan3_qt_rebuild_backup_{{ ansible_date_time.epoch }}
+  args:
+    creates: /opt/ultrascan3_qt_rebuild_backup_{{ ansible_date_time.epoch }}
+  when: qt_force_rebuild is defined
+
 - name: Check if us3 already installed, using /opt/ultrascan3/bin/us as a proxy
   stat: 
     path: /opt/ultrascan3/bin/us
@@ -133,7 +139,7 @@
 #        LD_LIBRARY: ${US3LIB}:${QTLIB}:${QWTLIB}:${OLPATH}:${USDIR}
       when: ansible_facts['os_family'] == "Debian"
 
-  when: us_installed_details.stat.exists == false
+  when: us_installed_details.stat.exists == false or qt_force_rebuild is defined
 
 - name: Check if us_somo already installed, using /opt/ultrascan3/bin/us3_somo as a proxy
   stat: 
@@ -247,7 +253,7 @@
         - us_somo.sh
         - us_env.sh
 
-  when: us_somo_installed_details.stat.exists == false
+  when: us_somo_installed_details.stat.exists == false or qt_force_rebuild is defined
 
 - name: Install dependencies to build documentation for us3 for RedHat
   yum:
@@ -263,20 +269,44 @@
     state: present
   when: ansible_facts['os_family'] == "Debian"
 
+- name: Check for us3 documentation requirements.txt
+  stat:
+    path: /opt/ultrascan3/doc/manual/source/requirements.txt
+  register: us3_doc_requirements
+
+- name: Install pip3 requirements to build documentation for us3 for RedHat
+  shell:
+    chdir: /opt/ultrascan3/doc/manual/source
+    cmd: python3.12 -m ensurepip && python3.12 -m pip install -r requirements.txt
+  when:
+    - us3_doc_requirements.stat.exists
+    - ansible_facts['os_family'] in ["RedHat", "Rocky"]
+
+- name: Create temporary bin directory
+  file:
+    path: /tmp/python_bin
+    state: directory
+
+- name: Create symlink for Makefile to find
+  file:
+    src: /usr/bin/python3.12
+    dest: /tmp/python_bin/python3
+    state: link
+
 - name: Build documentation for us3 for RedHat using gcc-9
   shell:
     chdir: /opt/ultrascan3/doc/manual
-    cmd: . /opt/rh/gcc-toolset-9/enable && gcc -v 2> build_doc.gccversion && make -j {{ cores_for_parallel_compile }} > build_doc.stdout 2> build_doc.stderr
+    cmd: . /opt/rh/gcc-toolset-9/enable && gcc -v 2> build_doc.gccversion && make -j1 > build_doc.stdout 2> build_doc.stderr
   environment: 
-    PATH: /opt/qt-{{ qt_version }}/bin/:/usr/bin:/usr/local/bin:/bin
+    PATH: /tmp/python_bin:/opt/qt-{{ qt_version }}/bin/:/usr/bin:/usr/local/bin:/bin
   when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
 
 - name: Build documentation for us3 for Debian
   shell:
     chdir: /opt/ultrascan3/doc/manual
-    cmd: gcc -v 2> build_doc.gccversion && make -j {{ cores_for_parallel_compile }} > build_doc.stdout 2> build_doc.stderr
+    cmd: gcc -v 2> build_doc.gccversion && make -j1 > build_doc.stdout 2> build_doc.stderr
   environment: 
-    PATH: /opt/qt-{{ qt_version }}/bin/:/usr/bin:/usr/local/bin:/bin
+    PATH: /tmp/python_bin:/opt/qt-{{ qt_version }}/bin/:/usr/bin:/usr/local/bin:/bin
   when: ansible_facts['os_family'] == "Debian"
 
 - name: Create group for us3

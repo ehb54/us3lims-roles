@@ -14,7 +14,7 @@
 
     - name: Download qt-{{ qt_version }}
       get_url:
-        url: https://download.qt.io/archive/qt/{{ qt_major_version }}/{{ qt_version }}/single/qt-everywhere-src-{{ qt_version }}.tar.xz
+        url: https://download.qt.io/archive/qt/{{ qt_major_version }}/{{ qt_version }}/single/qt-everywhere-opensource-src-{{ qt_version }}.tar.xz
         dest: '{{ target_dir }}/qt-everywhere-src-{{ qt_version }}.tar.xz'
       when: qt_src_details.stat.exists == false
 

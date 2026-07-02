@@ -1,7 +1,7 @@
 ---
 # using dnf in a shell because we want the power tools repo to be persistent for epel 
 - name: enable power tool for epel
-  shell: dnf config-manager --set-enabled powertools
+  shell: dnf config-manager --set-enabled {{ powertools }}
   args:
      warn: false
   changed_when: false

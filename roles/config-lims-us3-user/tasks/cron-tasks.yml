@@ -21,7 +21,7 @@
 #  cron:
 #    name: gridctl_pro cronjob
 #    minute: "*/1"
-#    job: /usr/bin/cronic php /home/us3/lims/bin/gridctl_pro.php
+#    job: /usr/bin/cronic php {{ user_home }}/us3/lims/bin/gridctl_pro.php
 #    user: us3
 #    cron_file: /etc/crontab
 #  when: cron_enable_pro == 'yes'
@@ -30,7 +30,7 @@
   cron:
     name: cluster_status cronjob
     minute: "*/12"
-    job: /usr/bin/cronic php /home/us3/lims/bin/cluster_status.php
+    job: /usr/bin/cronic php {{ user_home }}/us3/lims/bin/cluster_status.php
     user: us3
     cron_file: /etc/crontab
 
@@ -38,7 +38,7 @@
   cron:
     name: update_notice cronjob
     minute: "*/20"
-    job: /usr/bin/cronic php /home/us3/lims/bin/update_notice.php
+    job: /usr/bin/cronic php {{ user_home }}/us3/lims/bin/update_notice.php
     user: us3
     cron_file: /etc/crontab
   when: cron_enable_update_notice == 'yes'

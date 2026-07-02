@@ -3,7 +3,7 @@
 
 - name: Install fail2ban & whois RedHat
   dnf:
-    enablerepo: powertools
+    enablerepo: "{{ powertools }}"
     name:
      - fail2ban
      - whois

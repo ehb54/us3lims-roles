@@ -1,0 +1,8 @@
+---
+# tasks file for upgrade-environment-modules
+
+- name: Copy over template files for ultrascan/home-gui-qt6-build modulefile
+  template: 
+    src: home-gui-qt6-build.j2
+    dest: /etc/modulefiles/ultrascan/home-gui-qt6-build
+    mode: '0644'

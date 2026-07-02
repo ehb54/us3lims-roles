@@ -30,7 +30,7 @@
         warn: false
       when: qt_src_extracted_details.stat.exists == false
 
-    - name: Install yum-builddep for RedHat
+    - name: Install yum-utils for RedHat
       yum:
         name:
           - yum-utils
@@ -38,7 +38,7 @@
 
     - name: Install mariadb-devel RedHat
       dnf:
-        enablerepo: powertools
+        enablerepo: "{{ powertools }}"
         name:
           - mariadb-devel
         update_cache: yes
@@ -67,6 +67,10 @@
           - xcb-util-image-devel
           - xcb-util-renderutil-devel
           - xcb-util-keysyms-devel
+          - libarchive-devel
+          - bison
+          - flex
+          - gperf
 #          - libglvnd-devel
 #          - libglvnd-glx
 #          - libglvnd-egl
@@ -85,7 +89,13 @@
 #          - mesa-libgbm-devel
           - mesa-libGLU-devel
 #          - mesa-libOSMesa-devel
-
+          - clang
+          - llvm
+          - llvm-toolset
+          - llvm-devel
+          - clang-devel
+          - clang-libs
+          - clang-tools-extra-devel
         state: present
       when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
 
@@ -158,7 +168,8 @@
     - name: Configure qt {{ qt_version }} for RedHat using gcc-9
       shell:
         chdir: /opt/qt-everywhere-src-{{ qt_version }}/shadow-build
-        cmd: . /opt/rh/gcc-toolset-9/enable && gcc -v 2> ../last_configure.gccversion && export MAKEFLAGS=-j{{ cores_for_parallel_compile }} && ../configure -prefix /opt/qt-{{ qt_version }} -release -opensource -confirm-license -platform linux-g++-64 -nomake tests -nomake examples -no-icu -xcb -xcb-xlib -plugin-sql-mysql -plugin-sql-psql -openssl-linked -system-proxies -D QT_SHAREDMEMORY -D QT_SYSTEMSEMAPHORE -no-icu > ../last_configure.stdout 2> ../last_configure.stderr
+        cmd: . /opt/rh/gcc-toolset-9/enable && gcc -v 2> ../last_configure.gccversion && export MAKEFLAGS=-j{{ cores_for_parallel_compile }} && ../configure -prefix /opt/qt-{{ qt_version }} -release -opensource -confirm-license -platform linux-g++-64 -nomake tests -nomake examples -no-icu -xcb -xcb-xlib -plugin-sql-mysql -plugin-sql-psql -openssl-linked -system-proxies -D QT_SHAREDMEMORY -D QT_SYSTEMSEMAPHORE > ../last_configure.stdout 2> ../last_configure.stderr
+# n.b. had to add  PSQL_PREFIX=/usr/pgsql-16 for gsk-eu
 # worked for qt-5.14.2, but not qt-5.15.5
 #        cmd: . /opt/rh/gcc-toolset-9/enable && gcc -v 2> ../last_configure.gccversion && ../configure -prefix /opt/qt-{{ qt_version }} -release -opensource -confirm-license -platform linux-g++-64 -nomake tests -nomake examples -system-xcb -qpa xcb -plugin-sql-mysql -plugin-sql-psql -openssl-linked -system-proxies -D QT_SHAREDMEMORY -D QT_SYSTEMSEMAPHORE -no-icu > ../last_configure.stdout 2> ../last_configure.stderr
 # with -xcb-xlib:

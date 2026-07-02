@@ -1,0 +1,8 @@
+---
+# defaults file for build-libarchive-cluster
+
+us3_path         : "{{ target_dir }}/us3"
+us3_nodb_path    : "{{ us3_path }}/us3-nodb"
+us3_cluster_path : "{{ us3_path }}/cluster"
+gcc_path         : "{{ compiler }}"
+mpi_test_path    : "{{ us3_path }}/tests"

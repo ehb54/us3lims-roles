@@ -45,9 +45,9 @@ case "$ARGI" in
   install|copy)
     cd ${PROGDIR}
     echo "cp --preserve=timestamps ${PROG} ${UBINDIR}"
-    echo "cp --preserve=timestamps ../../lib/${LIBR} ${ULIBDIR}"
+    echo "cp --preserve=timestamps ../../lib/${LIBR} {{ target_dir }}/libarchive/lib/libarchive.so* ${ULIBDIR}"
     cp --preserve=timestamps ${PROG} ${UBINDIR}
-    cp --preserve=timestamps ../../lib/${LIBR} ${ULIBDIR}
+    cp --preserve=timestamps ../../lib/${LIBR} {{ target_dir }}/libarchive/lib/libarchive.so* ${ULIBDIR}
     chown -R us3 ${UBINDIR} ${ULIBDIR}
     ls -l ${UBINDIR} ${ULIBDIR}
   ;;

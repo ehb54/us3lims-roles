@@ -1,0 +1,18 @@
+[Unit]
+Description= gridctl us3 listen daemon
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+User=us3
+
+Type=oneshot
+
+ExecStart=php {{ user_home }}/us3/lims/bin/services.php start
+ExecReload=php {{ user_home }}/us3/lims/bin/services.php restart
+ExecStop=php {{ user_home }}/us3/lims/bin/services.php stop
+
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
