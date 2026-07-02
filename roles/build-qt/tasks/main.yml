@@ -30,7 +30,7 @@
         warn: false
       when: qt_src_extracted_details.stat.exists == false
 
-    - name: Install yum-builddep for RedHat
+    - name: Install yum-utils for RedHat
       yum:
         name:
           - yum-utils

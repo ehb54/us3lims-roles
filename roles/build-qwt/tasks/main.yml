@@ -19,9 +19,7 @@
 
     - name: Download qwt-{{ qwt_version }}
       get_url: 
-#        url: https://sourceforge.net/project/qwt/files/qwt/{{ qwt_version }}/qwt-{{ qwt_version }}.tar.bz2/download
-#        url: https://gigenet.dl.sourceforge.net/project/qwt/qwt/{{ qwt_version }}/qwt-{{ qwt_version }}.tar.bz2
-        url: https://versaweb.dl.sourceforge.net/project/qwt/qwt/{{ qwt_version }}/qwt-{{ qwt_version }}.tar.bz2
+        url: https://downloads.sourceforge.net/project/qwt/qwt/{{ qwt_version }}/qwt-{{ qwt_version }}.tar.bz2
         dest: /opt/qwt-{{ qwt_version }}.tar.bz2
 
       when: qwt_src_details.stat.exists == false

@@ -1,6 +1,6 @@
 ---
 # initial upgrade playbook, carefully add capabilities
-- hosts: 
+- hosts:
 ## done after llvm/clang
 ## umontanahost  demeler9host
 
@@ -23,6 +23,7 @@
 
 ## cli example, but double check esp. user_home, us3_branch & optimization
 ## ansible-playbook upgrade-qt-playbook.yml -e "optimization='-march=native'" -e "us3_branch='release-2024-Q4'" -e "qt_force_rebuild=1" -e "user_home='/home'" -e "install_commercial=XXXtrue or falseXXX" -e "run=1"
+## ansible-playbook upgrade-qt-playbook.yml -e "optimization='-march=native'" -e "us3_branch='main'" -e "qt_force_rebuild=1" -e "user_home='/home'" -e "install_commercial=true" -e "run=1"
 
   - name: Usage
     ansible.builtin.debug:
@@ -113,7 +114,7 @@
 
   roles:
   # lims-gui updates the desktop apps for the new path
-    - config-lims-gui 
+  #  - config-lims-gui 
     - build-qt
     - build-qwt
     - build-us3
@@ -125,8 +126,8 @@
   vars:
     - comp_opt: "{{ optimization }}"
     - qt_major_version:  "5.15"
-    - qt_version:        "5.15.16"
-    - qwt_version:       "6.1.6"
+    - qt_version:        "5.15.19"
+    - qwt_version:       "6.3.0"
     - cores_for_parallel_compile: "{{ ansible_processor_vcpus }}"
 
     - slurm_cores : "{{ ansible_processor_vcpus }}"

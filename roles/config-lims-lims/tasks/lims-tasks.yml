@@ -13,6 +13,9 @@
     webinfo_branch: "{{ branch }}"
   when: webinfo_branch is undefined
 
+- name: Add common directory to git safe directories
+  command: git config --global --add safe.directory {{ www_common }}
+
 # Common dir.
 - name: Clone commons repo
   git:
@@ -32,12 +35,17 @@
    mode: 0644
 
 # Install {{ us_airavata_bridge_url }}
-- name: Clone commons repo
+
+- name: Add common directory to git safe directories
+  command: git config --global --add safe.directory {{ us_airavata_bridge_path }}
+
+- name: Clone airavata repo
   git:
    repo: "{{ us_airavata_bridge_url }}"
    dest: "{{ us_airavata_bridge_path }}"
    version: "{{ us_airavata_bridge_branch }}"
    force: yes
+   
   changed_when: false
 
 ## do we need this? - not any more
@@ -53,6 +61,9 @@
 #  changed_when: false
 
 # Web info dir.
+- name: Add common directory to git safe directories
+  command: git config --global --add safe.directory {{ www_uslims }}
+
 - name: clone webinfo repo
   git:
    repo: "{{ webinfo_url }}"
@@ -70,6 +81,9 @@
   when: newinst_branch is undefined
 
 # Newlims dir.
+- name: Add common directory to git safe directories
+  command: git config --global --add safe.directory {{ www_newlims }}
+
 - name: Clone newinst repo
   git:
     repo: "{{ newinst_url }}"

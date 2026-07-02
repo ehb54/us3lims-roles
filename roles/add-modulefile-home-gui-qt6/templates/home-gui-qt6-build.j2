@@ -15,20 +15,20 @@ conflict ultrascan
 
 # Define prefix so PATH and MANPATH can be updated.
 
-setenv        US_GUI        $::env(HOME)/ultrascan3
-setenv        ULTRASCAN     $::env(HOME)/ultrascan3
+setenv        US_GUI        $::env(HOME)/ultrascan3_qt6
+setenv        ULTRASCAN     $::env(HOME)/ultrascan3_qt6
 setenv        QTDIR         /opt/qt-{{ qt_version }}
 setenv        QWTDIR        /opt/qt-{{ qt_version }}-qwt-{{ qwt_version }}
-setenv        US3DIR	    $::env(HOME)/ultrascan3
+setenv        US3DIR	    $::env(HOME)/ultrascan3_qt6
 setenv        QTBIN	    /opt/qt-{{ qt_version }}/bin
 setenv        QTLIB	    /opt/qt-{{ qt_version }}/lib
 setenv        QTINC	    /opt/qt-{{ qt_version }}/include
-setenv        US3BIN	    $::env(HOME)/ultrascan3/bin
-setenv        US3LIB	    $::env(HOME)/ultrascan3/lib
-setenv        us3	    $::env(HOME)/ultrascan3
+setenv        US3BIN	    $::env(HOME)/ultrascan3_qt6/bin
+setenv        US3LIB	    $::env(HOME)/ultrascan3_qt6/lib
+setenv        us3	    $::env(HOME)/ultrascan3_qt6
 
-prepend-path  PATH          $::env(HOME)/ultrascan3/bin:/opt/qt-{{ qt_version }}/bin:/opt/qt-{{ qt_version }}/libexec
-prepend-path  LD_LIBRARY_PATH $::env(HOME)/ultrascan3/lib:/opt/qt-{{ qt_version }}/lib:/opt/qt-{{ qt_version }}-qwt-{{ qwt_version }}/lib
+prepend-path  PATH          $::env(HOME)/ultrascan3_qt6/bin:/opt/qt-{{ qt_version }}/bin:/opt/qt-{{ qt_version }}/libexec
+prepend-path  LD_LIBRARY_PATH $::env(HOME)/ultrascan3_qt6/lib:/opt/qt-{{ qt_version }}/lib:/opt/qt-{{ qt_version }}-qwt-{{ qwt_version }}/lib
 
 # gcc-toolset-{{ gcc_toolset_version }} addendum
 prepend-path    INFOPATH        /opt/rh/gcc-toolset-{{ gcc_toolset_version }}/root/usr/share/info

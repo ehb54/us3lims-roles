@@ -11,6 +11,14 @@
       path: /etc/xrdp/sesman.ini
       regexp: "^X11DisplayOffset="
       line: X11DisplayOffset=100
+  notify: restart xrdp-sesman
+
+- name: config xrdp X11 MaxDisplayNumber
+  lineinfile:
+      path: /etc/xrdp/sesman.ini
+      regexp: "^#?MaxDisplayNumber="
+      line: "MaxDisplayNumber=150"
+  notify: restart xrdp-sesman
 
 - name: config xrdp listen to 0.0.0.0
   lineinfile:
@@ -18,10 +26,10 @@
       regexp: "^ListenAddress="
       line: ListenAddress=0.0.0.0
 
-- name: add xrdp (3350) to firewall
+- name: add xrdp (3389) to firewall
   firewalld:
       zone: public
-      port: 3350/tcp
+      port: 3389/tcp
       permanent: true
       state: enabled
 

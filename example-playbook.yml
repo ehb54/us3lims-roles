@@ -134,16 +134,16 @@
         - self_signed: 'yes' # change to 'no' to use certbot 
 
         - qt_major_version:  "5.15"
-        - qt_version:        "5.15.18"
-        - qwt_version:       "6.1.6"
+        - qt_version:        "5.15.19"
+        - qwt_version:       "6.3.0"
         - cores_for_parallel_compile: "{{ ansible_processor_vcpus }}"
-        - us3_branch:        "release-2025-Q2"
-        - sql_branch:        "release-2025-Q2"
-        - dbinst_branch:     "release-2025-Q2"
-        - gridctl_branch:    "release-2025-Q2"
-        - common_branch:     "release-2025-Q2"
-        - newinst_branch:    "release-2025-Q2"
-        - webinfo_branch:    "release-2025-Q2"
+        - us3_branch:        "release-2026-Q2"
+        - sql_branch:        "release-2026-Q2"
+        - dbinst_branch:     "release-2026-Q2"
+        - gridctl_branch:    "release-2026-Q2"
+        - common_branch:     "release-2026-Q2"
+        - newinst_branch:    "release-2026-Q2"
+        - webinfo_branch:    "release-2026-Q2"
         - airavata_branch:   "meta-scheduler-prod"
         - utils_branch:      "main"
 
@@ -185,8 +185,8 @@
         - certbot_auto_renew_minute: "30" 
         - cerbot_auto_renew_options: "--quiet --no-self-upgrade"
 
-        - slurm_ver: 20.11.9 # Change to appropriate version
-        - slurm_md5: 79b39943768ef21b83585e2f5087d9af
+        - slurm_ver: 25.11.5 # Change to appropriate version
+        - slurm_md5: 5bf9efcb4ec746cf31c22e723e42f909
 
         # N.B. slurm_cores can not exceed available cores, if it does, the node will be stuck "draining" (waiting for available resources)
         #      if you want to develop (not production!) on a smaller system
