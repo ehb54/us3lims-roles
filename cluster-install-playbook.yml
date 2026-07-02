@@ -72,8 +72,8 @@
     cores_performance          : 16
 
     qt_major_version           : "5.15"
-    qt_version                 : "5.15.16"
-    qwt_version                : "6.1.6"
+    qt_version                 : "5.15.19"
+    qwt_version                : "6.3.0"
     us3_branch                 : "master"
     slurm_cores                : 128
     slurm_sbatch_extras        : ""
