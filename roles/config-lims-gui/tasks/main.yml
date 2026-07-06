@@ -16,30 +16,8 @@
       - xorg-x11-apps
     state: present
 
-- name: Create a directory /etc/skel/.local/share/applications
-  file:
-    path: /etc/skel/.local/share/applications
-    state: directory
-    mode: '0755'
+- import_tasks: desktops.yml
 
-- name: install ultrascan & us_somo desktop icons
-  template: 
-    src: "{{ item }}.j2"
-    dest: /etc/skel/.local/share/applications/{{ item }}
-    mode: '0755'
-  with_items:
-    - ultrascan.desktop
-    - us_somo.desktop
-
-- name: install icons for commericial
-  template: 
-    src: "{{ item }}.j2"
-    dest: /etc/skel/.local/share/applications/{{ item }}
-    mode: '0755'
-  with_items:
-    - us_comproject.desktop
-  when: install_commercial|default(false)
-  
 - name: setup gnome default favorites for non-commercial
   copy:
     src: 00-favorite-apps
