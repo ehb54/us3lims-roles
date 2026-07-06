@@ -5,6 +5,11 @@
     user_home: "/home"
   when: user_home is undefined
 
+- name: "Regenerate /etc/skel desktop launchers for new Qt version"
+  include_role:
+    name: config-lims-gui
+    tasks_from: desktops
+
 - name: "Get home directories"
   shell: ls -d {{ user_home }}/*/.local | sed 's/\/.local//' | sed 's/^.*\///'
   register: home_dirs

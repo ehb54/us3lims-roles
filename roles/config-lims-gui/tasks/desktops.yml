@@ -1,0 +1,28 @@
+---
+# Render UltraScan desktop launchers into /etc/skel from templates using the
+# current qt_version / qwt_version. Shared by config-lims-gui (initial deploy)
+# and update-users-dotlocal (qt upgrade, to refresh skel before copying to users).
+
+- name: Create a directory /etc/skel/.local/share/applications
+  file:
+    path: /etc/skel/.local/share/applications
+    state: directory
+    mode: '0755'
+
+- name: install ultrascan & us_somo desktop icons
+  template:
+    src: "{{ item }}.j2"
+    dest: /etc/skel/.local/share/applications/{{ item }}
+    mode: '0755'
+  with_items:
+    - ultrascan.desktop
+    - us_somo.desktop
+
+- name: install icons for commericial
+  template:
+    src: "{{ item }}.j2"
+    dest: /etc/skel/.local/share/applications/{{ item }}
+    mode: '0755'
+  with_items:
+    - us_comproject.desktop
+  when: install_commercial|default(false)
