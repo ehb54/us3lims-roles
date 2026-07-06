@@ -50,9 +50,23 @@
   when: ansible_facts['os_family'] == "Debian"
 
 - name: Copy over template files for ultrascan/gui-build modulefiles for RedHat
-  template: 
+  template:
     src: gui-build-gcc-toolset-9.j2
     dest: /etc/modulefiles/ultrascan/gui-build
+    mode: '0644'
+  when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
+
+- name: Copy over template files for ultrascan/home-gui-build modulefiles for Debian
+  template:
+    src: home-gui-build.j2
+    dest: /etc/modulefiles/ultrascan/home-gui-build
+    mode: '0644'
+  when: ansible_facts['os_family'] == "Debian"
+
+- name: Copy over template files for ultrascan/home-gui-build modulefiles for RedHat
+  template:
+    src: home-gui-build-gcc-toolset-9.j2
+    dest: /etc/modulefiles/ultrascan/home-gui-build
     mode: '0644'
   when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
 
