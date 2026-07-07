@@ -3,7 +3,7 @@
 - name: move old us if qt_force_rebuild is defined
   command: mv /opt/ultrascan3 /opt/ultrascan3_qt_rebuild_backup_{{ ansible_date_time.epoch }}
   args:
-    creates: /opt/ultrascan3_qt_rebuild_backup_{{ ansible_date_time.epoch }}
+    removes: /opt/ultrascan3
   when: qt_force_rebuild is defined
 
 - name: Check if us3 already installed, using /opt/ultrascan3/bin/us as a proxy
