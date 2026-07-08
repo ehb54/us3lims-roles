@@ -21,7 +21,7 @@
 - name: "Update .local"
   shell:
     chdir: "{{ user_home }}/{{ item }}"
-    cmd: cp -rp /etc/skel/.local/* .local && chown -R {{ item }}:{{ item }} .local
+    cmd: "cp -rp /etc/skel/.local/* .local && chown -R {{ item }}: .local"
   loop: "{{ home_dirs.stdout_lines }}"
   when: item in ansible_facts.getent_passwd
 
