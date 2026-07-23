@@ -1,22 +1,23 @@
 ---
-- name: Install rasmol for RedHat
+- name: Install rasmol
   block:
-    - name: Git clone rasmol-centos repository
+    - name: Git clone rasmol repository
       git:
-       repo: https://github.com/ehb54/rasmol-centos.git
-       dest: "/tmp/rasmol-centos"
+       repo: https://github.com/ehb54/rasmol.git
+       dest: "/tmp/rasmol"
+       version: somo-modernize
 
-    - name: Copy rasmol bin files to /opt/ultrascan3/
+    - name: Copy rasmol binary to /opt/ultrascan3/bin/
       ansible.builtin.copy:
         remote_src: yes
-        src: /tmp/rasmol-centos/bin/
-        dest: /opt/ultrascan3/bin/
+        src: /tmp/rasmol/binaries/linux-x86_64/rasmol
+        dest: /opt/ultrascan3/bin/rasmol
 
-    - name: Copy rasmol lib files to /opt/ultrascan3/
+    - name: Copy rasmol.hlp to /opt/ultrascan3/bin/
       ansible.builtin.copy:
         remote_src: yes
-        src: /tmp/rasmol-centos/lib/
-        dest: /opt/ultrascan3/lib/
+        src: /tmp/rasmol/binaries/linux-x86_64/rasmol.hlp
+        dest: /opt/ultrascan3/bin/rasmol.hlp
 
     - name: Changing perm of /opt/ultrascan3/bin/rasmol
       ansible.builtin.file:
@@ -24,7 +25,14 @@
         owner: us3
         group: us3
         mode: '0755'
-  
+
+    - name: Changing perm of /opt/ultrascan3/bin/rasmol.hlp
+      ansible.builtin.file:
+        path: /opt/ultrascan3/bin/rasmol.hlp
+        owner: us3
+        group: us3
+        mode: '0644'
+
     - name: make sure bin64 is symlinked
       ansible.builtin.file:
         src: /opt/ultrascan3/bin
@@ -32,5 +40,3 @@
         owner: us3
         group: us3
         state: link
-        
-  when: ansible_facts['os_family'] == "RedHat"
