@@ -29,7 +29,8 @@
   become: true
 
 - name: Configure MPICH
-  command: >
+  shell: >
+    umask 022 &&
     ./configure
     --prefix=/usr/lib64/mpich
     --libdir=/usr/lib64/mpich/lib
@@ -45,13 +46,13 @@
   become: true
 
 - name: Compile MPICH
-  command: make -j {{ ansible_processor_vcpus }}
+  shell: umask 022 && make -j {{ ansible_processor_vcpus }}
   args:
     chdir: /usr/local/src/mpich
   become: true
 
 - name: Install MPICH
-  command: make install
+  shell: umask 022 && make install
   args:
     chdir: /usr/local/src/mpich
   become: true
