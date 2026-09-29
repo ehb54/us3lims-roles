@@ -169,7 +169,7 @@
           login_password: "{{ root_db_pass }}"
 
 - name: Create databases and tables
-  include: create-database.yml
+  import_tasks: create-database.yml
 
 - name: Create db grants
-  include: create-grants.yml
+  import_tasks: create-grants.yml

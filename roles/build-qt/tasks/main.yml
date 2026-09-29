@@ -27,7 +27,6 @@
       command:
         chdir: /opt
         cmd: tar Jxf qt-everywhere-src-{{ qt_version }}.tar.xz
-        warn: false
       when: qt_src_extracted_details.stat.exists == false
 
     - name: Install yum-utils for RedHat

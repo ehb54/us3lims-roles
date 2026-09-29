@@ -46,7 +46,6 @@
       command:
         chdir: /opt/qt-{{ qt_version }}-qwt-{{ qwt_version }}
         cmd: tar jxf /opt/qwt-{{ qwt_version }}.tar.bz2 --strip-components=1 
-        warn: false
       when: qwt_src_extracted_details.stat.exists == false
 
     - name: Configure qwt for RedHat using gcc-toolset-{{ gcc_toolset_version }}

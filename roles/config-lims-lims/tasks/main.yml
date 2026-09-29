@@ -23,6 +23,6 @@
       mode: "0640"
 
 - name: Run LIMS related tasks
-  include: lims-tasks.yml
+  import_tasks: lims-tasks.yml
   when: NO_LIMS is undefined or NO_LIMS == false or NO_LIMS == ''
 

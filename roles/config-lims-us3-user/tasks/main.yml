@@ -93,7 +93,6 @@
   command:
     chdir: "{{ user_home }}/us3/lims/bin"
     cmd: chown -R us3:us3 .
-    warn: false
 
 - name: Create us3/etc
   file:
@@ -103,5 +102,5 @@
     group: us3
 
 - name: Run LIMS related tasks
-  include: lims-tasks.yml
+  import_tasks: lims-tasks.yml
   when: NO_LIMS is undefined or NO_LIMS == false or NO_LIMS == ''
