@@ -124,7 +124,16 @@
           - at-spi2-atk
           - mariadb-devel
           - libarchive-devel
-          - postgresql-devel
+        state: present
+      when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
+
+    - name: Install PostgreSQL client headers RedHat, for the QPSQL driver
+      # nobest: when a PGDG repo is enabled, its postgresqlNN-devel is the best candidate but
+      # cannot install while the AppStream postgresql module hides postgresqlNN; nobest takes
+      # the OS libpq-devel (or an already installed provider) instead of failing
+      dnf:
+        name: postgresql-devel
+        nobest: true
         state: present
       when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
 
@@ -162,6 +171,19 @@
       shell:
         chdir: /opt/qt-everywhere-src-{{ qt_version }}
         cmd: . /opt/rh/gcc-toolset-{{ gcc_toolset_version }}/enable && ninja -C build install
+      when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
+
+    - name: Check which libpq the qt-{{ qt_version }} QPSQL driver loads
+      shell:
+        cmd: ldd /opt/qt-{{ qt_version }}/plugins/sqldrivers/libqsqlpsql.so | grep libpq
+      register: qpsql_libpq
+      changed_when: false
+      failed_when: false
+      when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
+
+    - name: Show QPSQL libpq, expected to be the OS /lib64 or /usr/lib64 libpq.so.5
+      debug:
+        msg: "{{ qpsql_libpq.stdout | trim | default('libqsqlpsql.so not found', true) }}{{ '' if qpsql_libpq.stdout is search('=> /(usr/)?lib64/libpq') else ' -- WARNING: not the OS libpq' }}"
       when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
 
     - name: Define Qt source path
