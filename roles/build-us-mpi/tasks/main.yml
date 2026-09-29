@@ -136,6 +136,25 @@
 
   when: us_mpi_installed_details.stat.exists == false
 
+- name: Check for {{ us3_nodb_path }}
+  stat:
+    path: "{{ us3_nodb_path }}"
+  register: us3_nodb_details
+
+# the block above is skipped when us_mpi_analysis exists, so rewrite these on every run
+# to keep later make-uma builds on the current qt_version / qwt_version
+- name: Keep make-uma and local.pri in step with qt_version and qwt_version
+  become: yes
+  become_user: us3
+  template:
+    src: "{{ item.name }}.j2"
+    dest: "{{ us3_nodb_path }}/{{ item.name }}"
+    mode: "{{ item.mode }}"
+  with_items:
+    - { name: local.pri, mode: '0644' }
+    - { name: make-uma, mode: '0755' }
+  when: us3_nodb_details.stat.exists
+
 - name: Test mpi
   become: yes
   become_user: us3
