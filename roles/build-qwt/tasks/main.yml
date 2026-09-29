@@ -43,33 +43,33 @@
       when: qwt_src_extracted_details.stat.exists == false
               
     - name: Extract qwt-{{ qwt_version }}
-      command:
+      shell:
         chdir: /opt/qt-{{ qt_version }}-qwt-{{ qwt_version }}
-        cmd: tar jxf /opt/qwt-{{ qwt_version }}.tar.bz2 --strip-components=1 
+        cmd: umask 022 && tar jxf /opt/qwt-{{ qwt_version }}.tar.bz2 --strip-components=1 
       when: qwt_src_extracted_details.stat.exists == false
 
     - name: Configure qwt for RedHat using gcc-toolset-{{ gcc_toolset_version }}
       shell:
         chdir: /opt/qt-{{ qt_version }}-qwt-{{ qwt_version }}
-        cmd: . /opt/rh/gcc-toolset-{{ gcc_toolset_version }}/enable && /opt/qt-{{ qt_version }}/bin/qmake qwt.pro
+        cmd: umask 022 && . /opt/rh/gcc-toolset-{{ gcc_toolset_version }}/enable && /opt/qt-{{ qt_version }}/bin/qmake qwt.pro
       when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
 
     - name: Configure qwt for Debian
       shell:
         chdir: /opt/qt-{{ qt_version }}-qwt-{{ qwt_version }}
-        cmd: /opt/qt-{{ qt_version }}/bin/qmake qwt.pro
+        cmd: umask 022 && /opt/qt-{{ qt_version }}/bin/qmake qwt.pro
       when: ansible_facts['os_family'] == "Debian"
 
     - name: Compile qwt for RedHat using gcc-{{ gcc_toolset_version }}
       shell:
         chdir: /opt/qt-{{ qt_version }}-qwt-{{ qwt_version }}
-        cmd: . /opt/rh/gcc-toolset-{{ gcc_toolset_version }}/enable && gcc -v 2> build.gccversion && make -j {{ cores_for_parallel_compile }} > build.stdout 2> build.stderr
+        cmd: umask 022 && . /opt/rh/gcc-toolset-{{ gcc_toolset_version }}/enable && gcc -v 2> build.gccversion && make -j {{ cores_for_parallel_compile }} > build.stdout 2> build.stderr
       when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
 
     - name: Compile qwt for Debian
       shell:
         chdir: /opt/qt-{{ qt_version }}-qwt-{{ qwt_version }}
-        cmd: gcc -v 2> build.gccversion && make -j {{ cores_for_parallel_compile }} > build.stdout 2> build.stderr
+        cmd: umask 022 && gcc -v 2> build.gccversion && make -j {{ cores_for_parallel_compile }} > build.stdout 2> build.stderr
       when: ansible_facts['os_family'] == "Debian"
 
 #    - name: install qwt
