@@ -23,30 +23,25 @@
       command:
         chdir: '{{ target_dir }}'
         cmd: tar zxf libarchive-{{ libarchive_vers }}.tar.gz
-        warn: false
 
     - name: Configure libarchive-{{ libarchive_vers }}
       command:
         chdir: '{{ target_dir }}/libarchive-{{ libarchive_vers }}'
         cmd: ./configure --prefix={{ target_dir }}/libarchive --disable-bsdtar --disable-bsdcpio
-        warn: false
 
     - name: Make libarchive-{{ libarchive_vers }}
       command:
         chdir: '{{ target_dir }}/libarchive-{{ libarchive_vers }}'
         cmd: make -j {{ cores_for_parallel_compile }}
-        warn: false
 
     - name: check libarchive-{{ libarchive_vers }}
       command:
         chdir: '{{ target_dir }}/libarchive-{{ libarchive_vers }}'
         cmd: make -j {{ cores_for_parallel_compile }} check
-        warn: false
 
     - name: install libarchive-{{ libarchive_vers }}
       command:
         chdir: '{{ target_dir }}/libarchive-{{ libarchive_vers }}'
         cmd: make -j {{ cores_for_parallel_compile }} install
-        warn: false
 
   when: libarchive_installed_details.stat.exists == false

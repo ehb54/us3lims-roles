@@ -51,13 +51,11 @@
   command:
     chdir: "{{ user_home }}/us3/lims/bin"
     cmd: chown -R us3:us3 .
-    warn: false
 
 - name: Set us3 ownership of us3/lims/database/sql
   command:
     chdir: "{{ user_home }}/us3/lims/database/sql"
     cmd: chown -R us3:us3 .
-    warn: false
 
 - name: check if us3-pipe exists
   stat:
@@ -72,7 +70,7 @@
   when: us3pipe.stat.exists == false
 
 - name: Include cron related tasks
-  include: cron-tasks.yml
+  import_tasks: cron-tasks.yml
 
 - name: Copy over us3-listen.service
   template:

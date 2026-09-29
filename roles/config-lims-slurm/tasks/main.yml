@@ -58,7 +58,6 @@
 - name: remove old slurm packages
   shell:
     cmd: "rm -fr /root/rpmbuild/RPMS/x86_64/slurm*"
-    warn: false
   ignore_errors: yes
   when: "('slurm' not in ansible_facts.packages and slurm_hash == 'none' )  or ('slurm' not in ansible_facts.packages and slurm_integrity.stat.checksum == slurm_hash)"
 
@@ -71,7 +70,6 @@
   shell:
     chdir: /root/rpmbuild/RPMS/x86_64
     cmd: "yum install --allowerasing ./slurm*  -y"
-    warn: false
 
   when: "'slurm' not in ansible_facts.packages"
 
