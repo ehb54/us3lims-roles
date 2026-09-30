@@ -123,15 +123,16 @@
   systemd:
        daemon_reload: yes
 
+# munge first: since Slurm 23.11, slurmctld and slurmd exit at startup if munged is not running
 - name: Enable slurm
   service:
     name : '{{ item }}'
     enabled: yes
     state: started
   with_items:
-    - slurmd
-    - slurmctld
     - munge
+    - slurmctld
+    - slurmd
     
     
 - name: exclude slurm from dnf/yum updates
