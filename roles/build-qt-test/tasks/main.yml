@@ -43,6 +43,16 @@
         update_cache: yes
       when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
 
+    - name: Name the CodeReady Builder / PowerTools repo for this distribution
+      set_fact:
+        crb_repo: >-
+          {{ 'codeready-builder-for-rhel-' ~ ansible_facts['distribution_major_version'] ~ '-' ~ ansible_facts['architecture'] ~ '-rpms'
+             if ansible_facts['distribution'] == 'RedHat' else
+             'ol' ~ ansible_facts['distribution_major_version'] ~ '_codeready_builder'
+             if ansible_facts['distribution'] == 'OracleLinux' else
+             'powertools' if ansible_facts['distribution_major_version'] == '8' else 'crb' }}
+      when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
+
     - name: Install missing dependencies RedHat
       yum:
         name:
@@ -68,7 +78,6 @@
           - libarchive-devel
           - bison
           - flex
-          - gperf
 #          - libglvnd-devel
 #          - libglvnd-glx
 #          - libglvnd-egl
@@ -97,6 +106,13 @@
         state: present
       when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
 
+    - name: Install gperf RedHat, from CodeReady Builder / PowerTools
+      dnf:
+        name: gperf
+        enablerepo: "{{ crb_repo }}"
+        state: present
+      when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
+
     - name: Install PostgreSQL client headers RedHat, for the QPSQL driver
       # nobest: when a PGDG repo is enabled, its postgresqlNN-devel is the best candidate but
       # cannot install while the AppStream postgresql module hides postgresqlNN; nobest takes
@@ -112,10 +128,17 @@
         cmd: alternatives --set python /usr/bin/python3
       when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
 
-    - name: Install qt5 dependencies RedHat
+    - name: Install qt5 dependencies RedHat, best effort (needs matching source repos)
       command:
-        cmd: yum-builddep qt5-devel
+        cmd: yum-builddep -y --enablerepo={{ crb_repo }} qt5-devel
+      register: qt5_builddep
+      failed_when: false
       when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
+
+    - name: Report a failed yum-builddep qt5-devel
+      debug:
+        msg: "yum-builddep qt5-devel failed (rc {{ qt5_builddep.rc }}), continuing with the dependency list above: {{ qt5_builddep.stderr_lines[-2:] | join(' / ') }}"
+      when: qt5_builddep.rc is defined and qt5_builddep.rc != 0
 
 # this next step fails, might have install source repos for ubuntu, e.g.
 # sudo cp /etc/apt/sources.list /etc/apt/sources.list~
