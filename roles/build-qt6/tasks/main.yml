@@ -71,6 +71,16 @@
         cmd: tar Jxf qt-everywhere-src-{{ qt_version }}.tar.xz
       when: qt_src_extracted_details.stat.exists == false
 
+    - name: Name the CodeReady Builder / PowerTools repo for this distribution
+      set_fact:
+        crb_repo: >-
+          {{ 'codeready-builder-for-rhel-' ~ ansible_facts['distribution_major_version'] ~ '-' ~ ansible_facts['architecture'] ~ '-rpms'
+             if ansible_facts['distribution'] == 'RedHat' else
+             'ol' ~ ansible_facts['distribution_major_version'] ~ '_codeready_builder'
+             if ansible_facts['distribution'] == 'OracleLinux' else
+             'powertools' if ansible_facts['distribution_major_version'] == '8' else 'crb' }}
+      when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
+
     - name: Install missing dependencies RedHat
       yum:
         name:
@@ -84,7 +94,6 @@
           - ninja-build
           - bison
           - flex
-          - gperf
           - pkgconf-pkg-config
           - libX11-devel
           - libXext-devel
@@ -124,6 +133,13 @@
           - at-spi2-atk
           - mariadb-devel
           - libarchive-devel
+        state: present
+      when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
+
+    - name: Install gperf RedHat, from CodeReady Builder / PowerTools
+      dnf:
+        name: gperf
+        enablerepo: "{{ crb_repo }}"
         state: present
       when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
 
