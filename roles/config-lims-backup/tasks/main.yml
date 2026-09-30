@@ -29,8 +29,16 @@
     - /srv/data/sqldumps
     - /srv/data/log
 
+# one line per lineinfile: it compares file lines one at a time, so a two-line "line:"
+# never matched and was appended again on every run
+- name: install daily backup marker in /etc/crontab
+  ansible.builtin.lineinfile:
+    path: /etc/crontab
+    line: "# Ansible: daily backup"
+
 - name: install in cronic
   ansible.builtin.lineinfile:
     path: /etc/crontab
-    insertafter: EOF
-    line: "# Ansible: daily backup\n10 0 * * * root /usr/bin/cronic php {{ user_home }}/us3/lims/database/utils/uslims_daily_backup.php"
+    regexp: '/uslims_daily_backup\.php$'
+    line: "10 0 * * * root /usr/bin/cronic php {{ user_home }}/us3/lims/database/utils/uslims_daily_backup.php"
+    insertafter: '^# Ansible: daily backup$'
