@@ -1,2 +1,14 @@
-- src: geerlingguy.repo-epel
-- src: geerlingguy.certbot
+---
+roles:
+  - src: geerlingguy.repo-epel
+  - src: geerlingguy.certbot
+
+# modules that left ansible-core; pinned for the ansible-core 2.16 controller and
+# RHEL 8 targets (python 3.6). community.crypto 3.x needs ansible-core 2.17+.
+collections:
+  - name: ansible.posix
+    version: "2.2.2"
+  - name: community.mysql
+    version: "5.0.2"
+  - name: community.crypto
+    version: "2.26.9"

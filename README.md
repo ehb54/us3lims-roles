@@ -18,8 +18,9 @@ If not already installed, [install ansible.]( https://docs.ansible.com/ansible/l
 ### Get other requirements 
 
 There are a couple of ansible roles used developed by [geerlingguy](https://galaxy.ansible.com/geerlingguy) that we use. 
+Several roles also use modules that are no longer part of ansible-core, from the `ansible.posix`, `community.mysql` and `community.crypto` collections.
 
-Run ansible-galaxy on the requirements.yml file to obtain the roles. 
+Run ansible-galaxy on the requirements.yml file to obtain the roles and collections. 
 
 ```
 ansible-galaxy install -r requirements.yml
