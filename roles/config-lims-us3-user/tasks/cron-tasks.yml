@@ -8,13 +8,14 @@
     owner: root
     group: root
 
+# the cron module refuses cron_file: /etc/crontab, so write the lines it used to put there:
+# MAILTO at the top, and each job under its "#Ansible: <name>" marker
 - name: Set Cron Admin
-  cron:
-    name: MAILTO
-    env: yes
-    job: "{{ cron_admin }}"
-    cron_file: /etc/crontab
-    user: root
+  lineinfile:
+    path: /etc/crontab
+    regexp: '^MAILTO='
+    line: 'MAILTO="{{ cron_admin }}"'
+    insertbefore: BOF
 
 # - deprecated
 #- name: Set gridctl_pro cronjob
@@ -26,19 +27,28 @@
 #    cron_file: /etc/crontab
 #  when: cron_enable_pro == 'yes'
 
+- name: set cluster_status cronjob marker
+  lineinfile:
+    path: /etc/crontab
+    line: '#Ansible: cluster_status cronjob'
+
 - name: set cluster_status cronjob
-  cron:
-    name: cluster_status cronjob
-    minute: "*/12"
-    job: /usr/bin/cronic php {{ user_home }}/us3/lims/bin/cluster_status.php
-    user: us3
-    cron_file: /etc/crontab
+  lineinfile:
+    path: /etc/crontab
+    regexp: '/lims/bin/cluster_status\.php$'
+    line: '*/12 * * * * us3 /usr/bin/cronic php {{ user_home }}/us3/lims/bin/cluster_status.php'
+    insertafter: '^#Ansible: cluster_status cronjob$'
+
+- name: set update_notice cronjob marker
+  lineinfile:
+    path: /etc/crontab
+    line: '#Ansible: update_notice cronjob'
+  when: cron_enable_update_notice == 'yes'
 
 - name: set update_notice cronjob
-  cron:
-    name: update_notice cronjob
-    minute: "*/20"
-    job: /usr/bin/cronic php {{ user_home }}/us3/lims/bin/update_notice.php
-    user: us3
-    cron_file: /etc/crontab
+  lineinfile:
+    path: /etc/crontab
+    regexp: '/lims/bin/update_notice\.php$'
+    line: '*/20 * * * * us3 /usr/bin/cronic php {{ user_home }}/us3/lims/bin/update_notice.php'
+    insertafter: '^#Ansible: update_notice cronjob$'
   when: cron_enable_update_notice == 'yes'
