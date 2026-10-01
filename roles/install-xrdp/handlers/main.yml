@@ -1,0 +1,6 @@
+---
+# xrdp.service requires xrdp-sesman.service, so this restarts xrdp as well
+- name: restart xrdp-sesman
+  service:
+    name: xrdp-sesman
+    state: restarted
