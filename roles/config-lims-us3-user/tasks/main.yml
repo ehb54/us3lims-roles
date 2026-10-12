@@ -85,12 +85,33 @@
   changed_when: false
 
 ## gridctl owns listen-config.php's layout; only this site's values are set here.
+##
+## dbutils' uslims_upgrade.php migrates a pre-4.3.0 listen-config.php to its
+## own "values only, version 2" contract, and from then on refuses to touch
+## the file again once it reads $listen_config_version >= 2 -- "rerun the
+## script rather than editing by hand" is its own stated contract too. This
+## task used to re-template the file from this role's own (pre-upgrade-
+## shaped) template on every run regardless, which reverted that migration
+## on its very next run: gridctl's bootstrap refuses to start against a
+## pre-upgrade file (round-13, us3lims-roles#24), stranding every job on the
+## host until an operator reran the upgrade by hand. $listen_config_version
+## only exists in the v2 contract, so its presence is the same signal
+## uslims_upgrade.php itself already checks for -- once set, this role backs
+## off and leaves the file to the upgrade script, same as that script asks
+## of a human editor.
+- name: Check whether listen-config.php already carries uslims_upgrade.php's version-2 contract
+  ansible.builtin.command: grep -q '^\$listen_config_version\s*=' "{{ user_home }}/us3/lims/bin/listen-config.php"
+  register: listen_config_is_v2
+  changed_when: false
+  failed_when: false
+
 - name: Read the deployed gridctl listen-config template
   ansible.builtin.slurp:
     src: "{{ user_home }}/us3/lims/bin/listen-config.php.template"
   register: listen_config_template
+  when: listen_config_is_v2.rc != 0
 
-- name: Write listen-config.php with this site's values
+- name: Write listen-config.php with this site's values (first install only -- see the check above)
   ansible.builtin.copy:
     content: |-
       {%- set ns = namespace(text=listen_config_template.content | b64decode) -%}
@@ -110,10 +131,12 @@
       submit_dir: "{{ submit_dir }}"
       servhost: "{{ hostname }}"
       host_name: "{{ hostname }}"
-      class_dir: "{{ class_dir_l }}"
+      class_dir: "{{ class_dir_p }}"
       org_name: "{{ org_name }}"
       org_domain: "{{ org_domain }}"
       admin_email: "{{ gridctl_admin_email }}"
+  when: listen_config_is_v2.rc != 0
+  notify: restart us3-listen
 
 
 - name: Set us3 ownership of us3/lims/bin

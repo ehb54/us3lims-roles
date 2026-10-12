@@ -25,7 +25,23 @@
    force: yes
   changed_when: false
 
-- name: copy global_config.php.template to global_config.php
+## uslims_upgrade.php stamps a "## BEGIN uslims_upgrade.php settings" banner
+## into global_config.php when it writes cluster/sizing/breaker settings
+## there, and says so in the banner itself: "rerun the script rather than
+## editing by hand". This task used to copy the plain template over
+## global_config.php on every run regardless, overwriting that banner (and
+## the sizing, pool and breaker settings inside it) with the un-upgraded
+## defaults on the very next ansible run after an operator upgraded the host
+## (round-13, us3lims-roles#24). The banner's presence is the same signal
+## the upgrade script would want a human editor to respect, so this task now
+## backs off once it is there and leaves the file to the upgrade script.
+- name: Check whether global_config.php already carries uslims_upgrade.php's managed settings
+  ansible.builtin.command: grep -q '## BEGIN uslims_upgrade.php settings' "{{ www_common }}/global_config.php"
+  register: global_config_is_upgraded
+  changed_when: false
+  failed_when: false
+
+- name: copy global_config.php.template to global_config.php (first install only -- see the check above)
   ansible.builtin.copy:
    remote_src: yes
    src: "{{ www_common }}/global_config.php.template"
@@ -33,6 +49,7 @@
    owner: us3
    group: us3
    mode: 0644
+  when: global_config_is_upgraded.rc != 0
 
 # Install {{ us_airavata_bridge_url }}
 
