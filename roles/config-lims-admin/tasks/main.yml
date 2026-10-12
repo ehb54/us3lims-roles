@@ -10,7 +10,6 @@
     state: present
     home: '{{ user_home }}/{{ item }}'
   with_items:
-    - gegorbet
     - demeler
     - alexey
     - ehb
@@ -21,7 +20,6 @@
     user: '{{ item }}'
     key: "{{ lookup( 'file', '../files/{{ item }}') }}"
   with_items:
-    - gegorbet
     - alexey
     - demeler
     - ehb
