@@ -1,0 +1,4 @@
+---
+local_slurm_user: us3
+local_slurm_user_home: "{{ user_home | default('/home') }}/us3"
+local_slurm_cluster_name: us3iab-node0

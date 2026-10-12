@@ -84,11 +84,38 @@
       recurse: yes
   changed_when: false
 
-- name: template listen-config.php
-  template:
-    src: listen-config.php.j2
+## gridctl owns listen-config.php's layout; only this site's values are set here.
+- name: Read the deployed gridctl listen-config template
+  ansible.builtin.slurp:
+    src: "{{ user_home }}/us3/lims/bin/listen-config.php.template"
+  register: listen_config_template
+
+- name: Write listen-config.php with this site's values
+  ansible.builtin.copy:
+    content: |-
+      {%- set ns = namespace(text=listen_config_template.content | b64decode) -%}
+      {%- for key, value in listen_config_values.items() -%}
+      {%- set ns.text = ns.text | regex_replace('(?m)^[$]' ~ key ~ '[ ]*=[^;]*;', '$' ~ key ~ ' = ' ~ php_quote ~ (value | replace(php_quote, php_escaped_quote)) ~ php_quote ~ ';') -%}
+      {%- endfor -%}
+      {{ ns.text | regex_replace('(?m)^date_default_timezone_set[(][^)]*[)]', 'date_default_timezone_set( ' ~ php_quote ~ time_zone ~ php_quote ~ ' )') }}
     dest: "{{ user_home }}/us3/lims/bin/listen-config.php"
-    
+    owner: us3
+    group: us3
+    mode: '0644'
+    validate: '/usr/bin/php -l %s'
+  vars:
+    php_quote: "'"
+    php_escaped_quote: "\\'"
+    listen_config_values:
+      submit_dir: "{{ submit_dir }}"
+      servhost: "{{ hostname }}"
+      host_name: "{{ hostname }}"
+      class_dir: "{{ class_dir_l }}"
+      org_name: "{{ org_name }}"
+      org_domain: "{{ org_domain }}"
+      admin_email: "{{ gridctl_admin_email }}"
+
+
 - name: Set us3 ownership of us3/lims/bin
   command:
     chdir: "{{ user_home }}/us3/lims/bin"

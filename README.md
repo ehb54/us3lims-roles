@@ -28,7 +28,7 @@ ansible-galaxy install -r requirements.yml
 
 ## Using it
 
-Modifying the example-playbook.yml is a good starting ground. 
+Modifying the install-lims-server-playbook.yml is a good starting ground. 
 
 ### Some required variable definitons: 
 
