@@ -145,7 +145,7 @@
         - newinst_branch:    "release-2026-Q2"
         - webinfo_branch:    "release-2026-Q2"
         - airavata_branch:   "meta-scheduler-prod"
-        - utils_branch:      "main"
+        - utils_branch:      "release-2026-Q2"
 
         - postfix_relay_smtp_host: smtp.gmail.com
         - postfix_relay_smtp_port: 587
