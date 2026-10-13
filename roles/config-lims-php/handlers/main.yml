@@ -1,6 +1,10 @@
---- 
+---
+- name: reload daemon
+  systemd:
+        daemon_reload: yes
+
 - name: restart php-fpm
-  service: 
+  service:
         name: php-fpm
         state: restarted
 

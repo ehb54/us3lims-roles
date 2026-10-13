@@ -14,6 +14,27 @@
   shell: echo '' | /usr/bin/pecl install imagick
   when: imagick_module.stat.exists == false
 
+## Default KillMode ("control-group") sends the stop signal to every
+## process in php-fpm.service's cgroup, not just the workers systemd
+## itself tracks -- a job a web request launched (submit_slurm's
+## launch_monitor path) stays in that same cgroup even once it has
+## detached from its parent worker, so a routine php-fpm restart (e.g.
+## from the config changes below) took every job it had launched down
+## with it. KillMode=process limits the signal to the tracked processes
+## php-fpm's own master already manages directly.
+- name: Create folder for the php-fpm systemd drop-in
+  ansible.builtin.file:
+    path: /etc/systemd/system/php-fpm.service.d/
+    state: directory
+
+- name: Install the php-fpm KillMode override
+  ansible.builtin.template:
+    src: killmode-process.conf.j2
+    dest: /etc/systemd/system/php-fpm.service.d/killmode-process.conf
+  notify:
+    - reload daemon
+    - restart php-fpm
+
 - name: Configure php.ini
   copy:
         src: php.ini
