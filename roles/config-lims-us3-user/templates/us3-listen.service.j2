@@ -1,16 +1,25 @@
 [Unit]
 Description= gridctl us3 listen daemon
 Wants=network-online.target
-After=network-online.target
+After=network-online.target mariadb.service
+Requires=mariadb.service
 
 [Service]
 User=us3
+WorkingDirectory={{ user_home }}/us3/lims/bin
 
 Type=oneshot
 
 ExecStart=php {{ user_home }}/us3/lims/bin/services.php start
 ExecReload=php {{ user_home }}/us3/lims/bin/services.php restart
 ExecStop=php {{ user_home }}/us3/lims/bin/services.php stop
+
+## The default KillMode ("control-group") sends the stop signal to every
+## process this unit's cgroup ever launched, including job monitors this
+## oneshot's ExecStart spawned and left running long after it exited --
+## a restart would take every running job down with it. KillMode=process
+## limits the signal to the tracked main process only.
+KillMode=process
 
 RemainAfterExit=yes
 
