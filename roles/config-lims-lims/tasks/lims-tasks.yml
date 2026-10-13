@@ -119,6 +119,9 @@
     dest: "{{ www_uslims }}/config.php"
     backup: yes
 
+- include_role:
+    name: config-lims-dbinst-base
+
 - set_fact:
     newinst_branch: "{{ site_release | default(branch) }}"
   when: newinst_branch is undefined

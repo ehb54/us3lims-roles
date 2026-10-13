@@ -1,0 +1,18 @@
+<?php
+/*
+ * Shared dbinst configuration, schema v1.
+ *
+ * MANAGED BY ANSIBLE (config-lims-dbinst-base) -- do not edit on the host.
+ * Change dbinst_base_values instead.
+ *
+ * Instance identity and credentials do not belong in this file: they live in
+ * one validated overlay per instance under instances/.
+ */
+return array(
+  'schema_version' => 1,
+  'values' => array(
+{% for key, value in dbinst_base_values | dictsort %}
+    {{ "'%s'"|format(key) }} => {% if value is boolean %}{{ 'true' if value else 'false' }}{% elif value is number %}{{ value }}{% else %}'{{ value | replace("\\", "\\\\") | replace("'", "\\'") }}'{% endif %},
+{% endfor %}
+  )
+);
