@@ -1,0 +1,52 @@
+---
+# Refuses to let a run touch a repo checkout that is not on this site's
+# declared release, instead of silently force-checking it out to whatever
+# the playbook happens to pass (us3lims-roles#24). site_release is a
+# per-site variable (set in that site's own inventory/group_vars, not
+# here) naming the release the host is supposed to run; a site that does
+# not define it gets none of this -- existing dev/test playbooks that pin
+# every *_branch to "master"/"main" directly are unaffected.
+#
+# Include this once per repo checkout, before its own git: task, with:
+#   release_gate_dest:  the checkout's working directory
+#   release_gate_label: a short name for messages (e.g. "dbutils")
+
+- block:
+    - name: "{{ release_gate_label }}: check whether a checkout already exists"
+      ansible.builtin.stat:
+        path: "{{ release_gate_dest }}/.git"
+      register: release_gate_git_dir
+
+    - name: "{{ release_gate_label }}: read the branch or tag currently checked out"
+      ansible.builtin.command:
+        argv: [ git, -C, "{{ release_gate_dest }}", rev-parse, --abbrev-ref, HEAD ]
+      register: release_gate_current
+      changed_when: false
+      when: release_gate_git_dir.stat.exists
+
+    ## A detached HEAD (checked out to a tag, not a branch) reads back
+    ## literally as "HEAD" from rev-parse --abbrev-ref -- fall back to an
+    ## exact-match describe so a tag-pinned release still compares cleanly.
+    - name: "{{ release_gate_label }}: resolve a detached HEAD to its tag"
+      ansible.builtin.command:
+        argv: [ git, -C, "{{ release_gate_dest }}", describe, --tags, --exact-match ]
+      register: release_gate_current_tag
+      changed_when: false
+      failed_when: false
+      when:
+        - release_gate_git_dir.stat.exists
+        - release_gate_current.stdout == "HEAD"
+
+    - name: "{{ release_gate_label }}: refuse to continue if the host is not on site_release"
+      ansible.builtin.fail:
+        msg: >-
+          {{ release_gate_dest }} is on
+          '{{ release_gate_current_tag.stdout | default(release_gate_current.stdout) }}',
+          not this site's declared release '{{ site_release }}'. Refusing to touch it --
+          either this host is running a different release than site_release says, or
+          site_release needs updating to match. Not stopped: nothing here changes an
+          existing checkout without this matching first.
+      when:
+        - release_gate_git_dir.stat.exists
+        - (release_gate_current_tag.stdout | default(release_gate_current.stdout)) != site_release
+  when: site_release is defined

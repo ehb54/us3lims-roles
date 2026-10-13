@@ -6,15 +6,21 @@
     update_cache: yes
 
 - set_fact:
-    common_branch: "{{ branch }}"
+    common_branch: "{{ site_release | default(branch) }}"
   when: common_branch is undefined
 
 - set_fact:
-    webinfo_branch: "{{ branch }}"
+    webinfo_branch: "{{ site_release | default(branch) }}"
   when: webinfo_branch is undefined
 
 - name: Add common directory to git safe directories
   command: git config --global --add safe.directory {{ www_common }}
+
+- include_role:
+    name: release-gate
+  vars:
+    release_gate_dest: "{{ www_common }}"
+    release_gate_label: "us3lims_common"
 
 # Common dir.
 - name: Clone commons repo
@@ -81,6 +87,12 @@
 - name: Add common directory to git safe directories
   command: git config --global --add safe.directory {{ www_uslims }}
 
+- include_role:
+    name: release-gate
+  vars:
+    release_gate_dest: "{{ www_uslims }}"
+    release_gate_label: "us3lims_webinfo"
+
 - name: clone webinfo repo
   git:
    repo: "{{ webinfo_url }}"
@@ -94,12 +106,18 @@
     backup: yes
 
 - set_fact:
-    newinst_branch: "{{ branch }}"
+    newinst_branch: "{{ site_release | default(branch) }}"
   when: newinst_branch is undefined
 
 # Newlims dir.
 - name: Add common directory to git safe directories
   command: git config --global --add safe.directory {{ www_newlims }}
+
+- include_role:
+    name: release-gate
+  vars:
+    release_gate_dest: "{{ www_newlims }}"
+    release_gate_label: "us3lims_newinst"
 
 - name: Clone newinst repo
   git:
