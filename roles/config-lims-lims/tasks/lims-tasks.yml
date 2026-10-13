@@ -191,3 +191,21 @@
     recurse: yes
     state: directory
   changed_when: false
+
+## Runs uslims_upgrade.php itself rather than reimplementing any of its
+## steps here, so a fresh build converges through the exact same logic an
+## existing host's upgrade does -- including the circuit-breaker, ssh-
+## control and elog directories, and the Report-Only CSP install above
+## (idempotent: already in place from this role, so this step reports it
+## and changes nothing). --accept-host-keys is deliberately not passed:
+## trusting a freshly scanned host key is a decision this run should not
+## make unattended, same reasoning as the script's own comment on it. A
+## default template install never needs it (its only active cluster entry
+## is 'localhost' => true), and a site with real remote clusters configured
+## sets those up through step 4's own confirm() prompts by hand.
+- name: Converge the host through uslims_upgrade.php (breaker/ssh-control/elog directories, managed config blocks, CSP)
+  ansible.builtin.command:
+    chdir: "{{ user_home }}/us3/lims/database/utils"
+    cmd: "php uslims_upgrade.php --apply --yes --www {{ www_base }}"
+  register: uslims_upgrade_result
+  changed_when: uslims_upgrade_result.rc == 0 and 'Nothing to change' not in uslims_upgrade_result.stdout
