@@ -20,6 +20,7 @@ CREATE TABLE `people` (
   `username` varchar(80) DEFAULT NULL,
   `password` varchar(80) NOT NULL,
   `activated` tinyint(1) NOT NULL DEFAULT '0',
+  `account_enabled` tinyint(1) unsigned NOT NULL DEFAULT '1',
   `signup` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `lastLogin` datetime DEFAULT NULL,
   `userlevel` tinyint(4) NOT NULL DEFAULT '0',
