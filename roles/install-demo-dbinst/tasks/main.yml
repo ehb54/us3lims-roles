@@ -81,7 +81,6 @@
     - common_branch
     - newinst_branch
     - webinfo_branch
-    - airavata_branch
     - utils_branch
 
 - name: import data in case of failure notice

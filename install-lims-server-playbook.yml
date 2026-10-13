@@ -144,7 +144,6 @@
         - common_branch:     "release-2026-Q2"
         - newinst_branch:    "release-2026-Q2"
         - webinfo_branch:    "release-2026-Q2"
-        - airavata_branch:   "meta-scheduler-prod"
         - utils_branch:      "release-2026-Q2"
 
         - postfix_relay_smtp_host: smtp.gmail.com

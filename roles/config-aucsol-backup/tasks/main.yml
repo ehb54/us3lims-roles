@@ -77,7 +77,6 @@
     - common_branch
     - newinst_branch
     - webinfo_branch
-    - airavata_branch
     - utils_branch
 
 - name: make directory /srv/data directories if non existant

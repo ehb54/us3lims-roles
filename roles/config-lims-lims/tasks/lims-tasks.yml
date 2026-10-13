@@ -71,20 +71,6 @@
     name: config-lims-mpi-runtime
   when: global_config_is_upgraded.rc == 0 or not global_config_existed_already.stat.exists
 
-# Install {{ us_airavata_bridge_url }}
-
-- name: Add common directory to git safe directories
-  command: git config --global --add safe.directory {{ us_airavata_bridge_path }}
-
-- name: Clone airavata repo
-  git:
-   repo: "{{ us_airavata_bridge_url }}"
-   dest: "{{ us_airavata_bridge_path }}"
-   version: "{{ us_airavata_bridge_branch }}"
-   force: yes
-   
-  changed_when: false
-
 ## do we need this? - not any more
 #- name: Run update_local.sh
 #  command:
