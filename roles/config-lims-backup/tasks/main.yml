@@ -4,8 +4,48 @@
     user_home: "/home"
   when: user_home is undefined
 
-- name: Check if db_config setup
-  stat: 
+## Previously only install-demo-dbinst (an optional, demo-only role) ever
+## rendered this file; a production host without it got no backups,
+## rsyncs or domain-update notices at all, and this role's own next check
+## failed outright demanding a file nothing in the production play created.
+- name: Check if db_config.php already exists
+  stat:
+    path: "{{ user_home }}/us3/lims/database/utils/db_config.php"
+  register: db_config_details
+
+- name: copy db_config.php.template to db_config.php (first install only -- see the check above)
+  ansible.builtin.copy:
+    remote_src: yes
+    src: "{{ user_home }}/us3/lims/database/utils/db_config.php.template"
+    dest: "{{ user_home }}/us3/lims/database/utils/db_config.php"
+    owner: us3
+    group: us3
+    mode: '0600'
+  when: not db_config_details.stat.exists
+
+- name: Set db_config.php's site-specific values (first install only)
+  ansible.builtin.replace:
+    path: "{{ user_home }}/us3/lims/database/utils/db_config.php"
+    regexp: "{{ item.regexp }}"
+    replace: "{{ item.replace }}"
+  loop:
+    - { regexp: 'SET_HOSTNAME', replace: "{{ hostname }}" }
+    - { regexp: 'SET_HOST', replace: "localhost" }
+    - { regexp: 'SET_USER', replace: "root" }
+    - { regexp: 'SET_PASSWORD', replace: "{{ root_db_pass }}" }
+    - { regexp: 'SET_EMAIL', replace: "{{ admin_email }}" }
+    - { regexp: 'SET-us3_branch', replace: "{{ us3_branch | default(branch) }}" }
+    - { regexp: 'SET-sql_branch', replace: "{{ sql_branch | default(branch) }}" }
+    - { regexp: 'SET-dbinst_branch', replace: "{{ dbinst_branch | default(branch) }}" }
+    - { regexp: 'SET-gridctl_branch', replace: "{{ gridctl_branch | default(branch) }}" }
+    - { regexp: 'SET-common_branch', replace: "{{ common_branch | default(branch) }}" }
+    - { regexp: 'SET-webinfo_branch', replace: "{{ webinfo_branch | default(branch) }}" }
+    - { regexp: 'SET-newinst_branch', replace: "{{ newinst_branch | default(branch) }}" }
+    - { regexp: 'SET-utils_branch', replace: "{{ utils_branch | default(branch) }}" }
+  when: not db_config_details.stat.exists
+
+- name: Check if db_config.php is now in place
+  stat:
     path: "{{ user_home }}/us3/lims/database/utils/db_config.php"
   register: db_config_details
   failed_when: not db_config_details.stat.exists
