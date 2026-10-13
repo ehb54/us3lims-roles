@@ -118,4 +118,23 @@
     cmd: "php set_cluster_authorizations.php uslims3_Demo updatepeople"
   when: NO_LIMS is undefined or NO_LIMS == false or NO_LIMS == ''
 
+## The imported dump's people_audit rows predate the UTC migration, and
+## nothing records a per-instance UTC boundary for uslims3_Demo on its
+## own: this role's import goes straight through stage3_import_databases.php,
+## never through uslims_upgrade.php step 0 where that boundary is normally
+## recorded for every discovered instance. Without one,
+## migrate_people_audit_utc.php's own --apply refuses outright ("no UTC
+## boundary is recorded for this instance") rather than guess whether every
+## row needs converting -- running the full upgrade here, the same remedy
+## its own refusal message names, is what lets it record one and then
+## migrate through step 9, exactly as it would for any other instance on
+## this host.
+- name: Run uslims_upgrade.php so uslims3_Demo gets a UTC boundary and its people_audit migration
+  ansible.builtin.command:
+    chdir: "{{ user_home }}/us3/lims/database/utils"
+    cmd: "php uslims_upgrade.php --apply --yes --www {{ www_base }}"
+  register: demo_uslims_upgrade_result
+  changed_when: demo_uslims_upgrade_result.rc == 0 and 'Nothing to change' not in demo_uslims_upgrade_result.stdout
+  when: NO_LIMS is undefined or NO_LIMS == false or NO_LIMS == ''
+
 
