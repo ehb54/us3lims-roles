@@ -78,3 +78,34 @@
   notify:
         - restart apache
   when: NO_LIMS is undefined or NO_LIMS == false or NO_LIMS == ''
+
+## Report-Only blocks nothing: it only logs violations (via webinfo's
+## /csp-report.php) so a site can run a full analysis cycle before ever
+## switching to the enforcing header. dbutils' util/csp/README.md documents
+## that path; this role only ever installs the report-only file, never the
+## enforcing one -- turning it into Content-Security-Policy on a specific
+## site, once that site's own log is quiet, is a deliberate per-site change,
+## not something a fresh build should do by default.
+##
+## Only installed on a fresh build or a host uslims_upgrade.php has already
+## converted (listen_config_is_v2, registered earlier by config-lims-us3-user
+## in this same play) -- an existing 4.2.0 host must see no new behavior
+## from a run against it, and a brand-new CSP header is exactly that.
+- name: Check whether the https vhost conf already exists (fresh install vs. existing host)
+  ansible.builtin.stat:
+    path: "/etc/httpd/conf.d/https-{{ server_name }}.conf"
+  register: https_vhost_existed_already
+
+- name: Install the Report-Only Content Security Policy
+  ansible.builtin.copy:
+        remote_src: yes
+        src: "{{ user_home }}/us3/lims/database/utils/util/csp/csp-report-only.conf"
+        dest: /etc/httpd/conf.d/lims-csp.conf
+        owner: root
+        group: root
+        mode: '0644'
+  notify:
+        - restart apache
+  when: >
+        (NO_LIMS is undefined or NO_LIMS == false or NO_LIMS == '') and
+        (not https_vhost_existed_already.stat.exists or listen_config_is_v2.rc == 0)
