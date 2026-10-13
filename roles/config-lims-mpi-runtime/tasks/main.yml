@@ -1,0 +1,97 @@
+---
+- name: Check for MPI metadata recorded by the analysis build
+  ansible.builtin.stat:
+    path: "{{ lims_mpi_manifest }}"
+  register: lims_mpi_manifest_stat
+
+- name: Read the recorded analysis build runtime
+  ansible.builtin.slurp:
+    src: "{{ lims_mpi_manifest }}"
+  register: lims_mpi_manifest_content
+  when: lims_mpi_manifest_stat.stat.exists
+
+- name: Use the runtime recorded by the analysis build
+  ansible.builtin.set_fact:
+    lims_selected_mpi: "{{ lims_mpi_manifest_content.content | b64decode | from_json }}"
+  when: lims_mpi_manifest_stat.stat.exists
+
+- name: Detect compatible runtimes on an existing installation
+  become: true
+  become_user: us3
+  ansible.builtin.shell: |
+    set -eo pipefail
+    source {{ lims_modules_init | quote }}
+    module purge
+    module load {{ item.mpi_module | quote }} {{ item.analysis_module | quote }}
+    launcher=$(command -v mpirun)
+    case "$launcher" in {{ item.library_prefix | quote }}*) ;; *) exit 1;; esac
+    analysis=$(command -v us_mpi_analysis)
+    libraries=$(ldd "$analysis")
+    if printf '%s\n' "$libraries" | grep -q 'not found'; then exit 1; fi
+    printf '%s\n' "$libraries" | grep -E 'libmpi[^ ]* => ' | grep -F {{ item.library_prefix | quote }}
+  args:
+    executable: /bin/bash
+  loop: "{{ lims_mpi_candidates }}"
+  register: lims_mpi_detection
+  changed_when: false
+  failed_when: false
+  when: not lims_mpi_manifest_stat.stat.exists
+
+- name: Require an unambiguous compatible runtime
+  ansible.builtin.assert:
+    that:
+      - (lims_mpi_detection.results | selectattr('rc', 'equalto', 0) | list | length) == 1
+    fail_msg: "Cannot identify a unique MPI runtime for us_mpi_analysis. Check the installed build, or supply site module paths in lims_mpi_candidates."
+  when: not lims_mpi_manifest_stat.stat.exists
+
+- name: Select the detected analysis runtime
+  ansible.builtin.set_fact:
+    lims_selected_mpi: "{{ (lims_mpi_detection.results | selectattr('rc', 'equalto', 0) | first).item }}"
+  when: not lims_mpi_manifest_stat.stat.exists
+
+- name: Validate MPI implementation selection
+  ansible.builtin.assert:
+    that:
+      - lims_selected_mpi.implementation in ['mpich', 'openmpi']
+
+- name: Verify the analysis runtime as the submission user
+  become: true
+  become_user: us3
+  ansible.builtin.shell: |
+    set -eo pipefail
+    {{ lims_mpi_environment }}
+    launcher=$(command -v mpirun)
+    case "$launcher" in {{ lims_selected_mpi.library_prefix | quote }}*) ;; *) exit 1;; esac
+    analysis=$(command -v us_mpi_analysis)
+    printf '%s\n' "$analysis"
+    {% if lims_selected_mpi.analysis_binary is defined %}
+    test "$analysis" = {{ lims_selected_mpi.analysis_binary | quote }}
+    {% endif %}
+    libraries=$(ldd "$analysis")
+    if printf '%s\n' "$libraries" | grep -q 'not found'; then
+      printf '%s\n' "$libraries" >&2
+      exit 1
+    fi
+    printf '%s\n' "$libraries" | grep -E 'libmpi[^ ]* => ' | grep -F {{ lims_selected_mpi.library_prefix | quote }}
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+## $single_tenant_deployment is deliberately not written here. Whether a
+## site runs single- or multi-tenant is its own policy decision, unrelated
+## to which MPI runtime the appliance detected -- forcing it here silently
+## flipped it to true on a run against a host configured as multi-tenant
+## since it was written unconditionally. A site that wants single-tenant
+## sets it directly in its own global_config.php, same as every setting
+## this role doesn't own.
+- name: Configure local Slurm jobs with the validated MPI environment
+  ansible.builtin.blockinfile:
+    path: "{{ www_common }}/global_config.php"
+    marker: '// {mark} ANSIBLE LOCAL MPI RUNTIME'
+    block: |
+      $default_local_cluster = {{ lims_local_cluster | to_json }};
+      $cluster_details[{{ lims_local_cluster | to_json }}]['ppn'] = {{ slurm_cores | int }};
+      $cluster_details[{{ lims_local_cluster | to_json }}]['ppbj'] = {{ slurm_cores | int }};
+      $cluster_details[{{ lims_local_cluster | to_json }}]['maxproc'] = {{ slurm_cores | int }};
+      $cluster_details[{{ lims_local_cluster | to_json }}]['env_script_lines'] = {{ lims_mpi_environment | to_json }};
+    validate: '/usr/bin/php -l %s'

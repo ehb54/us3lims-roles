@@ -41,6 +41,11 @@
 ## (round-13, us3lims-roles#24). The banner's presence is the same signal
 ## the upgrade script would want a human editor to respect, so this task now
 ## backs off once it is there and leaves the file to the upgrade script.
+- name: Check whether global_config.php exists yet (fresh install vs. an existing host)
+  ansible.builtin.stat:
+    path: "{{ www_common }}/global_config.php"
+  register: global_config_existed_already
+
 - name: Check whether global_config.php already carries uslims_upgrade.php's managed settings
   ansible.builtin.command: grep -q '## BEGIN uslims_upgrade.php settings' "{{ www_common }}/global_config.php"
   register: global_config_is_upgraded
@@ -56,6 +61,15 @@
    group: us3
    mode: 0644
   when: global_config_is_upgraded.rc != 0
+
+## global_config.php's $cluster_details array only has the shape this role
+## expects once it is either a fresh copy of the current template, or an
+## existing host uslims_upgrade.php has already converted -- an existing
+## host that is still on the pre-upgrade file (a 4.2.0 host) must see no
+## change at all, so this only runs for the other two cases.
+- include_role:
+    name: config-lims-mpi-runtime
+  when: global_config_is_upgraded.rc == 0 or not global_config_existed_already.stat.exists
 
 # Install {{ us_airavata_bridge_url }}
 
