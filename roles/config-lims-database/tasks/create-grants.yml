@@ -34,11 +34,25 @@
         - ::1
 
 # gfac privs
-- name: Grant SELECT, INSERT, UPDATE, DELETE to gfac user on gfac
+#
+# CREATE,ALTER,INDEX added on gfac.* (round 15, us3lims-roles#24 should-fix,
+# cross-referenced from dbutils#52/gridctl#35): this is the account
+# uslims_upgrade.php's step 5 and gridctl's own migrations connect to gfac
+# as (listen-config.php's guser/gpasswd), and without CREATE it cannot make
+# gfac.metascheduler_decision/gfac.cluster_status_nudge -- so on every
+# roles-built host, a configured metascheduler pool makes uslims_upgrade.php
+# --apply exit rc 1 permanently (us3lims-roles#24 runs it on every play),
+# and with no pool it silently never gets either table, until an operator
+# grants this by hand or runs the table SQL directly. ALTER/INDEX alongside
+# CREATE: both tables also pick up additive schema changes over time (an
+# index, a column), the same "one owner can keep this current" reasoning
+# as granting CREATE in the first place, not just enough for the one
+# CREATE TABLE this round happens to need.
+- name: Grant SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX to gfac user on gfac
   mysql_user:
         name: '{{ gbl_db_user }}'
         host: "{{ item }}"
-        priv: "{{ gbl_db_name }}.*:SELECT,INSERT,UPDATE,DELETE/uslims3_*.*:SELECT,UPDATE/uslims3_*.*:INSERT"
+        priv: "{{ gbl_db_name }}.*:SELECT,INSERT,UPDATE,DELETE,CREATE,ALTER,INDEX/uslims3_*.*:SELECT,UPDATE/uslims3_*.*:INSERT"
         append_privs: yes
         password: '{{ gbl_db_pass }}'
         login_unix_socket: /var/lib/mysql/mysql.sock
