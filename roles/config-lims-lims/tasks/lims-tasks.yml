@@ -106,11 +106,19 @@
    dest: "{{ www_uslims }}"
    version: "{{ webinfo_branch }}"
 
+## Round 15 nit, us3lims-roles#24: backup: yes has no way to redirect
+## where it writes (ansible.builtin.template's own option is a bare
+## boolean) -- it always drops the timestamped copy right next to the
+## file, which here is inside webinfo's own git checkout. Git already
+## tracks every actual repo file's history; a backup ansible itself wrote
+## is just an ever-accumulating untracked file in a tree uslims_git_info.php
+## otherwise manages cleanly. config.php itself is template-generated, not
+## a file an operator hand-edits in place, so there is nothing here worth
+## keeping a side-copy of anyway.
 - name: Template webinfo config
   template:
     src: "webinfo-config.php.j2"
     dest: "{{ www_uslims }}/config.php"
-    backup: yes
 
 - include_role:
     name: config-lims-dbinst-base
@@ -136,11 +144,13 @@
     version: "{{ newinst_branch }}"
     dest: "{{ www_newlims }}"
 
+## Round 15 nit, us3lims-roles#24: same reasoning as webinfo's own config
+## template just above -- the backup would land inside newinst's git
+## checkout, which git already tracks the real history of.
 - name: Template newinst config
   template:
     src: "newinst-config.php.j2"
     dest: "{{ www_newlims }}/config.php"
-    backup: yes
 
 - name: Install cluster_config.php local submit only
   copy:
@@ -189,9 +199,13 @@
 ## Runs uslims_upgrade.php itself rather than reimplementing any of its
 ## steps here, so a fresh build converges through the exact same logic an
 ## existing host's upgrade does -- including the circuit-breaker, ssh-
-## control and elog directories, and the Report-Only CSP install above
-## (idempotent: already in place from this role, so this step reports it
-## and changes nothing). --accept-host-keys is deliberately not passed:
+## control and elog directories, and the Report-Only CSP install (step 7,
+## idempotent: once installed, every later run reports it and changes
+## nothing). Round 15 nit: this used to say "the CSP install above" --
+## stale ever since config-lims-apache's own, separately-scoped CSP copy
+## task was removed in favor of this one, the sole installer now; there
+## is no CSP task left anywhere above this one in this role to point at.
+## --accept-host-keys is deliberately not passed:
 ## trusting a freshly scanned host key is a decision this run should not
 ## make unattended, same reasoning as the script's own comment on it. A
 ## default template install never needs it (its only active cluster entry
