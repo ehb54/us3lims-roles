@@ -98,7 +98,7 @@
     path: /etc/crontab
     line: "# Ansible: daily backup"
 
-## ROUND-14 FIX (us3lims-roles#24 should-fix, ticket item 18), same as
+## Same as
 ## config-lims-backup's identical task: anchoring alone isn't enough,
 ## since lineinfile's insertafter still inserts a fresh active copy of
 ## the line whenever its own regexp finds no match, which is always true

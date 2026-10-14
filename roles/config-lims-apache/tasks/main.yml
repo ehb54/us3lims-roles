@@ -79,7 +79,7 @@
         - restart apache
   when: NO_LIMS is undefined or NO_LIMS == false or NO_LIMS == ''
 
-## ROUND-14 REGRESSION (us3lims-roles#24 blocking #3): this task used to
+## This task used to
 ## copy dbutils' RAW csp-report-only.conf straight to /etc/httpd/conf.d/
 ## lims-csp.conf, unscoped -- applying the policy server-wide, to every
 ## vhost, not just the LIMS docroot. uslims_upgrade.php's own step 7

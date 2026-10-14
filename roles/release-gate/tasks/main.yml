@@ -13,7 +13,7 @@
 #   release_gate_branch: the branch/tag the upcoming git: task for this
 #                        checkout will pull (e.g. "{{ utils_branch }}")
 #
-# ROUND-14 FIX (us3lims-roles#24 blocking #4). The checks below only ever
+# The checks below only ever
 # compared the EXISTING checkout against site_release -- nothing checked
 # that the UPCOMING pull (release_gate_branch, each repo's own *_branch
 # var) was itself heading to site_release too. Ran: with site_release set

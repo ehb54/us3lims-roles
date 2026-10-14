@@ -69,8 +69,8 @@
     owner: root
     group: root
 
-## Same marker as config-lims-admin's own admin-account provisioning
-## (round-14 fix, us3lims-roles#24 should-fix): without it, this task ran
+## Same marker as config-lims-admin's own admin-account provisioning:
+## without it, this task ran
 ## unconditionally on every run too, re-registering a removed admin's VNC
 ## access (and flipping their vncusers membership back on) right along
 ## with their OS account and key. One marker, checked by both roles, so

@@ -80,8 +80,7 @@
   when: us3pipe.stat.exists == false
 
 ## Cron entries and the us3-listen service itself are started by the
-## start-lims-services role instead, much later in the play (round-14 fix,
-## us3lims-roles#24 blocking #1) -- starting them here, before config-lims-
+## start-lims-services role instead, much later in the play -- starting them here, before config-lims-
 ## lims and install-demo-dbinst run uslims_upgrade.php, left the host not
 ## idle by the time either of those checked, so the upgrade always refused.
 ## See UPGRADE-AND-INSTALL-MODEL.md.

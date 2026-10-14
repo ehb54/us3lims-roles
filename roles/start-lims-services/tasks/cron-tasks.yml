@@ -32,8 +32,7 @@
     path: /etc/crontab
     line: '#Ansible: cluster_status cronjob'
 
-## ROUND-14 REGRESSION FOUND WHILE FIXING (us3lims-roles#24 should-fix,
-## ticket item 18): anchoring the regexp (above, round 13) stopped it from
+## Anchoring the regexp (above) stopped it from
 ## matching a commented-out line as if it were already active -- but
 ## lineinfile's insertafter still inserts a brand-new, active copy of the
 ## line whenever its own regexp finds no match anywhere in the file, which

@@ -3,8 +3,8 @@
     user_home: "/home"
   when: user_home is undefined
 
-## ROUND-14 FIX (us3lims-roles#24 should-fix, ticket item: admin accounts
-## are set up only at install; re-runs must not add or remove them). These
+## Admin accounts
+## are set up only at install; re-runs must not add or remove them. These
 ## two tasks used to run unconditionally on every single run, with
 ## state: present -- so an admin account an operator deliberately removed
 ## (userdel) came right back on the very next run, key and all. A plain

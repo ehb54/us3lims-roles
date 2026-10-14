@@ -128,8 +128,8 @@
 ## its own refusal message names, is what lets it record one and then
 ## migrate through step 9, exactly as it would for any other instance on
 ## this host.
-## ROUND-14 FIX (us3lims-roles#24 blocking #1, same as config-lims-lims's
-## own call to this script): checked for existence first, so a host
+## Same as config-lims-lims's
+## own call to this script: checked for existence first, so a host
 ## pinned to a pre-4.3.0 utils_branch for compatibility testing skips this
 ## with a clear note instead of failing the play on "Could not open input
 ## file". See UPGRADE-AND-INSTALL-MODEL.md.

@@ -85,7 +85,7 @@
 ## sets it directly in its own global_config.php, same as every setting
 ## this role doesn't own.
 ##
-## ROUND-14 REGRESSION (us3lims-roles#24 blocking #3): this task used to
+## This task used to
 ## run unconditionally, re-asserting ppbj/maxproc/env_script_lines from
 ## slurm_cores/lims_mpi_environment on every single run -- including a
 ## re-run on an already-upgraded host, where uslims_upgrade.php's own

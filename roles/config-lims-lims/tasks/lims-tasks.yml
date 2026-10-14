@@ -64,8 +64,7 @@
   when: global_config_is_upgraded.rc != 0
 
 ## config-lims-mpi-runtime moved to its own entry in the top-level
-## playbook, after build-mpich/build-us-mpi (round-14 fix, us3lims-
-## roles#24 blocking #2): it shells out to mpirun/us_mpi_analysis, neither
+## playbook, after build-mpich/build-us-mpi: it shells out to mpirun/us_mpi_analysis, neither
 ## of which exist yet at this point in the play -- this role runs before
 ## the roles that build them, so its own assert always failed on a fresh
 ## build. $global_config_is_upgraded/$global_config_existed_already,
@@ -193,7 +192,7 @@
 ## is 'localhost' => true), and a site with real remote clusters configured
 ## sets those up through step 4's own confirm() prompts by hand.
 ##
-## ROUND-14 FIX (us3lims-roles#24 blocking #1). This task itself runs on
+## This task itself runs on
 ## BOTH a fresh install and an upgrade, deliberately -- it is not only a
 ## one-time migration (which a fresh host would have nothing to migrate
 ## for), it is also the one place that provisions the breaker/ssh-control/

@@ -1,13 +1,12 @@
 [Unit]
 Description= gridctl us3 listen daemon
 Wants=network-online.target
-## ROUND-14 FIX (us3lims-roles#24 should-fix + the blocking fresh-build
-## failure it also caused): Requires=mariadb.service made this unit fail
+## Requires=mariadb.service made this unit fail
 ## outright ("Unit mariadb.service not found") on any run where us3-listen
 ## started before MariaDB was installed, and ties this daemon's lifecycle
 ## to MariaDB's: a MariaDB restart restarted us3-listen, and stopping
 ## MariaDB stopped every gridctl daemon with no way back without a manual
-## restart. After= alone (the ticket's own ask) keeps the startup ordering
+## restart. After= alone keeps the startup ordering
 ## without either coupling.
 After=network-online.target mariadb.service
 

@@ -1,8 +1,8 @@
 ---
 # tasks file for start-lims-services
 #
-# Split out of config-lims-us3-user/tasks/lims-tasks.yml (round-14 fix,
-# us3lims-roles#24 blocking #1): starting us3-listen and writing the cron
+# Split out of config-lims-us3-user/tasks/lims-tasks.yml: starting
+# us3-listen and writing the cron
 # entries used to happen from within config-lims-us3-user, which runs
 # BEFORE config-lims-lims and install-demo-dbinst -- both of which call
 # uslims_upgrade.php, whose own step 1 requires the host be idle (no

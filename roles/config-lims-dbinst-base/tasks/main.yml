@@ -25,7 +25,7 @@
     group: "{{ www_user }}"
     mode: '2750'
 
-## ROUND-14 FIX (us3lims-roles#24 should-fix). enable_GMP/enable_PAM ship
+## enable_GMP/enable_PAM ship
 ## false in this role's own defaults, with its own comment admitting there
 ## is no per-site role to turn them on yet -- so a site that wants either
 ## has only one option today: edit the deployed dbinst-base.v1.php by
