@@ -77,6 +77,11 @@
       - build-us3
       - build-mpich
       - build-us-mpi
+      ## Needs mpirun/us_mpi_analysis, built by the two roles just above --
+      ## round-14 fix, us3lims-roles#24 blocking #2 (was included from
+      ## inside config-lims-lims, which runs before either is built, so
+      ## its own assert always failed on a fresh build).
+      - config-lims-mpi-runtime
       - install-vncserver
       - install-postfix
       - install-chrony
@@ -87,6 +92,12 @@
       - renice-slurmd
       - restart-php-fpm
       - install-demo-dbinst
+      ## Starts us3-listen and writes the LIMS cron entries -- moved here,
+      ## after every role that calls uslims_upgrade.php (config-lims-lims,
+      ## install-demo-dbinst), so the host is still idle when either does
+      ## (round-14 fix, us3lims-roles#24 blocking #1). See
+      ## UPGRADE-AND-INSTALL-MODEL.md.
+      - start-lims-services
       - config-lims-backup
       - install-xrdp
       - install-proxychains4

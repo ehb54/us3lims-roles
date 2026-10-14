@@ -84,6 +84,19 @@
 ## since it was written unconditionally. A site that wants single-tenant
 ## sets it directly in its own global_config.php, same as every setting
 ## this role doesn't own.
+##
+## ROUND-14 REGRESSION (us3lims-roles#24 blocking #3): this task used to
+## run unconditionally, re-asserting ppbj/maxproc/env_script_lines from
+## slurm_cores/lims_mpi_environment on every single run -- including a
+## re-run on an already-upgraded host, where uslims_upgrade.php's own
+## step 3 is now the one computing and owning these exact per-cluster
+## settings (sizing, env_script_lines). Ran: ppbj reset from an
+## operator/upgrade-computed 8 to 16 on every re-run, silently. Once a
+## host has been upgraded, this task must leave global_config.php's
+## cluster sizing to the upgrade script, the same "one owner" rule
+## global_config.php's own copy task above already follows -- so this
+## only runs on a genuinely fresh install, never on an already-upgraded
+## or still-pre-upgrade host.
 - name: Configure local Slurm jobs with the validated MPI environment
   ansible.builtin.blockinfile:
     path: "{{ www_common }}/global_config.php"
@@ -95,3 +108,4 @@
       $cluster_details[{{ lims_local_cluster | to_json }}]['maxproc'] = {{ slurm_cores | int }};
       $cluster_details[{{ lims_local_cluster | to_json }}]['env_script_lines'] = {{ lims_mpi_environment | to_json }};
     validate: '/usr/bin/php -l %s'
+  when: not global_config_existed_already.stat.exists

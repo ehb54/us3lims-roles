@@ -52,6 +52,7 @@
   vars:
     release_gate_dest: "{{ user_home }}/us3/lims/database/sql"
     release_gate_label: "us3_sql"
+    release_gate_branch: "{{ sql_branch }}"
 
 - name: git clone us3_mysql repository
   git:
@@ -68,6 +69,7 @@
   vars:
     release_gate_dest: "{{ user_home }}/us3/lims/database/utils"
     release_gate_label: "us3lims_dbutils"
+    release_gate_branch: "{{ utils_branch }}"
 
 - name: git clone us3lims_dbutils repository
   git:
@@ -96,6 +98,7 @@
   vars:
     release_gate_dest: "{{ user_home }}/us3/lims/bin"
     release_gate_label: "us3lims_gridctl"
+    release_gate_branch: "{{ gridctl_branch }}"
 
 - name: git clone gridctl repository to bin
   git:

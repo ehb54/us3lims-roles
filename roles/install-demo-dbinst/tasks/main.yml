@@ -128,12 +128,28 @@
 ## its own refusal message names, is what lets it record one and then
 ## migrate through step 9, exactly as it would for any other instance on
 ## this host.
+## ROUND-14 FIX (us3lims-roles#24 blocking #1, same as config-lims-lims's
+## own call to this script): checked for existence first, so a host
+## pinned to a pre-4.3.0 utils_branch for compatibility testing skips this
+## with a clear note instead of failing the play on "Could not open input
+## file". See UPGRADE-AND-INSTALL-MODEL.md.
+- name: Check whether uslims_upgrade.php exists (an older dbutils checkout, e.g. a 4.2.0-pinned host, may not have it)
+  ansible.builtin.stat:
+    path: "{{ user_home }}/us3/lims/database/utils/uslims_upgrade.php"
+  register: demo_uslims_upgrade_script
+  when: NO_LIMS is undefined or NO_LIMS == false or NO_LIMS == ''
+
 - name: Run uslims_upgrade.php so uslims3_Demo gets a UTC boundary and its people_audit migration
   ansible.builtin.command:
     chdir: "{{ user_home }}/us3/lims/database/utils"
     cmd: "php uslims_upgrade.php --apply --yes --www {{ www_base }}"
   register: demo_uslims_upgrade_result
   changed_when: demo_uslims_upgrade_result.rc == 0 and 'Nothing to change' not in demo_uslims_upgrade_result.stdout
-  when: NO_LIMS is undefined or NO_LIMS == false or NO_LIMS == ''
+  when: (NO_LIMS is undefined or NO_LIMS == false or NO_LIMS == '') and demo_uslims_upgrade_script.stat.exists
+
+- name: Note that uslims_upgrade.php was skipped (dbutils checkout predates it)
+  ansible.builtin.debug:
+    msg: "{{ user_home }}/us3/lims/database/utils has no uslims_upgrade.php -- skipping uslims3_Demo's UTC boundary/migration step; pin utils_branch/site_release to 4.3.0 or newer to run it."
+  when: (NO_LIMS is undefined or NO_LIMS == false or NO_LIMS == '') and not demo_uslims_upgrade_script.stat.exists
 
 
