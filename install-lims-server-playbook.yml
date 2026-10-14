@@ -61,6 +61,34 @@
           user_home: "/home"
         when: user_home is undefined
 
+      ## Round 15, us3lims-roles#24 blocking: release-gate's own per-checkout
+      ## comparison only ever runs once the first role that includes it does
+      ## (config-lims-us3-user, the 5th role below) -- so a mismatched branch
+      ## var was only ever caught after config-lims-gui/-admin/-firewall/
+      ## -repo had already run. This needs no filesystem access at all (every
+      ## *_branch var and site_release are both already known here, in
+      ## pre_tasks, before any role runs), and covers all eight branch vars,
+      ## not just the six release-gate is actually included in front of --
+      ## dbinst_branch and us3_branch included, which nothing checked at all
+      ## before this. A real checkout already on disk disagreeing with
+      ## site_release is still release-gate's own job, per repo, since that
+      ## needs the filesystem; this only catches a misconfigured *_branch
+      ## var itself, as early as the play can.
+      - name: "release-gate: refuse to continue if any branch variable disagrees with site_release"
+        ansible.builtin.fail:
+          msg: >-
+            {{ item.key }} is '{{ item.value }}', not this site's declared
+            release '{{ site_release }}'. Refusing to continue -- either
+            this repo's own branch variable needs to track site_release, or
+            site_release needs updating to match what this run actually
+            intends to pull.
+        loop: "{{ {
+            'us3_branch': us3_branch, 'sql_branch': sql_branch, 'dbinst_branch': dbinst_branch,
+            'gridctl_branch': gridctl_branch, 'common_branch': common_branch, 'newinst_branch': newinst_branch,
+            'webinfo_branch': webinfo_branch, 'utils_branch': utils_branch
+          } | dict2items }}"
+        when: item.value != site_release
+
   roles:
       - config-lims-gui
       - config-lims-admin
@@ -147,14 +175,26 @@
         - qt_version:        "5.15.19"
         - qwt_version:       "6.3.0"
         - cores_for_parallel_compile: "{{ ansible_processor_vcpus }}"
-        - us3_branch:        "release-2026-Q2"
-        - sql_branch:        "release-2026-Q2"
-        - dbinst_branch:     "release-2026-Q2"
-        - gridctl_branch:    "release-2026-Q2"
-        - common_branch:     "release-2026-Q2"
-        - newinst_branch:    "release-2026-Q2"
-        - webinfo_branch:    "release-2026-Q2"
-        - utils_branch:      "release-2026-Q2"
+        ## Round 15, us3lims-roles#24 blocking: release-gate (and the
+        ## pre_tasks check above) is off unless site_release is set, and
+        ## until now nothing here ever set it -- so it never ran on this
+        ## playbook's own default pins, only on a site that happened to
+        ## define site_release itself in its own inventory/group_vars.
+        ## site_release is now the single source of truth these eight pins
+        ## derive from by default (still the same literal value as before;
+        ## this is a refactor of where it lives, not a change of what it
+        ## is), so the gate is active out of the box, and a site that wants
+        ## one repo pinned differently from the rest still can by
+        ## overriding that one *_branch var directly, same as before.
+        - site_release:      "release-2026-Q2"
+        - us3_branch:        "{{ site_release }}"
+        - sql_branch:        "{{ site_release }}"
+        - dbinst_branch:     "{{ site_release }}"
+        - gridctl_branch:    "{{ site_release }}"
+        - common_branch:     "{{ site_release }}"
+        - newinst_branch:    "{{ site_release }}"
+        - webinfo_branch:    "{{ site_release }}"
+        - utils_branch:      "{{ site_release }}"
 
         - postfix_relay_smtp_host: smtp.gmail.com
         - postfix_relay_smtp_port: 587
