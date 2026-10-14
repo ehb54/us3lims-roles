@@ -91,10 +91,28 @@
   changed_when: false
   failed_when: false
 
-- name: install in cronic (skipped if deliberately disabled -- see the check above)
+## The lineinfile below used to match only its own hardcoded time
+## ("10 0 * * *"). A site that changed the backup time by hand still runs
+## the identical command, just on a different schedule -- the regexp
+## never matched that line, so lineinfile did what it always does when
+## nothing matches: inserted a second, active line at the role's own
+## default time, leaving two nightly backups running. Detected by command
+## alone (any schedule), the same "match by identity, not by value"
+## principle the deliberately-disabled check above already uses -- if a
+## line for this command exists at all, whatever time it runs at is left
+## alone, and only a host with no line for it yet gets the default-timed
+## one inserted.
+- name: Check whether the daily backup cronjob already has an active line, at any time
+  ansible.builtin.shell:
+    cmd: grep -qE '^[0-9*/,-]+ [0-9*/,-]+ [0-9*/,-]+ [0-9*/,-]+ [0-9*/,-]+ root /usr/bin/cronic php {{ (user_home ~ "/us3/lims/database/utils/uslims_daily_backup.php") | regex_escape }}$' /etc/crontab
+  register: daily_backup_present
+  changed_when: false
+  failed_when: false
+
+- name: install in cronic (skipped if deliberately disabled, or already present at a site-chosen time -- see the checks above)
   ansible.builtin.lineinfile:
     path: /etc/crontab
     regexp: '^10 0 \* \* \* root /usr/bin/cronic php {{ (user_home ~ "/us3/lims/database/utils/uslims_daily_backup.php") | regex_escape }}$'
     line: "10 0 * * * root /usr/bin/cronic php {{ user_home }}/us3/lims/database/utils/uslims_daily_backup.php"
     insertafter: '^# Ansible: daily backup$'
-  when: daily_backup_disabled.rc != 0
+  when: daily_backup_disabled.rc != 0 and daily_backup_present.rc != 0
