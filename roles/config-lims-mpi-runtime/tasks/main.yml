@@ -97,6 +97,17 @@
 ## global_config.php's own copy task above already follows -- so this
 ## only runs on a genuinely fresh install, never on an already-upgraded
 ## or still-pre-upgrade host.
+## Round 15 should-fix, us3lims-roles#24: with NO_LIMS: true,
+## config-lims-lims/tasks/main.yml skips lims-tasks.yml entirely --
+## which is the only place global_config_existed_already ever gets
+## registered. This task's own `when:` then fails outright ("'global_
+## config_existed_already' is undefined"), not merely skips, since
+## Ansible errors on referencing an unregistered variable rather than
+## treating it as falsy. Checking `is defined` first short-circuits that;
+## NO_LIMS is also checked directly and explicitly, since under it there
+## is no global_config.php for this task to write into at all (the role
+## that creates/owns it was never run) -- the same condition
+## config-lims-lims/tasks/main.yml itself gates lims-tasks.yml on.
 - name: Configure local Slurm jobs with the validated MPI environment
   ansible.builtin.blockinfile:
     path: "{{ www_common }}/global_config.php"
@@ -108,4 +119,7 @@
       $cluster_details[{{ lims_local_cluster | to_json }}]['maxproc'] = {{ slurm_cores | int }};
       $cluster_details[{{ lims_local_cluster | to_json }}]['env_script_lines'] = {{ lims_mpi_environment | to_json }};
     validate: '/usr/bin/php -l %s'
-  when: not global_config_existed_already.stat.exists
+  when: >-
+    (NO_LIMS is undefined or NO_LIMS == false or NO_LIMS == '')
+    and global_config_existed_already is defined
+    and not global_config_existed_already.stat.exists
