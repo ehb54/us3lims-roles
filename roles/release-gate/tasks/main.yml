@@ -60,6 +60,50 @@
         - release_gate_git_dir.stat.exists
         - release_gate_current.stdout == "HEAD"
 
+    ## The branch/tag check above only proves the checkout's ref is named
+    ## right -- it says nothing about what's actually in the tree. A
+    ## force-push, a rebase, or a stale fetch can leave a branch with the
+    ## right name pointing at the wrong content, and the ref check alone
+    ## would pass it. Every repo in this stack has carried a VERSION file
+    ## at its root since 4.2.0 (uslims_upgrade.php's own step 0 reads it
+    ## for exactly this, and trusts it over the ref name: "a VERSION file
+    ## alone is not enough" there is about gridctl's own artifacts, not
+    ## about preferring the branch name instead). Reading it here is the
+    ## same "read a deployed VERSION" signal, just checked before the pull
+    ## that would otherwise silently move a drifted checkout.
+    - name: "{{ release_gate_label }}: read the checkout's own VERSION file"
+      ansible.builtin.slurp:
+        src: "{{ release_gate_dest }}/VERSION"
+      register: release_gate_version_file
+      failed_when: false
+      when: release_gate_git_dir.stat.exists
+
+    - name: "{{ release_gate_label }}: refuse to continue if the checkout has no readable VERSION"
+      ansible.builtin.fail:
+        msg: >-
+          {{ release_gate_dest }} has no readable VERSION file. Every repo
+          in this stack has carried one since 4.2.0 -- a missing file here
+          is an unrecognized checkout, not an old one, and the branch-name
+          check above cannot stand in for it.
+      when:
+        - release_gate_git_dir.stat.exists
+        - release_gate_version_file.content is not defined
+
+    - name: "{{ release_gate_label }}: refuse to continue if the checkout's VERSION disagrees with site_release"
+      ansible.builtin.fail:
+        msg: >-
+          {{ release_gate_dest }}'s VERSION file says
+          '{{ release_gate_version_file.content | b64decode | trim }}', not
+          this site's declared release '{{ site_release }}' -- even though
+          its git ref is named right. Refusing to touch it: either the
+          checkout is stale (right ref name, wrong content -- a force-push
+          or a rebase landed something else), or site_release itself needs
+          updating to match what is actually deployed.
+      when:
+        - release_gate_git_dir.stat.exists
+        - release_gate_version_file.content is defined
+        - (release_gate_version_file.content | b64decode | trim) != site_release
+
     - name: "{{ release_gate_label }}: refuse to continue if the host is not on site_release"
       ansible.builtin.fail:
         msg: >-
