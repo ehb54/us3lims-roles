@@ -21,6 +21,7 @@
   vars:
     release_gate_dest: "{{ www_common }}"
     release_gate_label: "us3lims_common"
+    release_gate_branch: "{{ common_branch }}"
 
 # Common dir.
 - name: Clone commons repo
@@ -62,14 +63,14 @@
    mode: 0644
   when: global_config_is_upgraded.rc != 0
 
-## global_config.php's $cluster_details array only has the shape this role
-## expects once it is either a fresh copy of the current template, or an
-## existing host uslims_upgrade.php has already converted -- an existing
-## host that is still on the pre-upgrade file (a 4.2.0 host) must see no
-## change at all, so this only runs for the other two cases.
-- include_role:
-    name: config-lims-mpi-runtime
-  when: global_config_is_upgraded.rc == 0 or not global_config_existed_already.stat.exists
+## config-lims-mpi-runtime moved to its own entry in the top-level
+## playbook, after build-mpich/build-us-mpi (round-14 fix, us3lims-
+## roles#24 blocking #2): it shells out to mpirun/us_mpi_analysis, neither
+## of which exist yet at this point in the play -- this role runs before
+## the roles that build them, so its own assert always failed on a fresh
+## build. $global_config_is_upgraded/$global_config_existed_already,
+## registered above, are host facts and still readable from that later
+## role in the same play. See UPGRADE-AND-INSTALL-MODEL.md.
 
 ## do we need this? - not any more
 #- name: Run update_local.sh
@@ -92,6 +93,7 @@
   vars:
     release_gate_dest: "{{ www_uslims }}"
     release_gate_label: "us3lims_webinfo"
+    release_gate_branch: "{{ webinfo_branch }}"
 
 - name: clone webinfo repo
   git:
@@ -121,6 +123,7 @@
   vars:
     release_gate_dest: "{{ www_newlims }}"
     release_gate_label: "us3lims_newinst"
+    release_gate_branch: "{{ newinst_branch }}"
 
 - name: Clone newinst repo
   git:
@@ -189,9 +192,34 @@
 ## default template install never needs it (its only active cluster entry
 ## is 'localhost' => true), and a site with real remote clusters configured
 ## sets those up through step 4's own confirm() prompts by hand.
+##
+## ROUND-14 FIX (us3lims-roles#24 blocking #1). This task itself runs on
+## BOTH a fresh install and an upgrade, deliberately -- it is not only a
+## one-time migration (which a fresh host would have nothing to migrate
+## for), it is also the one place that provisions the breaker/ssh-control/
+## elog directories and the CSP policy every host needs, migrated or not.
+## Skipping it on a fresh host would skip that provisioning too. The two
+## real problems were ordering and a missing script, now both fixed
+## elsewhere: (1) the host staying idle, which start-lims-services (moved
+## to the end of the play) now guarantees regardless of fresh/upgraded;
+## (2) an older dbutils checkout (a 4.2.0 host pinned to an old branch for
+## compatibility testing) not having this script at all -- checked here,
+## so the play continues with a clear note instead of failing outright on
+## "Could not open input file". See UPGRADE-AND-INSTALL-MODEL.md.
+- name: Check whether uslims_upgrade.php exists (an older dbutils checkout, e.g. a 4.2.0-pinned host, may not have it)
+  ansible.builtin.stat:
+    path: "{{ user_home }}/us3/lims/database/utils/uslims_upgrade.php"
+  register: uslims_upgrade_script
+
 - name: Converge the host through uslims_upgrade.php (breaker/ssh-control/elog directories, managed config blocks, CSP)
   ansible.builtin.command:
     chdir: "{{ user_home }}/us3/lims/database/utils"
     cmd: "php uslims_upgrade.php --apply --yes --www {{ www_base }}"
   register: uslims_upgrade_result
   changed_when: uslims_upgrade_result.rc == 0 and 'Nothing to change' not in uslims_upgrade_result.stdout
+  when: uslims_upgrade_script.stat.exists
+
+- name: Note that uslims_upgrade.php was skipped (dbutils checkout predates it)
+  ansible.builtin.debug:
+    msg: "{{ user_home }}/us3/lims/database/utils has no uslims_upgrade.php -- skipping the host convergence step; pin utils_branch/site_release to 4.3.0 or newer to run it."
+  when: not uslims_upgrade_script.stat.exists
