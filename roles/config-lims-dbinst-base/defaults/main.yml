@@ -26,8 +26,13 @@ dbinst_base_values:
   timezone: "{{ time_zone }}"
   dbinst_root: "{{ www_base | default('/srv/www/htdocs') }}/uslims3/"
   ## Per-site GMP/PAM enablement is a separate, not-yet-built role; until
-  ## then every base ships with both off, same as a fresh instance's own
-  ## overlay already defaults to (dbinst's --base-overlay, round-13).
-  enable_GMP: false
-  enable_PAM: false
+  ## then a site declares it through lims_enable_gmp/lims_enable_pam
+  ## (both default off, matching a fresh instance's own overlay). This
+  ## base is rendered once, on first install under this role -- an
+  ## existing GMP site upgrading to it needs its real setting at that
+  ## first render, not a hardcoded false every new --base-overlay
+  ## instance would otherwise silently inherit until someone remembers
+  ## to hand-edit the already-deployed base.
+  enable_GMP: "{{ lims_enable_gmp | default(false) | bool }}"
+  enable_PAM: "{{ lims_enable_pam | default(false) | bool }}"
   trust_proxy_https_header: false

@@ -2,8 +2,10 @@
 /*
  * Shared dbinst configuration, schema v1.
  *
- * MANAGED BY ANSIBLE (config-lims-dbinst-base) -- do not edit on the host.
- * Change dbinst_base_values instead.
+ * Rendered once by ansible (config-lims-dbinst-base), on first install
+ * only -- a later ansible run never re-renders this file, so changing
+ * dbinst_base_values afterward has no effect on an already-provisioned
+ * host. Edit this file directly to change a value (e.g. enable_GMP) here.
  *
  * Instance identity and credentials do not belong in this file: they live in
  * one validated overlay per instance under instances/.
