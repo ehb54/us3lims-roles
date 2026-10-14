@@ -98,9 +98,23 @@
     path: /etc/crontab
     line: "# Ansible: daily backup"
 
-- name: install in cronic
+## ROUND-14 FIX (us3lims-roles#24 should-fix, ticket item 18), same as
+## config-lims-backup's identical task: anchoring alone isn't enough,
+## since lineinfile's insertafter still inserts a fresh active copy of
+## the line whenever its own regexp finds no match, which is always true
+## once the line is commented out. Detects a deliberately-commented line
+## and skips the task entirely instead.
+- name: Check whether the daily backup cronjob has been deliberately disabled
+  ansible.builtin.shell:
+    cmd: grep -qE '^#.*{{ (user_home ~ "/us3/lims/database/utils/uslims_daily_backup.php /home/us3/lims/database/utils/db_config_aucsol.php") | regex_escape }}$' /etc/crontab
+  register: daily_backup_disabled
+  changed_when: false
+  failed_when: false
+
+- name: install in cronic (skipped if deliberately disabled -- see the check above)
   ansible.builtin.lineinfile:
     path: /etc/crontab
-    regexp: '/uslims_daily_backup\.php \S*db_config_aucsol\.php$'
+    regexp: '^10 0 \* \* \* root /usr/bin/cronic php {{ (user_home ~ "/us3/lims/database/utils/uslims_daily_backup.php /home/us3/lims/database/utils/db_config_aucsol.php") | regex_escape }}$'
     line: "10 0 * * * root /usr/bin/cronic php {{ user_home }}/us3/lims/database/utils/uslims_daily_backup.php /home/us3/lims/database/utils/db_config_aucsol.php"
     insertafter: '^# Ansible: daily backup$'
+  when: daily_backup_disabled.rc != 0
