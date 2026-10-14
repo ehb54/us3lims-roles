@@ -39,19 +39,25 @@
 ## global_config.php on every run regardless, overwriting that banner (and
 ## the sizing, pool and breaker settings inside it) with the un-upgraded
 ## defaults on the very next ansible run after an operator upgraded the host
-## (round-13, us3lims-roles#24). The banner's presence is the same signal
-## the upgrade script would want a human editor to respect, so this task now
-## backs off once it is there and leaves the file to the upgrade script.
+## (round-13, us3lims-roles#24). Backing this off on the banner's presence
+## fixed an upgraded host, but not a fresh-built one that has never been
+## upgraded at all (round 15): config-lims-mpi-runtime's own task below
+## writes real ppbj/env_script_lines into this same file on a fresh
+## install's first run, but that host never gets the upgrade-script banner
+## either, so every later re-run still saw no banner and copied the
+## pristine template straight over those detected values -- ppbj observed
+## going 16 (detected) -> 8 (template) -> 16 (re-detected, since the MPI
+## task's own "fresh install only" gate happened to still read true from a
+## stale pre-run fact) on successive runs. The actual question this task
+## needs answered is "did this run just create the file, or has some
+## earlier run (this role's own copy, or an operator's upgrade) already
+## put something worth keeping there" -- answered by the same
+## global_config_existed_already fact the MPI task below already uses for
+## exactly this, not by grepping for one specific owner's marker.
 - name: Check whether global_config.php exists yet (fresh install vs. an existing host)
   ansible.builtin.stat:
     path: "{{ www_common }}/global_config.php"
   register: global_config_existed_already
-
-- name: Check whether global_config.php already carries uslims_upgrade.php's managed settings
-  ansible.builtin.command: grep -q '## BEGIN uslims_upgrade.php settings' "{{ www_common }}/global_config.php"
-  register: global_config_is_upgraded
-  changed_when: false
-  failed_when: false
 
 - name: copy global_config.php.template to global_config.php (first install only -- see the check above)
   ansible.builtin.copy:
@@ -61,15 +67,15 @@
    owner: us3
    group: us3
    mode: 0644
-  when: global_config_is_upgraded.rc != 0
+  when: not global_config_existed_already.stat.exists
 
 ## config-lims-mpi-runtime moved to its own entry in the top-level
 ## playbook, after build-mpich/build-us-mpi: it shells out to mpirun/us_mpi_analysis, neither
 ## of which exist yet at this point in the play -- this role runs before
 ## the roles that build them, so its own assert always failed on a fresh
-## build. $global_config_is_upgraded/$global_config_existed_already,
-## registered above, are host facts and still readable from that later
-## role in the same play. See UPGRADE-AND-INSTALL-MODEL.md.
+## build. $global_config_existed_already, registered above, is a host fact
+## and still readable from that later role in the same play. See
+## UPGRADE-AND-INSTALL-MODEL.md.
 
 ## do we need this? - not any more
 #- name: Run update_local.sh
@@ -198,24 +204,119 @@
 ## for), it is also the one place that provisions the breaker/ssh-control/
 ## elog directories and the CSP policy every host needs, migrated or not.
 ## Skipping it on a fresh host would skip that provisioning too. The two
-## real problems were ordering and a missing script, now both fixed
-## elsewhere: (1) the host staying idle, which start-lims-services (moved
-## to the end of the play) now guarantees regardless of fresh/upgraded;
+## real problems were ordering and a missing script: (1) the host staying
+## idle through THIS run's own first call, which start-lims-services
+## (moved to the end of the play) guarantees regardless of fresh/upgraded;
 ## (2) an older dbutils checkout (a 4.2.0 host pinned to an old branch for
 ## compatibility testing) not having this script at all -- checked here,
 ## so the play continues with a clear note instead of failing outright on
-## "Could not open input file". See UPGRADE-AND-INSTALL-MODEL.md.
+## "Could not open input file".
+##
+## Round 15, us3lims-roles#24 blocking: (1) above only ever covered one
+## play's first call -- it is also start-lims-services that starts
+## us3-listen and writes the LIMS cron entries, and that state carries
+## into the NEXT run untouched, since nothing before this point in a later
+## run ever stops them again. So every re-run on an already-converged host
+## hit the exact same "not idle" refusal moving start-lims-services
+## solved only for a play's own first run. This play now re-idles itself
+## immediately before the call, rather than assuming a prior run left the
+## host in a state this one can still rely on. See
+## UPGRADE-AND-INSTALL-MODEL.md.
 - name: Check whether uslims_upgrade.php exists (an older dbutils checkout, e.g. a 4.2.0-pinned host, may not have it)
   ansible.builtin.stat:
     path: "{{ user_home }}/us3/lims/database/utils/uslims_upgrade.php"
   register: uslims_upgrade_script
 
-- name: Converge the host through uslims_upgrade.php (breaker/ssh-control/elog directories, managed config blocks, CSP)
+## Round 15, us3lims-roles#24 blocking, continued: stopping the daemon
+## alone is not enough -- uslims_upgrade.php's idle check separately
+## refuses on any UNCOMMENTED crontab line matching its own LIMS-job
+## pattern (live_lims_crontabs(), uslims_upgrade.php), and start-lims-
+## services' cron-tasks.yml (cluster_status, update_notice) and config-
+## lims-backup/config-aucsol-backup (the nightly backup job) all write
+## exactly such lines, active, on every prior run. A plain comment-out/
+## uncomment-after pair here would misfire against cron-tasks.yml's own
+## "deliberately disabled" detection -- a line this task left commented
+## would be indistinguishable from one an operator deliberately disabled,
+## so a later run would never re-enable it. Snapshotting the whole file
+## and restoring it verbatim afterward (not a pattern-based restore)
+## sidesteps that ambiguity entirely: nothing here needs to know, or
+## guess, which lines it is safe to turn back on.
+- name: Snapshot /etc/crontab before idling it for uslims_upgrade.php
+  ansible.builtin.copy:
+    src: /etc/crontab
+    dest: /etc/crontab.pre-upgrade-idle
+    remote_src: yes
+    mode: preserve
+  when: uslims_upgrade_script.stat.exists
+
+- name: Comment out any active LIMS cron entry in /etc/crontab before uslims_upgrade.php (restored verbatim in 'always', regardless of outcome)
+  ansible.builtin.replace:
+    path: /etc/crontab
+    regexp: '^(?!\s*#)(.*\b(?:gridctl(?:_pro|_dev)?\.php|cluster_status\.php|update_notice\.php|listen\.php|jobmonitor\.php|uslims_daily_backup\.php|uslims_daily_rsync\.php|save-jobstats\.sh)\b.*)$'
+    replace: '#\1'
+  when: uslims_upgrade_script.stat.exists
+
+- name: Check whether us3-listen is currently active (a prior run's start-lims-services, not necessarily this one)
+  ansible.builtin.command: systemctl is-active us3-listen
+  register: us3_listen_active_before_upgrade
+  changed_when: false
+  failed_when: false
+  when: uslims_upgrade_script.stat.exists
+
+## Graceful (drains in-flight work), not "systemctl stop": services.php
+## stop is the documented shutdown path (uslims_upgrade.php --help's own
+## procedure step 1), and the idle check this feeds into runs on every
+## listen-config.php this role ever templates (version 2, from the moment
+## config-lims-apache/config-lims-us3-user first lay the host out), so
+## services.php is always the right tool here, never the pre-v2 fallback
+## uslims_upgrade.php's own refusal message names for a host this role has
+## never touched. start-lims-services (end of this same play) starts
+## everything back up regardless of whether uslims_upgrade.php below finds
+## anything to change.
+- name: Idle the host for uslims_upgrade.php (stop the gridctl services gracefully; start-lims-services below brings them back regardless of outcome)
+  become: yes
+  become_user: us3
   ansible.builtin.command:
-    chdir: "{{ user_home }}/us3/lims/database/utils"
-    cmd: "php uslims_upgrade.php --apply --yes --www {{ www_base }}"
-  register: uslims_upgrade_result
-  changed_when: uslims_upgrade_result.rc == 0 and 'Nothing to change' not in uslims_upgrade_result.stdout
+    chdir: "{{ user_home }}/us3/lims/bin"
+    cmd: "php services.php stop"
+  when: uslims_upgrade_script.stat.exists and us3_listen_active_before_upgrade.stdout | default('') == 'active'
+  changed_when: true
+
+## block/always, not a plain task list: a genuine failure (not the
+## tolerated "not idle" case just below) must still restore the crontab
+## snapshot before the play stops, or a hard failure here would leave
+## every LIMS cron entry disabled behind it -- worse than the "not idle"
+## refusal this is meant to fix.
+- block:
+    - name: Converge the host through uslims_upgrade.php (breaker/ssh-control/elog directories, managed config blocks, CSP)
+      ansible.builtin.command:
+        chdir: "{{ user_home }}/us3/lims/database/utils"
+        cmd: "php uslims_upgrade.php --apply --yes --www {{ www_base }}"
+      register: uslims_upgrade_result
+      changed_when: uslims_upgrade_result.rc == 0 and 'Nothing to change' not in uslims_upgrade_result.stdout
+      ## A refusal because the host is STILL not idle after the idle step
+      ## just above means something outside this play's control is using
+      ## it (a manually-started daemon, a job genuinely in flight) --
+      ## noted below, not a reason to fail the whole play; every other
+      ## non-zero exit is a real problem and still fails it.
+      failed_when: uslims_upgrade_result.rc != 0 and 'the host is not idle' not in uslims_upgrade_result.stdout
+
+    - name: Note that uslims_upgrade.php refused because the host is genuinely busy (outside this play's control)
+      ansible.builtin.debug:
+        msg: "uslims_upgrade.php found the host still not idle after stopping this role's own services -- something else is using it; rerun once it is clear."
+      when: uslims_upgrade_result.rc != 0 and 'the host is not idle' in uslims_upgrade_result.stdout
+  always:
+    - name: Restore /etc/crontab exactly as it was before idling it for uslims_upgrade.php
+      ansible.builtin.copy:
+        src: /etc/crontab.pre-upgrade-idle
+        dest: /etc/crontab
+        remote_src: yes
+        mode: preserve
+
+    - name: Remove the crontab snapshot
+      ansible.builtin.file:
+        path: /etc/crontab.pre-upgrade-idle
+        state: absent
   when: uslims_upgrade_script.stat.exists
 
 - name: Note that uslims_upgrade.php was skipped (dbutils checkout predates it)

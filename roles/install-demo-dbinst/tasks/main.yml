@@ -139,12 +139,58 @@
   register: demo_uslims_upgrade_script
   when: NO_LIMS is undefined or NO_LIMS == false or NO_LIMS == ''
 
-- name: Run uslims_upgrade.php so uslims3_Demo gets a UTC boundary and its people_audit migration
-  ansible.builtin.command:
-    chdir: "{{ user_home }}/us3/lims/database/utils"
-    cmd: "php uslims_upgrade.php --apply --yes --www {{ www_base }}"
-  register: demo_uslims_upgrade_result
-  changed_when: demo_uslims_upgrade_result.rc == 0 and 'Nothing to change' not in demo_uslims_upgrade_result.stdout
+## Round 15, us3lims-roles#24 blocking: us3-listen itself needs no second
+## idle step here -- config-lims-lims's own call (earlier in this play)
+## already stopped it, and nothing between there and here starts it again
+## (that is start-lims-services's job, after this role). The crontab does
+## need its own snapshot/comment/restore cycle here too, though:
+## config-lims-lims's own 'always' block already restored it to whatever
+## was active beforehand immediately after its call, so by the time this
+## role runs those same entries (cluster_status/update_notice from
+## start-lims-services, the nightly backup from config-lims-backup/
+## config-aucsol-backup, all written by earlier runs) are live again.
+## Same reasoning as there for why this snapshots and restores the whole
+## file rather than pattern-matching a restore: see that task's comment.
+- name: Snapshot /etc/crontab before idling it for this call to uslims_upgrade.php
+  ansible.builtin.copy:
+    src: /etc/crontab
+    dest: /etc/crontab.pre-upgrade-idle-demo
+    remote_src: yes
+    mode: preserve
+  when: (NO_LIMS is undefined or NO_LIMS == false or NO_LIMS == '') and demo_uslims_upgrade_script.stat.exists
+
+- name: Comment out any active LIMS cron entry in /etc/crontab before this call (restored verbatim in 'always', regardless of outcome)
+  ansible.builtin.replace:
+    path: /etc/crontab
+    regexp: '^(?!\s*#)(.*\b(?:gridctl(?:_pro|_dev)?\.php|cluster_status\.php|update_notice\.php|listen\.php|jobmonitor\.php|uslims_daily_backup\.php|uslims_daily_rsync\.php|save-jobstats\.sh)\b.*)$'
+    replace: '#\1'
+  when: (NO_LIMS is undefined or NO_LIMS == false or NO_LIMS == '') and demo_uslims_upgrade_script.stat.exists
+
+- block:
+    - name: Run uslims_upgrade.php so uslims3_Demo gets a UTC boundary and its people_audit migration
+      ansible.builtin.command:
+        chdir: "{{ user_home }}/us3/lims/database/utils"
+        cmd: "php uslims_upgrade.php --apply --yes --www {{ www_base }}"
+      register: demo_uslims_upgrade_result
+      changed_when: demo_uslims_upgrade_result.rc == 0 and 'Nothing to change' not in demo_uslims_upgrade_result.stdout
+      failed_when: demo_uslims_upgrade_result.rc != 0 and 'the host is not idle' not in demo_uslims_upgrade_result.stdout
+
+    - name: Note that uslims_upgrade.php refused because the host is genuinely busy (outside this play's control)
+      ansible.builtin.debug:
+        msg: "uslims_upgrade.php found the host still not idle; something outside this play is using it -- rerun once it is clear."
+      when: demo_uslims_upgrade_result.rc != 0 and 'the host is not idle' in demo_uslims_upgrade_result.stdout
+  always:
+    - name: Restore /etc/crontab exactly as it was before idling it for this call
+      ansible.builtin.copy:
+        src: /etc/crontab.pre-upgrade-idle-demo
+        dest: /etc/crontab
+        remote_src: yes
+        mode: preserve
+
+    - name: Remove the crontab snapshot
+      ansible.builtin.file:
+        path: /etc/crontab.pre-upgrade-idle-demo
+        state: absent
   when: (NO_LIMS is undefined or NO_LIMS == false or NO_LIMS == '') and demo_uslims_upgrade_script.stat.exists
 
 - name: Note that uslims_upgrade.php was skipped (dbutils checkout predates it)
