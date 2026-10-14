@@ -69,7 +69,18 @@
     owner: root
     group: root
 
-- name: Add admin users to vnc
+## Same marker as config-lims-admin's own admin-account provisioning
+## (round-14 fix, us3lims-roles#24 should-fix): without it, this task ran
+## unconditionally on every run too, re-registering a removed admin's VNC
+## access (and flipping their vncusers membership back on) right along
+## with their OS account and key. One marker, checked by both roles, so
+## "provisioned once" means the same thing in each.
+- name: Check whether admin accounts have already been provisioned once
+  ansible.builtin.stat:
+    path: /etc/lims-admin-accounts-provisioned
+  register: lims_admin_accounts_provisioned
+
+- name: Add admin users to vnc (first install only -- see the check above)
   command:
     cmd: /usr/sbin/vncadmin add {{ item }}
   with_items:
@@ -78,4 +89,5 @@
     - ehb
     - saeed
   ignore_errors: yes
+  when: not lims_admin_accounts_provisioned.stat.exists
   
