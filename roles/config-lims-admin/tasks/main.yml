@@ -106,13 +106,13 @@
     owner: ehb
     group: ehb
     mode: u=rw,g=r,o=r
-  when: "'ehb' in getent_passwd"
+  when: "getent_passwd.ehb is defined and getent_passwd.ehb is not none"
 
 - name: Creates directory
   file:
     path: ~ehb/bin
     state: directory
-  when: "'ehb' in getent_passwd"
+  when: "getent_passwd.ehb is defined and getent_passwd.ehb is not none"
 
 - name: "Copy items to ~ehb/bin"
   copy:
@@ -126,4 +126,4 @@
     - s
     - lth
     - epath
-  when: "'ehb' in getent_passwd"
+  when: "getent_passwd.ehb is defined and getent_passwd.ehb is not none"
