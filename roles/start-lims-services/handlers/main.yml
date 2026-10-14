@@ -1,5 +1,5 @@
 ---
-# Round 15 nit, us3lims-roles#24: these two handlers used to live only in
+# These two handlers used to live only in
 # config-lims-us3-user/handlers/main.yml, even though this role (not that
 # one) is what notifies them and what us3-listen's own lifecycle actually
 # belongs to -- an implicit cross-role dependency on a role this one does

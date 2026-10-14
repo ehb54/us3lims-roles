@@ -1,7 +1,7 @@
 ---
 # tasks file for restart-php-fpm
 #
-# Round 15 should-fix, us3lims-roles#24: state: restarted is
+# state: restarted is
 # unconditional in Ansible's own service module -- it bounces the service
 # (and every live PHP-FPM worker's in-flight request, every open GMP
 # e-signature web session) on every single complete run, whether or not

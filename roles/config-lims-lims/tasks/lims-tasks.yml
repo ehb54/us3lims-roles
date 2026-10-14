@@ -106,7 +106,7 @@
    dest: "{{ www_uslims }}"
    version: "{{ webinfo_branch }}"
 
-## Round 15 nit, us3lims-roles#24: backup: yes has no way to redirect
+## backup: yes has no way to redirect
 ## where it writes (ansible.builtin.template's own option is a bare
 ## boolean) -- it always drops the timestamped copy right next to the
 ## file, which here is inside webinfo's own git checkout. Git already
@@ -144,7 +144,7 @@
     version: "{{ newinst_branch }}"
     dest: "{{ www_newlims }}"
 
-## Round 15 nit, us3lims-roles#24: same reasoning as webinfo's own config
+## Same reasoning as webinfo's own config
 ## template just above -- the backup would land inside newinst's git
 ## checkout, which git already tracks the real history of.
 - name: Template newinst config
@@ -201,7 +201,7 @@
 ## existing host's upgrade does -- including the circuit-breaker, ssh-
 ## control and elog directories, and the Report-Only CSP install (step 7,
 ## idempotent: once installed, every later run reports it and changes
-## nothing). Round 15 nit: this used to say "the CSP install above" --
+## nothing). This used to say "the CSP install above" --
 ## stale ever since config-lims-apache's own, separately-scoped CSP copy
 ## task was removed in favor of this one, the sole installer now; there
 ## is no CSP task left anywhere above this one in this role to point at.
@@ -226,7 +226,7 @@
 ## so the play continues with a clear note instead of failing outright on
 ## "Could not open input file".
 ##
-## Round 15, us3lims-roles#24 blocking: (1) above only ever covered one
+## (1) above only ever covered one
 ## play's first call -- it is also start-lims-services that starts
 ## us3-listen and writes the LIMS cron entries, and that state carries
 ## into the NEXT run untouched, since nothing before this point in a later
@@ -241,7 +241,7 @@
     path: "{{ user_home }}/us3/lims/database/utils/uslims_upgrade.php"
   register: uslims_upgrade_script
 
-## Round 15, us3lims-roles#24 blocking, continued: stopping the daemon
+## Stopping the daemon
 ## alone is not enough -- uslims_upgrade.php's idle check separately
 ## refuses on any UNCOMMENTED crontab line matching its own LIMS-job
 ## pattern (live_lims_crontabs(), uslims_upgrade.php), and start-lims-
