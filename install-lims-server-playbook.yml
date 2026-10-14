@@ -244,48 +244,56 @@
       - config-authentication-messages
       
   become: yes
+  ## Ansible's vars: on a play takes a mapping, not a sequence -- every
+  ## entry here was written as "- key: value", a list of one-key
+  ## mappings. A list satisfies no schema vars: actually accepts, so
+  ## ansible-playbook --syntax-check refused this whole file outright
+  ## ("Vars in a Play must be specified as a dictionary"); nothing in
+  ## this list was ever validated as a playbook, pre_tasks included.
+  ## Converted here to a plain mapping -- same keys, same values, same
+  ## comments, just without the leading "- " on each one.
   vars:
-        - user_home:           "/home"
-        - install_workstation: false
-        - install_commercial:  true
-        - NO_LIMS:             false
+        user_home:           "/home"
+        install_workstation: false
+        install_commercial:  true
+        NO_LIMS:             false
 
         # set the desired compiler optimization
         # for hardware installs
-        - comp_opt: "-march=native"
+        comp_opt: "-march=native"
         # perhaps for VM installs if qt core dumps
-        # - comp_opt: "-m64"
-        
+        # comp_opt: "-m64"
+
         # innodb_buffer_pool_size
-        - innodb_buffer_pool_size: "2G"
-        # - innodb_buffer_pool_size: "8G"
+        innodb_buffer_pool_size: "2G"
+        # innodb_buffer_pool_size: "8G"
 
         # uncomment one of the below for default allowed submissions
-        - submit_localonly: true
-        # - submit_remoteonly : true
-        # - submit_localandremote : true
+        submit_localonly: true
+        # submit_remoteonly : true
+        # submit_localandremote : true
 
         # Required variables to define:
         # N.B. once you set these, you can't change them simply by rerunning ansible-playbook for the same remote host!
-        - us3_db_pass:       "foobar-demo"
-        - root_db_pass:      "foobar-super"
-        - admins_db_pass:    "foobar-admin"
-        - gbl_db_pass:       "foobar-global"
-        - us3php_db_pass:    "foobar-php"
-        - limsadmin_db_pass: "foobar-iam-admin" 
+        us3_db_pass:       "foobar-demo"
+        root_db_pass:      "foobar-super"
+        admins_db_pass:    "foobar-admin"
+        gbl_db_pass:       "foobar-global"
+        us3php_db_pass:    "foobar-php"
+        limsadmin_db_pass: "foobar-iam-admin"
 
-        - admin_email:       "example@email.org"
-        - cron_admin:        "example@email.org" # root@localhost 
-        
-        - ipaddr_ext:        "192.168.5.30"
-        - ipaddr_int:        "192.168.5.30"
-        
-        - self_signed: 'yes' # change to 'no' to use certbot 
+        admin_email:       "example@email.org"
+        cron_admin:        "example@email.org" # root@localhost
 
-        - qt_major_version:  "5.15"
-        - qt_version:        "5.15.19"
-        - qwt_version:       "6.3.0"
-        - cores_for_parallel_compile: "{{ ansible_processor_vcpus }}"
+        ipaddr_ext:        "192.168.5.30"
+        ipaddr_int:        "192.168.5.30"
+
+        self_signed: 'yes' # change to 'no' to use certbot
+
+        qt_major_version:  "5.15"
+        qt_version:        "5.15.19"
+        qwt_version:       "6.3.0"
+        cores_for_parallel_compile: "{{ ansible_processor_vcpus }}"
         ## Round 15, us3lims-roles#24 blocking: release-gate (and the
         ## pre_tasks check above) is off unless site_release is set, and
         ## until now nothing here ever set it -- so it never ran on this
@@ -297,66 +305,66 @@
         ## is), so the gate is active out of the box, and a site that wants
         ## one repo pinned differently from the rest still can by
         ## overriding that one *_branch var directly, same as before.
-        - site_release:      "release-2026-Q2"
-        - us3_branch:        "{{ site_release }}"
-        - sql_branch:        "{{ site_release }}"
-        - dbinst_branch:     "{{ site_release }}"
-        - gridctl_branch:    "{{ site_release }}"
-        - common_branch:     "{{ site_release }}"
-        - newinst_branch:    "{{ site_release }}"
-        - webinfo_branch:    "{{ site_release }}"
-        - utils_branch:      "{{ site_release }}"
+        site_release:      "release-2026-Q2"
+        us3_branch:        "{{ site_release }}"
+        sql_branch:        "{{ site_release }}"
+        dbinst_branch:     "{{ site_release }}"
+        gridctl_branch:    "{{ site_release }}"
+        common_branch:     "{{ site_release }}"
+        newinst_branch:    "{{ site_release }}"
+        webinfo_branch:    "{{ site_release }}"
+        utils_branch:      "{{ site_release }}"
 
-        - postfix_relay_smtp_host: smtp.gmail.com
-        - postfix_relay_smtp_port: 587
-        - postfix_relay_smtp_user: us.etc.tests@gmail.com
-        - postfix_relay_smtp_password: put_app_password_here
+        postfix_relay_smtp_host: smtp.gmail.com
+        postfix_relay_smtp_port: 587
+        postfix_relay_smtp_user: us.etc.tests@gmail.com
+        postfix_relay_smtp_password: put_app_password_here
 
         # required for role install-reverse-tunnel-service
         # you will manually need to install usadmin's public key on the rtunnel_user @ rtunnel_ip's authorized keys
-        - rtunnel_user: "ultrascan"
-        - rtunnel_ip: "secure.aucsolutions.com"
+        rtunnel_user: "ultrascan"
+        rtunnel_ip: "secure.aucsolutions.com"
         # assign unique port (if both rtunnel & rtunnel service installed, use different ports!
-        - rtunnel_service_port: "220XX"
+        rtunnel_service_port: "220XX"
         # any extra command options required to ssh, e.g. "-J user@jumpserver" etc.
-        - rtunnel_service_ssh_extras: ""
+        rtunnel_service_ssh_extras: ""
         ## enabled at boot up - "no" or "yes"
-        - rtunnel_service_enabled: "yes"
-        ## current state -  "started" or "stopped" 
-        - rtunnel_service_state: "started"
+        rtunnel_service_enabled: "yes"
+        ## current state -  "started" or "stopped"
+        rtunnel_service_state: "started"
 
         # set this to a specific value (could be numeric ip) instead of {{ ansible_fqdn }} if you with, e.g. if the host is private
         # N.B. you can only configure one host per ansible-playbook run if you do not use {{ ansible_fqdn }}
-        - hostname: "{{ ansible_fqdn }}"
-        - postfix_hostname: "{{ hostname }}"
+        hostname: "{{ ansible_fqdn }}"
+        postfix_hostname: "{{ hostname }}"
         # N.B. if your host name is pure ip (e.g. 1.2.3.4 etc), you need to configure a text string prefix as commented below
-        # - postfix_hostname: "us-{{ hostname }}"
+        # postfix_hostname: "us-{{ hostname }}"
 
         # Doesn't matter if self-signed is enabled but here as an example for some certbot uses
-        - certbot_create_if_missing: true
-        - certbot_admin_email: "{{ admin_email }}" 
-        - certbot_create_standalone_stop_services: [httpd] # centos/RHEL 
-        - certbot_certs: 
-            - domains: 
-                  - "{{ hostname }}" 
+        certbot_create_if_missing: true
+        certbot_admin_email: "{{ admin_email }}"
+        certbot_create_standalone_stop_services: [httpd] # centos/RHEL
+        certbot_certs:
+            - domains:
+                  - "{{ hostname }}"
 
-        - certbot_auto_renew: true 
-        - certbot_auto_renew_hour: "1" 
-        - certbot_auto_renew_minute: "30" 
-        - cerbot_auto_renew_options: "--quiet --no-self-upgrade"
+        certbot_auto_renew: true
+        certbot_auto_renew_hour: "1"
+        certbot_auto_renew_minute: "30"
+        cerbot_auto_renew_options: "--quiet --no-self-upgrade"
 
-        - slurm_ver: 25.11.5 # Change to appropriate version
-        - slurm_md5: 5bf9efcb4ec746cf31c22e723e42f909
+        slurm_ver: 25.11.5 # Change to appropriate version
+        slurm_md5: 5bf9efcb4ec746cf31c22e723e42f909
 
         # N.B. slurm_cores can not exceed available cores, if it does, the node will be stuck "draining" (waiting for available resources)
         #      if you want to develop (not production!) on a smaller system
         #         add "#SBATCH -O" to your sbatch submission scripts to allow overcommitting
-        #         set - slurm_sbatch_extras : "#SBATCH -O\n" for slurm testing scripts via ansible
-        - slurm_cores : "{{ ansible_processor_vcpus }}"
-        - slurm_sbatch_extras : ""
-        # - slurm_sbatch_extras : "#SBATCH -O\n"
+        #         set slurm_sbatch_extras : "#SBATCH -O\n" for slurm testing scripts via ansible
+        slurm_cores : "{{ ansible_processor_vcpus }}"
+        slurm_sbatch_extras : ""
+        # slurm_sbatch_extras : "#SBATCH -O\n"
 
         # Overrride variables that are default
-        - lims_admin: "John Smith"
-        - org_name: "Ultrascan Example LIMS"
+        lims_admin: "John Smith"
+        org_name: "Ultrascan Example LIMS"
 
