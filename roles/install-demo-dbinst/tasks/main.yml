@@ -173,12 +173,16 @@
         cmd: "php uslims_upgrade.php --apply --yes --www {{ www_base }}"
       register: demo_uslims_upgrade_result
       changed_when: demo_uslims_upgrade_result.rc == 0 and 'Nothing to change' not in demo_uslims_upgrade_result.stdout
-      failed_when: demo_uslims_upgrade_result.rc != 0 and 'the host is not idle' not in demo_uslims_upgrade_result.stdout
+      ## error_exit() (utility.php) writes "the host is not idle" to the
+      ## real PHP STDERR stream, not stdout -- checked against .stdout,
+      ## this phrase is never found there, so the tolerance below never
+      ## actually fired; every "not idle" refusal hard-failed the play.
+      failed_when: demo_uslims_upgrade_result.rc != 0 and 'the host is not idle' not in demo_uslims_upgrade_result.stderr
 
     - name: Note that uslims_upgrade.php refused because the host is genuinely busy (outside this play's control)
       ansible.builtin.debug:
         msg: "uslims_upgrade.php found the host still not idle; something outside this play is using it -- rerun once it is clear."
-      when: demo_uslims_upgrade_result.rc != 0 and 'the host is not idle' in demo_uslims_upgrade_result.stdout
+      when: demo_uslims_upgrade_result.rc != 0 and 'the host is not idle' in demo_uslims_upgrade_result.stderr
   always:
     - name: Restore /etc/crontab exactly as it was before idling it for this call
       ansible.builtin.copy:
