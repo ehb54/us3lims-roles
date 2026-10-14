@@ -77,6 +77,35 @@
 ## and still readable from that later role in the same play. See
 ## UPGRADE-AND-INSTALL-MODEL.md.
 
+## A fresh pre-4.3.0 install has no other submission path: 4.3.0
+## replaced the Airavata/GFAC bridge with direct Slurm submission
+## (UPGRADE-AND-INSTALL-MODEL.md), so this clone was dropped as dead
+## weight for every release this playbook actually targets -- but any
+## numeric release before 4.3.0 (4.2.x, and any earlier minor) still
+## runs pre-4.3.0 code, which still submits through this bridge and has
+## nothing else to use. Without it: web submission 500s, manage/submit/
+## esign down. The match() guard is required before version(): site_
+## release defaults to a non-numeric label ("release-2026-Q2"), and
+## version() has no defined answer for comparing that against "4.3.0"
+## -- only a dotted numeric release (an explicit 4.2.x pin) is ever
+## actually a pre-4.3.0 target, so only that shape is compared at all.
+## Not gated on file pre-existence like global_config.php/
+## listen-config.php above, since there is nothing here to preserve an
+## operator's own edit to -- this is a plain repo checkout, kept in
+## sync like webinfo's or common's own clone just above.
+- name: Add common directory to git safe directories (pre-4.3.0 installs only -- see the Airavata/GFAC note above)
+  command: git config --global --add safe.directory {{ us_airavata_bridge_path }}
+  when: site_release is match('^\d+\.\d+\.\d+') and site_release is version('4.3.0', '<')
+
+- name: Clone airavata repo (pre-4.3.0 installs only -- see the Airavata/GFAC note above)
+  git:
+   repo: "{{ us_airavata_bridge_url }}"
+   dest: "{{ us_airavata_bridge_path }}"
+   version: "{{ us_airavata_bridge_branch }}"
+   force: yes
+  changed_when: false
+  when: site_release is match('^\d+\.\d+\.\d+') and site_release is version('4.3.0', '<')
+
 ## do we need this? - not any more
 #- name: Run update_local.sh
 #  command:
