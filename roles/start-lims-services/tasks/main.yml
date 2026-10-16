@@ -1,0 +1,40 @@
+---
+# tasks file for start-lims-services
+#
+# Split out of config-lims-us3-user/tasks/lims-tasks.yml: starting
+# us3-listen and writing the cron
+# entries used to happen from within config-lims-us3-user, which runs
+# BEFORE config-lims-lims and install-demo-dbinst -- both of which call
+# uslims_upgrade.php, whose own step 1 requires the host be idle (no
+# gridctl daemon running, no LIMS cron entries). The same play had already
+# started that daemon and written those entries before either upgrade
+# call ran, so uslims_upgrade.php always refused with "host is not idle",
+# on every run, upgrade or fresh install alike. This role carries the
+# exact same tasks, moved to the end of the play (after every role that
+# calls uslims_upgrade.php), so the host stays idle until nothing more
+# needs it to be. See UPGRADE-AND-INSTALL-MODEL.md.
+
+- set_fact:
+    user_home: "/home"
+  when: user_home is undefined
+
+- name: Include cron related tasks
+  import_tasks: cron-tasks.yml
+
+- name: Copy over us3-listen.service
+  template:
+    src: us3-listen.service.j2
+    dest: /etc/systemd/system/us3-listen.service
+  notify:
+    - reload daemon
+    - restart us3-listen
+
+- name: Reload systemd daemon
+  systemd:
+    daemon_reload: yes
+
+- name: Make sure us3-listen is enabled and running (never restarts an already-running service -- see the "restart us3-listen" handler for that)
+  service:
+    name: us3-listen
+    enabled: yes
+    state: started

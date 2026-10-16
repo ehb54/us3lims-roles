@@ -1,0 +1,50 @@
+---
+## The schema-v1 host base and the overlay directory dbinst's loader expects
+## (CONFIGURATION.md in the dbinst checkout). Installing these creates no
+## instance by itself -- an instance only uses the base once its own
+## config.php is the generated shim, which newinst's makeconfig.php decides
+## per instance. Until then every existing instance keeps its complete
+## legacy config.php and is unaffected.
+- name: Create the dbinst configuration root
+  ansible.builtin.file:
+    path: "{{ dbinst_config_root }}"
+    state: directory
+    owner: us3
+    group: "{{ www_user }}"
+    mode: '0750'
+
+## 2750, not group-writable: overlays are PHP the us3 daemons include, so a
+## web-writable directory would let the web tier replace them. The setgid
+## bit gives new overlays the web group without every writer having to set
+## it explicitly.
+- name: Create the dbinst instance overlay directory
+  ansible.builtin.file:
+    path: "{{ dbinst_config_root }}/instances"
+    state: directory
+    owner: us3
+    group: "{{ www_user }}"
+    mode: '2750'
+
+## enable_GMP/enable_PAM ship
+## false in this role's own defaults, with its own comment admitting there
+## is no per-site role to turn them on yet -- so a site that wants either
+## has only one option today: edit the deployed dbinst-base.v1.php by
+## hand. This task used to re-render it from the template unconditionally
+## on every run, overwriting that hand edit back to false every time.
+## First-install-only, same pattern as cluster_config.php's own check
+## elsewhere in this playbook -- once rendered, an operator's later edit
+## (GMP/PAM or anything else in the base) is left alone.
+- name: Check whether the dbinst schema-v1 host base already exists
+  ansible.builtin.stat:
+    path: "{{ dbinst_config_root }}/dbinst-base.v1.php"
+  register: dbinst_base_exists
+
+- name: Render the dbinst schema-v1 host base (first install only -- see the check above)
+  ansible.builtin.template:
+    src: dbinst-base.v1.php.j2
+    dest: "{{ dbinst_config_root }}/dbinst-base.v1.php"
+    owner: us3
+    group: "{{ www_user }}"
+    mode: '0640'
+    validate: '/usr/bin/php -l %s'
+  when: not dbinst_base_exists.stat.exists

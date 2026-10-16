@@ -1,0 +1,27 @@
+---
+# These two handlers used to live only in
+# config-lims-us3-user/handlers/main.yml, even though this role (not that
+# one) is what notifies them and what us3-listen's own lifecycle actually
+# belongs to -- an implicit cross-role dependency on a role this one does
+# not otherwise need, left behind when the service/cron-starting tasks
+# were extracted out of config-lims-us3-user into this role. Moved here,
+# where they are actually owned; config-lims-us3-user's own task that
+# also notifies "restart us3-listen" still finds it, since Ansible
+# resolves a notified handler by name across the whole play, not scoped
+# to the role that defines it -- the same mechanism this role's own
+# notify already relied on before this move, just pointed the other way.
+
+- name: reload daemon
+  systemd:
+    daemon_reload: yes
+
+## Only fires when something that actually changed us3-listen's config did
+## so this run (its unit file or listen-config.php) -- see lims-tasks.yml.
+## round-13 (us3lims-roles#24): an unconditional restart on every ansible
+## run, whether or not anything changed, killed every running job's monitor
+## (and stranded its job) on a host that had nothing to apply.
+- name: restart us3-listen
+  service:
+    name: us3-listen
+    enabled: yes
+    state: restarted

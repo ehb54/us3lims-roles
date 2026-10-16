@@ -79,3 +79,41 @@ CREATE TABLE `queue_messages` (
 ) ENGINE=MyISAM AUTO_INCREMENT=5287341 DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
+--
+-- Table structure for table `metascheduler_decision` and `cluster_status_nudge`
+-- (gridctl's pick_cluster(), round-13 should-fix gridctl#35: this dump never
+-- carried either table, so a host built fresh by this role had no audit
+-- trail and lost its double-booking protection for a configured pool --
+-- "decisions are still made... but nudges are lost (two reservations both
+-- pick the same cluster); no audit row is written". CREATE TABLE IF NOT
+-- EXISTS, same as both tables' own source files
+-- (home/us3/lims/bin/gridctl/metascheduler_decision_table.sql and
+-- cluster_status_nudge_table.sql in the uslims_stack aggregator repo) and
+-- us3_sql#41's gfac.sql fresh-install schema -- purely additive, so
+-- re-running this file leaves an existing table and its data alone.
+--
+
+CREATE TABLE IF NOT EXISTS `metascheduler_decision` (
+`id` int(11) NOT NULL AUTO_INCREMENT COMMENT 'Unique decision ID',
+`pseudo_cluster` varchar(120) NOT NULL COMMENT 'Metascheduler pool name that was resolved',
+`chosen` varchar(120) DEFAULT NULL COMMENT 'Real cluster chosen, or NULL when none was eligible',
+`reason` varchar(255) DEFAULT NULL COMMENT 'pick_cluster() reason string for the outcome',
+`tier` varchar(32) DEFAULT NULL COMMENT 'Tier the chosen cluster belongs to (local/national/...), NULL when nothing chosen',
+`scores` text COMMENT 'JSON-encoded pick_cluster() scores for every candidate, for full post-hoc diagnosis',
+`time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'When this decision was made',
+PRIMARY KEY (`id`),
+KEY `pseudo_cluster_time` (`pseudo_cluster`, `time`),
+KEY `time` (`time`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
+  COMMENT='Queryable history of metascheduler pick_cluster() decisions';
+
+CREATE TABLE IF NOT EXISTS `cluster_status_nudge` (
+`id` bigint(20) unsigned NOT NULL AUTO_INCREMENT COMMENT 'Unique nudge ID',
+`cluster` varchar(64) NOT NULL COMMENT 'Real cluster this decision was nudged onto',
+`time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'When this decision was made',
+PRIMARY KEY (`id`),
+KEY `cluster_time` (`cluster`, `time`),
+KEY `time` (`time`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci
+  COMMENT='Short-lived pick_cluster_reserve() load nudges, independent of the real cluster_status probe';
+

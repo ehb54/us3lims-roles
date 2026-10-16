@@ -123,15 +123,19 @@
 ### N.B. comment this next line for systems without mpi (GUI only sync'd systems)
     - build-us-mpi
 
+  ## vars: on a play takes a mapping, not a sequence -- every entry here
+  ## was written as "- key: value", a list of one-key mappings, which
+  ## made ansible-playbook --syntax-check refuse this whole file. Written
+  ## as a plain mapping instead; same keys, same values.
   vars:
-    - comp_opt: "{{ optimization }}"
-    - qt_major_version:  "5.15"
-    - qt_version:        "5.15.19"
-    - qwt_version:       "6.3.0"
-    - cores_for_parallel_compile: "{{ ansible_processor_vcpus }}"
+    comp_opt: "{{ optimization }}"
+    qt_major_version:  "5.15"
+    qt_version:        "5.15.19"
+    qwt_version:       "6.3.0"
+    cores_for_parallel_compile: "{{ ansible_processor_vcpus }}"
 
-    - slurm_cores : "{{ ansible_processor_vcpus }}"
-    - slurm_sbatch_extras : ""
-    # - slurm_sbatch_extras : "#SBATCH -O\n"
+    slurm_cores : "{{ ansible_processor_vcpus }}"
+    slurm_sbatch_extras : ""
+    # slurm_sbatch_extras : "#SBATCH -O\n"
 
     

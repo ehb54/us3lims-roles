@@ -13,4 +13,6 @@ $dbusername         = '{{ us3_db_user }}';  # the name of the MySQL user
 $dbpasswd           = $configs[ 'newus3' ][ 'password' ];  # the password for the MySQL user
 $dbname             = '{{ us3_db_name }}';  # the name of the database
 $dbhost             = '{{ us3_db_host }}'; # the host on which MySQL runs, generally localhost
+
+$common_dir         = '{{ www_common }}/';  # shared header/footer/topmenu partials, not reached via symlink
 ?>

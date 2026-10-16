@@ -1,0 +1,119 @@
+---
+# Refuses to let a run touch a repo checkout that is not on this site's
+# declared release, instead of silently force-checking it out to whatever
+# the playbook happens to pass (us3lims-roles#24). site_release is a
+# per-site variable (set in that site's own inventory/group_vars, not
+# here) naming the release the host is supposed to run; a site that does
+# not define it gets none of this -- existing dev/test playbooks that pin
+# every *_branch to "master"/"main" directly are unaffected.
+#
+# Include this once per repo checkout, before its own git: task, with:
+#   release_gate_dest:   the checkout's working directory
+#   release_gate_label:  a short name for messages (e.g. "dbutils")
+#   release_gate_branch: the branch/tag the upcoming git: task for this
+#                        checkout will pull (e.g. "{{ utils_branch }}")
+#
+# The checks below only ever
+# compared the EXISTING checkout against site_release -- nothing checked
+# that the UPCOMING pull (release_gate_branch, each repo's own *_branch
+# var) was itself heading to site_release too. Ran: with site_release set
+# to match a 4.2.0 host's current branch (so the existing-checkout check
+# passed trivially) and every *_branch pinned to a newer release, the run
+# moved six checkouts to that newer release while the site's own data
+# stayed at 4.2.0 -- exactly the drift this gate exists to catch, just not
+# checked. The new assert below closes that: it fails the same way, before
+# the same git: task, whenever release_gate_branch disagrees with
+# site_release, independent of what the existing checkout says.
+
+- block:
+    - name: "{{ release_gate_label }}: refuse to continue if the upcoming pull disagrees with site_release"
+      ansible.builtin.fail:
+        msg: >-
+          {{ release_gate_label }} is about to be pulled to
+          '{{ release_gate_branch }}', not this site's declared release
+          '{{ site_release }}'. Refusing to touch it -- either this repo's
+          own branch variable needs to track site_release, or site_release
+          needs updating to match what this run actually intends to pull.
+      when: release_gate_branch is defined and release_gate_branch != site_release
+    - name: "{{ release_gate_label }}: check whether a checkout already exists"
+      ansible.builtin.stat:
+        path: "{{ release_gate_dest }}/.git"
+      register: release_gate_git_dir
+
+    - name: "{{ release_gate_label }}: read the branch or tag currently checked out"
+      ansible.builtin.command:
+        argv: [ git, -C, "{{ release_gate_dest }}", rev-parse, --abbrev-ref, HEAD ]
+      register: release_gate_current
+      changed_when: false
+      when: release_gate_git_dir.stat.exists
+
+    ## A detached HEAD (checked out to a tag, not a branch) reads back
+    ## literally as "HEAD" from rev-parse --abbrev-ref -- fall back to an
+    ## exact-match describe so a tag-pinned release still compares cleanly.
+    - name: "{{ release_gate_label }}: resolve a detached HEAD to its tag"
+      ansible.builtin.command:
+        argv: [ git, -C, "{{ release_gate_dest }}", describe, --tags, --exact-match ]
+      register: release_gate_current_tag
+      changed_when: false
+      failed_when: false
+      when:
+        - release_gate_git_dir.stat.exists
+        - release_gate_current.stdout == "HEAD"
+
+    ## The branch/tag check above only proves the checkout's ref is named
+    ## right -- it says nothing about what's actually in the tree. A
+    ## force-push, a rebase, or a stale fetch can leave a branch with the
+    ## right name pointing at the wrong content, and the ref check alone
+    ## would pass it. Every repo in this stack has carried a VERSION file
+    ## at its root since 4.2.0 (uslims_upgrade.php's own step 0 reads it
+    ## for exactly this, and trusts it over the ref name: "a VERSION file
+    ## alone is not enough" there is about gridctl's own artifacts, not
+    ## about preferring the branch name instead). Reading it here is the
+    ## same "read a deployed VERSION" signal, just checked before the pull
+    ## that would otherwise silently move a drifted checkout.
+    - name: "{{ release_gate_label }}: read the checkout's own VERSION file"
+      ansible.builtin.slurp:
+        src: "{{ release_gate_dest }}/VERSION"
+      register: release_gate_version_file
+      failed_when: false
+      when: release_gate_git_dir.stat.exists
+
+    - name: "{{ release_gate_label }}: refuse to continue if the checkout has no readable VERSION"
+      ansible.builtin.fail:
+        msg: >-
+          {{ release_gate_dest }} has no readable VERSION file. Every repo
+          in this stack has carried one since 4.2.0 -- a missing file here
+          is an unrecognized checkout, not an old one, and the branch-name
+          check above cannot stand in for it.
+      when:
+        - release_gate_git_dir.stat.exists
+        - release_gate_version_file.content is not defined
+
+    - name: "{{ release_gate_label }}: refuse to continue if the checkout's VERSION disagrees with site_release"
+      ansible.builtin.fail:
+        msg: >-
+          {{ release_gate_dest }}'s VERSION file says
+          '{{ release_gate_version_file.content | b64decode | trim }}', not
+          this site's declared release '{{ site_release }}' -- even though
+          its git ref is named right. Refusing to touch it: either the
+          checkout is stale (right ref name, wrong content -- a force-push
+          or a rebase landed something else), or site_release itself needs
+          updating to match what is actually deployed.
+      when:
+        - release_gate_git_dir.stat.exists
+        - release_gate_version_file.content is defined
+        - (release_gate_version_file.content | b64decode | trim) != site_release
+
+    - name: "{{ release_gate_label }}: refuse to continue if the host is not on site_release"
+      ansible.builtin.fail:
+        msg: >-
+          {{ release_gate_dest }} is on
+          '{{ release_gate_current_tag.stdout | default(release_gate_current.stdout) }}',
+          not this site's declared release '{{ site_release }}'. Refusing to touch it --
+          either this host is running a different release than site_release says, or
+          site_release needs updating to match. Not stopped: nothing here changes an
+          existing checkout without this matching first.
+      when:
+        - release_gate_git_dir.stat.exists
+        - (release_gate_current_tag.stdout | default(release_gate_current.stdout)) != site_release
+  when: site_release is defined
