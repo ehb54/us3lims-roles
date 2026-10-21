@@ -6,6 +6,7 @@
 - name: Install the build dependencies for {{ lims_php_ext }}
   ansible.builtin.dnf:
     name: "{{ ['php-devel', 'php-pear', 'gcc', 'make'] + lims_php_pecl[lims_php_ext].build_deps }}"
+    enablerepo: "{{ lims_php_crb_repo }}"
     state: present
 
 - name: Make the tarball cache on the controller

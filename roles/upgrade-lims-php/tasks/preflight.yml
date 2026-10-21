@@ -91,3 +91,22 @@
       Add them to lims_php_pecl, or to lims_php_ignore_extensions to leave them as they are.
     quiet: true
   when: lims_php_mode == 'upgrade'
+
+- name: Name the CodeReady Builder / PowerTools repository
+  ansible.builtin.set_fact:
+    lims_php_crb_repo: >-
+      {{ 'codeready-builder-for-rhel-' ~ ansible_facts['distribution_major_version'] ~ '-' ~ ansible_facts['architecture'] ~ '-rpms'
+         if ansible_facts['distribution'] == 'RedHat' else
+         'ol' ~ ansible_facts['distribution_major_version'] ~ '_codeready_builder'
+         if ansible_facts['distribution'] == 'OracleLinux' else 'powertools' }}
+
+# Before the php stream switch, so a dependency that cannot be installed stops the run with
+# the host unchanged. The php-devel and php-pear for the new stream follow after the switch.
+- name: Install the build dependencies of the hand-built extensions
+  ansible.builtin.dnf:
+    name: "{{ ['gcc', 'make'] + (lims_php_hand_built | map('extract', lims_php_pecl, 'build_deps') | flatten) }}"
+    enablerepo: "{{ lims_php_crb_repo }}"
+    state: present
+  when:
+    - lims_php_mode == 'upgrade'
+    - lims_php_hand_built | length > 0
