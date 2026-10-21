@@ -4,10 +4,9 @@
     lims_php_tgz: "{{ lims_php_ext }}-{{ lims_php_pecl[lims_php_ext].version }}.tgz"
 
 - name: Install the build dependencies for {{ lims_php_ext }}
-  ansible.builtin.dnf:
-    name: "{{ ['php-devel', 'php-pear', 'gcc', 'make'] + lims_php_pecl[lims_php_ext].build_deps }}"
-    enablerepo: "{{ lims_php_crb_repo }}"
-    state: present
+  ansible.builtin.include_tasks: deps.yml
+  vars:
+    lims_php_deps: "{{ ['php-devel', 'php-pear', 'gcc', 'make'] + lims_php_pecl[lims_php_ext].build_deps }}"
 
 - name: Make the tarball cache on the controller
   ansible.builtin.file:

@@ -100,13 +100,37 @@
          'ol' ~ ansible_facts['distribution_major_version'] ~ '_codeready_builder'
          if ansible_facts['distribution'] == 'OracleLinux' else 'powertools' }}
 
+# ImageMagick is updated only when imagick is rebuilt anyway (the stream switch); a re-run on
+# an upgraded host leaves it alone
+- name: Decide whether to update ImageMagick
+  ansible.builtin.set_fact:
+    lims_php_im_update: >-
+      {{ lims_php_mode == 'upgrade' and lims_php_update_imagemagick | bool
+         and 'imagick' in lims_php_hand_built and lims_php_stream_enabled != lims_php_stream }}
+
+- name: Read dnf.conf and ImageMagick before the upgrade
+  ansible.builtin.shell: |
+    set -o pipefail
+    sha256sum /etc/dnf/dnf.conf | cut -d ' ' -f 1
+    rpm -q ImageMagick || true
+  args:
+    executable: /bin/bash
+  register: lims_php_dnf_before
+  changed_when: false
+
+# --disableexcludes applies to this one dnf command; dnf.conf is not edited
+- name: Update ImageMagick past the dnf exclude
+  ansible.builtin.command: dnf -y --disableexcludes=main --enablerepo={{ lims_php_crb_repo }} upgrade 'ImageMagick*'
+  register: lims_php_im_upgrade
+  changed_when: "'Upgraded:' in lims_php_im_upgrade.stdout"
+  when: lims_php_im_update | bool
+
 # Before the php stream switch, so a dependency that cannot be installed stops the run with
 # the host unchanged. The php-devel and php-pear for the new stream follow after the switch.
 - name: Install the build dependencies of the hand-built extensions
-  ansible.builtin.dnf:
-    name: "{{ ['gcc', 'make'] + (lims_php_hand_built | map('extract', lims_php_pecl, 'build_deps') | flatten) }}"
-    enablerepo: "{{ lims_php_crb_repo }}"
-    state: present
+  ansible.builtin.include_tasks: deps.yml
+  vars:
+    lims_php_deps: "{{ ['gcc', 'make'] + (lims_php_hand_built | map('extract', lims_php_pecl, 'build_deps') | flatten) }}"
   when:
     - lims_php_mode == 'upgrade'
     - lims_php_hand_built | length > 0

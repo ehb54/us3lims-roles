@@ -12,7 +12,7 @@ Modes are set by `lims_php_mode`; the playbook maps `-e run=1` to `upgrade` and 
   - `/etc/php-fpm.d/zz-us3lims-php2shell.conf`: `pm.max_requests` and `session.upload_progress.enabled` for each pool in `lims_php_fpm_pools`. These override `www.conf`, which `config-lims-php` owns.
   - With `lims_php_mitigation: false` it removes both files instead.
 - `upgrade`:
-  1. Stops before changing anything if a hand-built extension (a `.so` in the extension directory that no rpm owns) has no recipe in `lims_php_pecl`. Then installs the build dependencies of the hand-built extensions, with CodeReady Builder / PowerTools enabled, so a missing one also stops the run before anything changes.
+  1. Stops before changing anything if a hand-built extension (a `.so` in the extension directory that no rpm owns) has no recipe in `lims_php_pecl`. Then installs the build dependencies of the hand-built extensions that are not installed yet, with CodeReady Builder / PowerTools enabled, so a missing one also stops the run before anything changes. Installed ones are left alone even when dnf excludes them. LIMS hosts exclude `ImageMagick*` so a routine dnf update cannot replace ImageMagick under the PECL-built imagick. When the run switches the stream (so imagick is rebuilt anyway), it first updates ImageMagick with `--disableexcludes=main` on that dnf command (`lims_php_update_imagemagick`, default `true`). `dnf.conf` is never edited, and the final check confirms it is unchanged.
   2. Saves the php state to `lims_php_state_dir`: `php -v`, `php -m`, php rpms, `pecl list`, `/etc/php*` and the hand-built `.so` files.
   3. Runs `dnf module switch-to php:7.4`. Config files the roles changed stay as they are; dnf writes the packaged ones beside them as `.rpmnew`. With `lims_php_rpm_dir` set, it then upgrades the installed php packages to the fallback RPMs in that controller directory (`php-fallback/build.sh`, ultrascan-tickets#1151); nothing happens once the vendor packages are newer.
   4. Rebuilds each hand-built extension that no longer loads with `pecl install -f`. The pinned tarball is fetched on the controller, checked against its sha256 and copied to the host, so the host needs no internet access.
@@ -36,6 +36,8 @@ See `defaults/main.yml`.
 `lims_php_mitigation`, `lims_php_fpm_pools`, `lims_php_fpm_max_requests` - the PHP2Shell settings, default on, pool `www`, `1`
 
 `lims_php_rpm_dir` - controller directory of fallback php RPMs, default empty (none)
+
+`lims_php_update_imagemagick` - default `true`: update ImageMagick past the dnf exclude when the stream switch rebuilds imagick anyway; `false` keeps the installed ImageMagick (ultrascan-tickets#1154)
 
 `lims_php_keep_stopped` - default `true`: after changes, php-fpm and httpd are restarted only if each was running when the play started. A service stopped beforehand stays stopped, and the final check does not expect it to run, so stopping httpd first keeps the LIMS down until the host has been checked. With `false`, both are restarted, which also starts a stopped one (ultrascan-tickets#1152).
 

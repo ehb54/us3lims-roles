@@ -1,0 +1,20 @@
+---
+# Install the packages in lims_php_deps that are not installed yet. LIMS hosts exclude ImageMagick*
+# in dnf.conf, so a dnf update cannot replace ImageMagick under the PECL-built imagick (which would
+# break until imagick is rebuilt). dnf applies "exclude" to installed packages too, so asking it for
+# an installed, excluded package fails; rpm decides what is missing instead. The exclusion is
+# lifted (for this dnf command only, dnf.conf is not edited) only when the upgrade updates
+# ImageMagick, so a missing ImageMagick-devel then matches the new version. ultrascan-tickets#1154
+- name: Find the missing packages
+  ansible.builtin.shell: |
+    for p in {{ lims_php_deps | join(' ') }}; do rpm -q --quiet "$p" || echo "$p"; done
+  register: lims_php_deps_missing
+  changed_when: false
+
+- name: Install the missing packages
+  ansible.builtin.dnf:
+    name: "{{ lims_php_deps_missing.stdout_lines }}"
+    enablerepo: "{{ lims_php_crb_repo }}"
+    disable_excludes: "{{ 'main' if lims_php_im_update | default(false) | bool else omit }}"
+    state: present
+  when: lims_php_deps_missing.stdout_lines | length > 0
