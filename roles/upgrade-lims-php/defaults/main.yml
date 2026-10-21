@@ -22,6 +22,12 @@ lims_php_pecl:
     sha256: aa4e51a3f975b1462dd2cda82ce2288bd87efb5e01cd439ae086758b85e19b82
     build_deps:
       - pam-devel
+  # yaml 2.3.0 supports php 7.1 to 8.x; libyaml-devel is in CodeReady Builder / PowerTools
+  yaml:
+    version: "2.3.0"
+    sha256: bc8404807a3a4dc896b310af21a7f8063aa238424ff77f27eb6ffa88b5874b8a
+    build_deps:
+      - libyaml-devel
 lims_php_pecl_url: https://pecl.php.net/get
 # Controller directory for the tarballs. On a controller without internet access, copy
 # <name>-<version>.tgz here first.

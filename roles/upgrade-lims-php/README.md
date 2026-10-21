@@ -12,7 +12,7 @@ Modes are set by `lims_php_mode`; the playbook maps `-e run=1` to `upgrade` and 
   - `/etc/php-fpm.d/zz-us3lims-php2shell.conf`: `pm.max_requests` and `session.upload_progress.enabled` for each pool in `lims_php_fpm_pools`. These override `www.conf`, which `config-lims-php` owns.
   - With `lims_php_mitigation: false` it removes both files instead.
 - `upgrade`:
-  1. Stops before changing anything if a hand-built extension (a `.so` in the extension directory that no rpm owns) has no recipe in `lims_php_pecl`.
+  1. Stops before changing anything if a hand-built extension (a `.so` in the extension directory that no rpm owns) has no recipe in `lims_php_pecl`. Then installs the build dependencies of the hand-built extensions, with CodeReady Builder / PowerTools enabled, so a missing one also stops the run before anything changes.
   2. Saves the php state to `lims_php_state_dir`: `php -v`, `php -m`, php rpms, `pecl list`, `/etc/php*` and the hand-built `.so` files.
   3. Runs `dnf module switch-to php:7.4`. Config files the roles changed stay as they are; dnf writes the packaged ones beside them as `.rpmnew`. With `lims_php_rpm_dir` set, it then upgrades the installed php packages to the fallback RPMs in that controller directory (`php-fallback/build.sh`, ultrascan-tickets#1151); nothing happens once the vendor packages are newer.
   4. Rebuilds each hand-built extension that no longer loads with `pecl install -f`. The pinned tarball is fetched on the controller, checked against its sha256 and copied to the host, so the host needs no internet access.
@@ -27,9 +27,9 @@ See `defaults/main.yml`.
 
 `lims_php_stream` - target stream, default `"7.4"`
 
-`lims_php_pecl` - extensions that can be rebuilt: `imagick` 3.8.1 (LIMS captcha) and `pam` 2.2.5 (`pam_auth()` on PAM sites), each with a sha256 and build dependencies
+`lims_php_pecl` - extensions that can be rebuilt: `imagick` 3.8.1 (LIMS captcha), `pam` 2.2.5 (`pam_auth()` on PAM sites) and `yaml` 2.3.0 (needs `libyaml-devel` from CodeReady Builder / PowerTools), each with a sha256 and build dependencies
 
-`lims_php_pecl_cache` - controller directory for the tarballs, default `~/.cache/us3lims-pecl`. On a controller without internet access, copy `imagick-3.8.1.tgz` and `pam-2.2.5.tgz` there first.
+`lims_php_pecl_cache` - controller directory for the tarballs, default `~/.cache/us3lims-pecl`. On a controller without internet access, copy `imagick-3.8.1.tgz`, `pam-2.2.5.tgz` and `yaml-2.3.0.tgz` there first.
 
 `lims_php_ignore_extensions` - hand-built extensions to leave alone
 
