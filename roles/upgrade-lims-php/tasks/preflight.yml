@@ -55,9 +55,25 @@
   register: lims_php_rpm_read
   changed_when: false
 
+- name: Read the service states
+  ansible.builtin.service_facts:
+
+- name: Record which of php-fpm and httpd are running
+  ansible.builtin.set_fact:
+    lims_php_running_before: >-
+      {{ ansible_facts['services'] | dict2items
+         | selectattr('key', 'in', ['php-fpm.service', 'httpd.service'])
+         | selectattr('value.state', 'equalto', 'running')
+         | map(attribute='key') | map('regex_replace', '\.service$', '') | list }}
+
 - name: Report the php state
   ansible.builtin.debug:
     msg:
+      - >-
+        php-fpm {{ 'running' if 'php-fpm' in lims_php_running_before else 'stopped' }},
+        httpd {{ 'running' if 'httpd' in lims_php_running_before else 'stopped' }};
+        {{ 'a stopped one stays stopped' if lims_php_keep_stopped | bool
+           else 'a stopped one will be started (lims_php_keep_stopped false)' }}
       - "php module stream: {{ lims_php_stream_enabled | default('', true) or 'none enabled' }} (target {{ lims_php_stream }})"
       - "php version: {{ lims_php_version_before }} ({{ lims_php_rpm_read.stdout_lines[0] }})"
       - "PHP2Shell fix in the installed php packages: {{ 'yes' if (lims_php_rpm_read.stdout_lines[1] | int) > 0 else 'no' }}"

@@ -7,7 +7,7 @@ Moves an EL8 LIMS host (RHEL, Oracle Linux, Alma, Rocky 8) from the `php:7.2` mo
 Modes are set by `lims_php_mode`; the playbook maps `-e run=1` to `upgrade` and `-e mitigate=1` to `mitigate`.
 
 - `info` (default): reports the enabled stream, php version and package, whether the php-common changelog lists the PHP2Shell CVEs (vendor packages keep version 7.4.33 and add the fix as a new release, e.g. `7.4.33-7`), hand-built extensions and startup warnings. Changes nothing.
-- `mitigate`: writes the PHP2Shell settings and restarts php-fpm. Works on any stream, so a `php:7.2` host can get them before it is upgraded.
+- `mitigate`: writes the PHP2Shell settings and restarts php-fpm if it is running. Works on any stream, so a `php:7.2` host can get them before it is upgraded.
   - `/etc/php.d/zz-us3lims-php2shell.ini`: `session.upload_progress.enabled = 0`
   - `/etc/php-fpm.d/zz-us3lims-php2shell.conf`: `pm.max_requests` and `session.upload_progress.enabled` for each pool in `lims_php_fpm_pools`. These override `www.conf`, which `config-lims-php` owns.
   - With `lims_php_mitigation: false` it removes both files instead.
@@ -16,8 +16,8 @@ Modes are set by `lims_php_mode`; the playbook maps `-e run=1` to `upgrade` and 
   2. Saves the php state to `lims_php_state_dir`: `php -v`, `php -m`, php rpms, `pecl list`, `/etc/php*` and the hand-built `.so` files.
   3. Runs `dnf module switch-to php:7.4`. Config files the roles changed stay as they are; dnf writes the packaged ones beside them as `.rpmnew`. With `lims_php_rpm_dir` set, it then upgrades the installed php packages to the fallback RPMs in that controller directory (`php-fallback/build.sh`, ultrascan-tickets#1151); nothing happens once the vendor packages are newer.
   4. Rebuilds each hand-built extension that no longer loads with `pecl install -f`. The pinned tarball is fetched on the controller, checked against its sha256 and copied to the host, so the host needs no internet access.
-  5. Applies the PHP2Shell settings and restarts php-fpm and httpd.
-  6. Reports whether the php-common changelog lists the PHP2Shell CVEs. Fails if the php version is not 7.4, if any module that loaded before is missing (php CLI and php-fpm; extensions php 7.4 itself dropped, `lims_php_modules_dropped`, such as wddx, are only reported), if php prints startup warnings, or if php-fpm or httpd is not running.
+  5. Applies the PHP2Shell settings and restarts php-fpm and httpd if they were running (see `lims_php_keep_stopped`).
+  6. Reports whether the php-common changelog lists the PHP2Shell CVEs. Fails if the php version is not 7.4, if any module that loaded before is missing (php CLI and php-fpm; extensions php 7.4 itself dropped, `lims_php_modules_dropped`, such as wddx, are only reported), if php prints startup warnings, or if php-fpm or httpd is not running (except one left stopped with `lims_php_keep_stopped`).
 
   Running it again on an upgraded host changes nothing.
 
@@ -36,6 +36,8 @@ See `defaults/main.yml`.
 `lims_php_mitigation`, `lims_php_fpm_pools`, `lims_php_fpm_max_requests` - the PHP2Shell settings, default on, pool `www`, `1`
 
 `lims_php_rpm_dir` - controller directory of fallback php RPMs, default empty (none)
+
+`lims_php_keep_stopped` - default `true`: after changes, php-fpm and httpd are restarted only if each was running when the play started. A service stopped beforehand stays stopped, and the final check does not expect it to run, so stopping httpd first keeps the LIMS down until the host has been checked. With `false`, both are restarted, which also starts a stopped one (ultrascan-tickets#1152).
 
 ## Fallback RPMs and dnf
 

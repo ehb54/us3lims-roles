@@ -54,3 +54,8 @@ lims_php_mitigation: true
 lims_php_fpm_pools:
   - www
 lims_php_fpm_max_requests: 1
+
+# true: after changes, restart php-fpm and httpd only if each was running when the play started;
+# a service stopped beforehand (e.g. to keep the LIMS down until the host is checked) stays
+# stopped. false: restart both, which also starts a stopped one. ultrascan-tickets#1152
+lims_php_keep_stopped: true

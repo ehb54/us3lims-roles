@@ -40,11 +40,14 @@
 - name: Read the service states
   ansible.builtin.service_facts:
 
+# with lims_php_keep_stopped, a service that was stopped before the play is expected to stay so
 - name: Check that php-fpm and httpd are running
   ansible.builtin.assert:
     that:
-      - ansible_facts['services']['php-fpm.service']['state'] == 'running'
-      - ansible_facts['services']['httpd.service']['state'] | default('running') == 'running'
+      - (lims_php_keep_stopped | bool and 'php-fpm' not in lims_php_running_before)
+        or ansible_facts['services']['php-fpm.service']['state'] == 'running'
+      - (lims_php_keep_stopped | bool and 'httpd' not in lims_php_running_before)
+        or ansible_facts['services']['httpd.service']['state'] | default('running') == 'running'
     fail_msg: "php-fpm or httpd is not running after the upgrade"
     quiet: true
 
@@ -64,4 +67,7 @@
       - "php {{ lims_php_version_before }} -> {{ lims_php_version_after }} ({{ lims_php_rpm_after.stdout_lines[0] }})"
       - "PHP2Shell fix in the installed php packages: {{ 'yes' if (lims_php_rpm_after.stdout_lines[1] | int) > 0 else 'no' }}"
       - "rebuilt: {{ lims_php_rebuild_read.stdout_lines | default([]) | join(', ') or 'nothing' }}"
+      - >-
+        php-fpm {{ ansible_facts['services']['php-fpm.service']['state'] }},
+        httpd {{ ansible_facts['services']['httpd.service']['state'] | default('not installed') }}
       - "packaged config files kept as .rpmnew next to the roles' versions; compare them when convenient"
