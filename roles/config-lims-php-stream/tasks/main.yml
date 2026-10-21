@@ -1,0 +1,25 @@
+---
+# Enable the php module stream before any role installs php, so a new EL8 host gets
+# php:{{ lims_php_stream }} instead of the default php:7.2. A host already on another
+# stream is left alone: moving it needs upgrade-php-playbook.yml, which also rebuilds
+# the hand-built PECL extensions.
+
+- name: Read the enabled php module stream
+  ansible.builtin.include_tasks: read.yml
+  when:
+    - ansible_facts['os_family'] == 'RedHat'
+    - ansible_facts['distribution_major_version'] == '8'
+
+- name: Enable the php module stream, {{ lims_php_stream }}
+  ansible.builtin.command: dnf -y module enable php:{{ lims_php_stream }}
+  changed_when: true
+  when:
+    - lims_php_stream_enabled is defined
+    - lims_php_stream_enabled == ''
+
+- name: Report a host left on another php stream
+  ansible.builtin.debug:
+    msg: "php:{{ lims_php_stream_enabled }} is enabled, not php:{{ lims_php_stream }}. Run upgrade-php-playbook.yml to move this host."
+  when:
+    - lims_php_stream_enabled is defined
+    - lims_php_stream_enabled not in ['', lims_php_stream]

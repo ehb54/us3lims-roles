@@ -1,0 +1,50 @@
+---
+# Move an EL8 LIMS host to this php module stream (ultrascan-tickets#1150)
+lims_php_stream: "7.4"
+
+# info:     report the php stream, version and hand-built extensions, change nothing
+# mitigate: apply (or, with lims_php_mitigation false, remove) the PHP2Shell settings only
+# upgrade:  switch the stream, rebuild the hand-built PECL extensions, apply the
+#           PHP2Shell settings, verify
+lims_php_mode: info
+
+# Hand-built PECL extensions this role can rebuild, keyed by the .so name in the php
+# extension_dir. The controller downloads the tarballs and checks them against sha256,
+# so the hosts need no internet access. config-lims-php pins the same imagick version.
+lims_php_pecl:
+  imagick:
+    version: "3.8.1"
+    sha256: 3a3587c0a524c17d0dad9673a160b90cd776e836838474e173b549ed864352ee
+    build_deps:
+      - ImageMagick-devel
+  pam:
+    version: "2.2.5"
+    sha256: aa4e51a3f975b1462dd2cda82ce2288bd87efb5e01cd439ae086758b85e19b82
+    build_deps:
+      - pam-devel
+lims_php_pecl_url: https://pecl.php.net/get
+# Controller directory for the tarballs. On a controller without internet access, copy
+# <name>-<version>.tgz here first.
+lims_php_pecl_cache: "{{ lookup('ansible.builtin.env', 'HOME') }}/.cache/us3lims-pecl"
+
+# Hand-built extensions (.so files that no rpm owns) to leave alone instead of stopping
+lims_php_ignore_extensions: []
+
+# Extensions that php 7.4 itself dropped (moved to PECL). EL8 php 7.2 loads wddx by
+# default; the LIMS code uses none of them. The upgrade reports them and does not count
+# them as lost.
+lims_php_modules_dropped:
+  - wddx
+  - recode
+  - interbase
+
+# Host directory for the pre-upgrade snapshot and the PECL tarballs
+lims_php_state_dir: /root/us3lims-php-upgrade
+
+# PHP2Shell (CVE-2026-109618, CVE-2026-109619) configuration mitigations. They are not a
+# fix. Once the vendor's fixed php packages are installed, rerun in mitigate mode with
+# lims_php_mitigation false to remove them.
+lims_php_mitigation: true
+lims_php_fpm_pools:
+  - www
+lims_php_fpm_max_requests: 1

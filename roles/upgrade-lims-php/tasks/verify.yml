@@ -1,0 +1,56 @@
+---
+- name: Read php after the upgrade
+  ansible.builtin.command: >-
+    php -d display_errors=stderr -d display_startup_errors=1 -r
+    'echo json_encode(["version" => PHP_VERSION,
+    "modules" => array_map("strtolower", array_merge(get_loaded_extensions(), get_loaded_extensions(true)))]);'
+  register: lims_php_after
+  changed_when: false
+
+- name: Read php-fpm after the upgrade
+  ansible.builtin.command: php-fpm -m
+  register: lims_php_fpm_after
+  changed_when: false
+
+- name: Record php after the upgrade
+  ansible.builtin.set_fact:
+    lims_php_version_after: "{{ (lims_php_after.stdout | from_json).version }}"
+    lims_php_modules_lost: >-
+      {{ lims_php_modules_before | difference((lims_php_after.stdout | from_json).modules) | difference(lims_php_modules_dropped) }}
+    lims_php_fpm_modules: "{{ lims_php_fpm_after.stdout_lines | map('lower') | list }}"
+    # a run resumed after a failed rebuild starts without them loaded, so require them by name
+    lims_php_hand_built_lost: "{{ lims_php_hand_built | difference((lims_php_after.stdout | from_json).modules) }}"
+
+- name: Check the php version, modules and startup
+  ansible.builtin.assert:
+    that:
+      - lims_php_version_after.split('.')[0:2] | join('.') == lims_php_stream
+      - lims_php_modules_lost | length == 0
+      - lims_php_hand_built_lost | length == 0
+      - lims_php_after.stderr is not search('PHP Startup')
+      - lims_php_fpm_after.stderr is not search('PHP Startup')
+      - lims_php_hand_built | difference(lims_php_fpm_modules) | length == 0
+    fail_msg:
+      - "php {{ lims_php_version_after }} (want {{ lims_php_stream }})"
+      - "modules lost since php {{ lims_php_version_before }}: {{ (lims_php_modules_lost + lims_php_hand_built_lost) | unique | join(', ') or 'none' }}"
+      - "hand-built extensions missing from php-fpm: {{ lims_php_hand_built | difference(lims_php_fpm_modules) | join(', ') or 'none' }}"
+      - "php stderr: {{ lims_php_after.stderr }}"
+      - "php-fpm stderr: {{ lims_php_fpm_after.stderr }}"
+
+- name: Read the service states
+  ansible.builtin.service_facts:
+
+- name: Check that php-fpm and httpd are running
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['services']['php-fpm.service']['state'] == 'running'
+      - ansible_facts['services']['httpd.service']['state'] | default('running') == 'running'
+    fail_msg: "php-fpm or httpd is not running after the upgrade"
+    quiet: true
+
+- name: Report the upgrade
+  ansible.builtin.debug:
+    msg:
+      - "php {{ lims_php_version_before }} -> {{ lims_php_version_after }}"
+      - "rebuilt: {{ lims_php_rebuild_read.stdout_lines | default([]) | join(', ') or 'nothing' }}"
+      - "packaged config files kept as .rpmnew next to the roles' versions; compare them when convenient"

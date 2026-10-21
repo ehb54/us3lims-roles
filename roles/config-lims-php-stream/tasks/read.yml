@@ -1,0 +1,18 @@
+---
+# Sets lims_php_stream_enabled to the enabled php module stream, or '' when none is.
+# dnf keeps module state in /etc/dnf/modules.d, so this needs no repository access.
+
+- name: Read /etc/dnf/modules.d/php.module
+  ansible.builtin.shell: |
+    set -o pipefail
+    if [ -e /etc/dnf/modules.d/php.module ]; then
+      awk -F= '$1 == "stream" { s = $2 } $1 == "state" { st = $2 } END { if (st == "enabled") print s }' /etc/dnf/modules.d/php.module
+    fi
+  args:
+    executable: /bin/bash
+  register: lims_php_stream_read
+  changed_when: false
+
+- name: Record the enabled php module stream
+  ansible.builtin.set_fact:
+    lims_php_stream_enabled: "{{ lims_php_stream_read.stdout | trim }}"

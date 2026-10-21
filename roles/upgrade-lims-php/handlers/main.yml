@@ -1,0 +1,10 @@
+---
+- name: Restart php-fpm
+  ansible.builtin.service:
+    name: php-fpm
+    state: restarted
+
+- name: Restart httpd
+  ansible.builtin.service:
+    name: httpd
+    state: restarted

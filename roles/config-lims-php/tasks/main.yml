@@ -5,14 +5,18 @@
       name: "{{ packages }}"
       update_cache: yes
 
-- name: Check if magik already exists
-  stat:
-        path: /usr/lib64/php/modules/imagick.so
+# an imagick.so built for another php version exists but does not load
+- name: Check if magik loads
+  command: >-
+    php -n -d extension=imagick.so -r "exit(extension_loaded('imagick') ? 0 : 1);"
   register: imagick_module
+  changed_when: false
+  failed_when: false
 
+# umask 022 so a host running Ansible with umask 0027 leaves imagick.so readable to php-fpm
 - name: Install magik
-  shell: echo '' | /usr/bin/pecl install imagick
-  when: imagick_module.stat.exists == false
+  shell: umask 022 && echo '' | /usr/bin/pecl install -f imagick-{{ lims_php_imagick_version }}
+  when: imagick_module.rc != 0
 
 - name: Configure php.ini
   copy:
