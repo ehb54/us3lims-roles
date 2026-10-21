@@ -48,9 +48,20 @@
     fail_msg: "php-fpm or httpd is not running after the upgrade"
     quiet: true
 
+- name: Read the php-common package and look for the PHP2Shell fix after the upgrade
+  ansible.builtin.shell: |
+    set -o pipefail
+    rpm -q php-common
+    rpm -q --changelog php-common | grep -c -E 'CVE-2026-10961[89]' || true
+  args:
+    executable: /bin/bash
+  register: lims_php_rpm_after
+  changed_when: false
+
 - name: Report the upgrade
   ansible.builtin.debug:
     msg:
-      - "php {{ lims_php_version_before }} -> {{ lims_php_version_after }}"
+      - "php {{ lims_php_version_before }} -> {{ lims_php_version_after }} ({{ lims_php_rpm_after.stdout_lines[0] }})"
+      - "PHP2Shell fix in the installed php packages: {{ 'yes' if (lims_php_rpm_after.stdout_lines[1] | int) > 0 else 'no' }}"
       - "rebuilt: {{ lims_php_rebuild_read.stdout_lines | default([]) | join(', ') or 'nothing' }}"
       - "packaged config files kept as .rpmnew next to the roles' versions; compare them when convenient"
