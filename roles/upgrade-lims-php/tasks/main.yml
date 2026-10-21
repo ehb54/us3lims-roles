@@ -22,6 +22,10 @@
   ansible.builtin.include_tasks: pecl.yml
   when: lims_php_mode == 'upgrade'
 
+- name: Fix the CAPTCHA background images for the current ImageMagick
+  ansible.builtin.include_tasks: captcha.yml
+  when: lims_php_mode == 'upgrade'
+
 - name: Apply the PHP2Shell settings
   ansible.builtin.import_tasks: mitigation.yml
 
