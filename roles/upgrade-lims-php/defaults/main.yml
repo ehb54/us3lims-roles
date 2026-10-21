@@ -72,3 +72,10 @@ lims_php_keep_stopped: true
 # imagick; the role passes --disableexcludes=main to its own dnf commands only and never edits
 # dnf.conf. false: leave ImageMagick at the installed version. ultrascan-tickets#1154
 lims_php_update_imagemagick: true
+
+# Directories searched (4 levels deep) for LIMS CAPTCHA background images (cap_bg.jpg) that the
+# installed ImageMagick cannot write; those are stripped in place in upgrade mode.
+# ultrascan-tickets#1155
+lims_php_captcha_dirs:
+  - /srv/www/htdocs
+  - /var/www

@@ -1,0 +1,38 @@
+---
+# ImageMagick 6.9.13-45 and later cannot write the cap_bg.jpg that release-2026-Q3 and older
+# LIMS releases ship (an empty EXIF block; ultrascan-tickets#1057), so after the ImageMagick
+# update the CAPTCHA breaks. Strip the metadata of each one that does not convert, in place.
+# The stripped file is a local change in that instance's git checkout: uslims_git_info.php
+# reports it, and it is resolved by hand at the next LIMS code update. ultrascan-tickets#1155
+- name: Strip the CAPTCHA background images ImageMagick cannot write
+  ansible.builtin.shell: |
+    set -o pipefail
+    command -v convert > /dev/null || exit 0
+    find {{ lims_php_captcha_dirs | join(' ') }} -maxdepth 4 -name cap_bg.jpg 2> /dev/null | while read -r f; do
+      if [ "$(convert "$f" png:- 2> /dev/null | wc -c)" -eq 0 ]; then
+        convert "$f" -strip "$f" && echo "$f"
+      fi
+    done
+  args:
+    executable: /bin/bash
+  register: lims_php_captcha_fixed
+  changed_when: lims_php_captcha_fixed.stdout_lines | length > 0
+
+- name: List the CAPTCHA background images ImageMagick still cannot write
+  ansible.builtin.shell: |
+    set -o pipefail
+    command -v convert > /dev/null || exit 0
+    find {{ lims_php_captcha_dirs | join(' ') }} -maxdepth 4 -name cap_bg.jpg 2> /dev/null | while read -r f; do
+      [ "$(convert "$f" png:- 2> /dev/null | wc -c)" -gt 0 ] || echo "$f"
+    done
+  args:
+    executable: /bin/bash
+  register: lims_php_captcha_broken
+  changed_when: false
+  failed_when: lims_php_captcha_broken.stdout_lines | length > 0
+
+- name: Report the CAPTCHA background images
+  ansible.builtin.debug:
+    msg: >-
+      {{ 'stripped (local change in those checkouts): ' ~ (lims_php_captcha_fixed.stdout_lines | join(', '))
+         if lims_php_captcha_fixed.stdout_lines | length > 0 else 'no CAPTCHA background image needed stripping' }}
