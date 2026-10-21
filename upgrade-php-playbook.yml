@@ -6,6 +6,8 @@
 # report only:            ansible-playbook upgrade-php-playbook.yml -l <host>
 # PHP2Shell settings only: ansible-playbook upgrade-php-playbook.yml -l <host> -e "mitigate=1"
 # upgrade:                ansible-playbook upgrade-php-playbook.yml -l <host> -e "run=1"
+# upgrade, then put the PHP2Shell fallback RPMs (php-fallback/build.sh) over the vendor packages:
+#   ansible-playbook upgrade-php-playbook.yml -l <host> -e "run=1" -e "lims_php_rpm_dir=<controller dir>/RPMS"
 # remove the settings once the vendor's fixed php is installed:
 #   ansible-playbook upgrade-php-playbook.yml -l <host> -e "mitigate=1" -e "lims_php_mitigation=false"
 #
