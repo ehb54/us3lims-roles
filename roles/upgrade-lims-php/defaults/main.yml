@@ -38,6 +38,12 @@ lims_php_modules_dropped:
   - recode
   - interbase
 
+# Controller directory of fallback php RPMs to put over the vendor packages in upgrade mode,
+# e.g. RPMS/ from php-fallback/build.sh (ultrascan-tickets#1151). Only php packages already
+# installed are upgraded, and nothing happens once the vendor's packages are newer; a later
+# "dnf update" moves the host to the vendor's fixed packages. Empty: no fallback.
+lims_php_rpm_dir: ""
+
 # Host directory for the pre-upgrade snapshot and the PECL tarballs
 lims_php_state_dir: /root/us3lims-php-upgrade
 

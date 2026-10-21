@@ -12,6 +12,12 @@
     - lims_php_mode == 'upgrade'
     - lims_php_stream_enabled != lims_php_stream
 
+- name: Install the fallback php RPMs
+  ansible.builtin.include_tasks: fallback.yml
+  when:
+    - lims_php_mode == 'upgrade'
+    - lims_php_rpm_dir | length > 0
+
 - name: Rebuild the hand-built PECL extensions
   ansible.builtin.include_tasks: pecl.yml
   when: lims_php_mode == 'upgrade'
