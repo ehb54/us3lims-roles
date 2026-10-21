@@ -61,9 +61,27 @@
   register: lims_php_rpm_after
   changed_when: false
 
+- name: Read dnf.conf and ImageMagick after the upgrade
+  ansible.builtin.shell: |
+    set -o pipefail
+    sha256sum /etc/dnf/dnf.conf | cut -d ' ' -f 1
+    rpm -q ImageMagick || true
+  args:
+    executable: /bin/bash
+  register: lims_php_dnf_after
+  changed_when: false
+
+# the role lifts dnf excludes only per command, so dnf.conf (with its exclude line) is as before
+- name: Check that dnf.conf is unchanged
+  ansible.builtin.assert:
+    that: lims_php_dnf_after.stdout_lines[0] == lims_php_dnf_before.stdout_lines[0]
+    fail_msg: "/etc/dnf/dnf.conf changed during the upgrade; check its exclude line"
+    quiet: true
+
 - name: Report the upgrade
   ansible.builtin.debug:
     msg:
+      - "ImageMagick: {{ lims_php_dnf_before.stdout_lines[1] }} -> {{ lims_php_dnf_after.stdout_lines[1] }}; dnf.conf unchanged"
       - "php {{ lims_php_version_before }} -> {{ lims_php_version_after }} ({{ lims_php_rpm_after.stdout_lines[0] }})"
       - "PHP2Shell fix in the installed php packages: {{ 'yes' if (lims_php_rpm_after.stdout_lines[1] | int) > 0 else 'no' }}"
       - "rebuilt: {{ lims_php_rebuild_read.stdout_lines | default([]) | join(', ') or 'nothing' }}"

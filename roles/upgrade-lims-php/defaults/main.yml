@@ -65,3 +65,10 @@ lims_php_fpm_max_requests: 1
 # a service stopped beforehand (e.g. to keep the LIMS down until the host is checked) stays
 # stopped. false: restart both, which also starts a stopped one. ultrascan-tickets#1152
 lims_php_keep_stopped: true
+
+# true: when the upgrade switches the php stream (so a hand-built imagick is rebuilt anyway),
+# first update ImageMagick past dnf's exclude, so imagick is built against the current version.
+# LIMS hosts exclude ImageMagick* in dnf.conf so routine dnf updates cannot break the PECL-built
+# imagick; the role passes --disableexcludes=main to its own dnf commands only and never edits
+# dnf.conf. false: leave ImageMagick at the installed version. ultrascan-tickets#1154
+lims_php_update_imagemagick: true
