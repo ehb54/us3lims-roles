@@ -1,0 +1,50 @@
+---
+- name: Make the state directory
+  ansible.builtin.file:
+    path: "{{ lims_php_state_dir }}"
+    state: directory
+    mode: "0700"
+
+# Enough to see, and if need be restore, what the host ran before the switch
+- name: Save the php state before the switch
+  ansible.builtin.shell: |
+    set -o pipefail
+    d={{ lims_php_state_dir }}/php-{{ lims_php_version_before }}-{{ ansible_facts['date_time']['iso8601_basic_short'] }}
+    mkdir -p "$d"
+    php -v > "$d/php-v.txt" 2>&1
+    php -m > "$d/php-m.txt" 2>&1
+    rpm -qa 'php*' | sort > "$d/rpm-qa-php.txt"
+    pecl list > "$d/pecl-list.txt" 2>&1 || true
+    cp -p /etc/dnf/modules.d/php.module "$d/" 2>/dev/null || true
+    tar -czf "$d/etc-php.tar.gz" --ignore-failed-read /etc/php.ini /etc/php.d /etc/php-fpm.conf /etc/php-fpm.d /etc/httpd/conf.d/php.conf
+    for e in {{ lims_php_hand_built | join(' ') }}; do cp -p "{{ lims_php_ext_dir }}/$e.so" "$d/"; done
+    echo "$d"
+  args:
+    executable: /bin/bash
+  register: lims_php_snapshot
+  changed_when: true
+
+- name: Report the snapshot
+  ansible.builtin.debug:
+    msg: "php {{ lims_php_version_before }} state saved in {{ lims_php_snapshot.stdout_lines | last }}"
+
+# switch-to resets the module, enables the new stream and distro-syncs every installed
+# php package. Config files the roles changed (php.ini, www.conf) stay; dnf writes the
+# packaged versions next to them as .rpmnew.
+- name: Switch to php:{{ lims_php_stream }}
+  ansible.builtin.command: dnf -y module switch-to php:{{ lims_php_stream }}
+  changed_when: true
+  notify:
+    - Restart php-fpm
+    - Restart httpd
+
+- name: Read the enabled php module stream after the switch
+  ansible.builtin.include_role:
+    name: config-lims-php-stream
+    tasks_from: read.yml
+
+- name: Check the switch
+  ansible.builtin.assert:
+    that: lims_php_stream_enabled == lims_php_stream
+    fail_msg: "php:{{ lims_php_stream_enabled }} is still enabled after dnf module switch-to"
+    quiet: true

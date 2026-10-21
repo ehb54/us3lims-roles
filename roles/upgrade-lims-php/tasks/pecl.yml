@@ -1,0 +1,16 @@
+---
+# An extension built for another php version stays on disk but no longer loads.
+# Test each .so on its own (-n skips php.ini) and rebuild the ones that fail.
+- name: List the hand-built extensions that do not load
+  ansible.builtin.shell: |
+    for e in {{ lims_php_hand_built | join(' ') }}; do
+      php -n -d extension_dir={{ lims_php_ext_dir }} -d extension="$e.so" -r "exit(extension_loaded('$e') ? 0 : 1);" > /dev/null 2>&1 || echo "$e"
+    done
+  register: lims_php_rebuild_read
+  changed_when: false
+
+- name: Rebuild the extensions that do not load
+  ansible.builtin.include_tasks: pecl-one.yml
+  loop: "{{ lims_php_rebuild_read.stdout_lines }}"
+  loop_control:
+    loop_var: lims_php_ext

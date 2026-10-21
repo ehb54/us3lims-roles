@@ -1,0 +1,3 @@
+---
+# PECL imagick version; keep in step with lims_php_pecl in upgrade-lims-php
+lims_php_imagick_version: "3.8.1"

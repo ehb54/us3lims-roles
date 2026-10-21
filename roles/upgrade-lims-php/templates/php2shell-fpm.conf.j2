@@ -1,0 +1,10 @@
+; {{ ansible_managed }}
+; PHP2Shell (CVE-2026-109618, CVE-2026-109619) mitigation from upgrade-lims-php,
+; ultrascan-tickets#1150. php-fpm reopens a pool that a later file names again, so
+; these lines override the same settings in www.conf.
+{% for pool in lims_php_fpm_pools %}
+
+[{{ pool }}]
+pm.max_requests = {{ lims_php_fpm_max_requests }}
+php_admin_flag[session.upload_progress.enabled] = off
+{% endfor %}

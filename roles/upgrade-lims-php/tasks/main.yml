@@ -1,0 +1,27 @@
+---
+- name: Read the php state
+  ansible.builtin.import_tasks: preflight.yml
+
+- name: Stop after the report
+  ansible.builtin.meta: end_host
+  when: lims_php_mode == 'info'
+
+- name: Switch the php module stream
+  ansible.builtin.include_tasks: switch.yml
+  when:
+    - lims_php_mode == 'upgrade'
+    - lims_php_stream_enabled != lims_php_stream
+
+- name: Rebuild the hand-built PECL extensions
+  ansible.builtin.include_tasks: pecl.yml
+  when: lims_php_mode == 'upgrade'
+
+- name: Apply the PHP2Shell settings
+  ansible.builtin.import_tasks: mitigation.yml
+
+- name: Restart php-fpm and httpd
+  ansible.builtin.meta: flush_handlers
+
+- name: Verify the upgrade
+  ansible.builtin.include_tasks: verify.yml
+  when: lims_php_mode == 'upgrade'
