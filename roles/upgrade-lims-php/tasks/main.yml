@@ -35,3 +35,10 @@
 - name: Verify the upgrade
   ansible.builtin.include_tasks: verify.yml
   when: lims_php_mode == 'upgrade'
+
+- name: Start the gridctl services again
+  ansible.builtin.include_tasks: services-start.yml
+  when:
+    - lims_php_mode == 'upgrade'
+    - lims_php_has_services | bool
+    - lims_php_has_marker | bool or (lims_php_changes_php | bool and lims_php_services_running | length > 0)

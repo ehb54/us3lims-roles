@@ -79,3 +79,13 @@ lims_php_update_imagemagick: true
 lims_php_captcha_dirs:
   - /srv/www/htdocs
   - /var/www
+
+# An upgrade needs an idle LIMS: it stops before changing anything if squeue lists a job or
+# "php uslims_jobs.php --running" lists an analysis job. false skips this, after checking by hand.
+# The gridctl services (php services.php, as lims_php_lims_user) are stopped first and started
+# again at the end if any was running. ultrascan-tickets#1171
+lims_php_require_idle: true
+
+# The account the LIMS runs as. services.php is looked for in its ~/lims/bin and uslims_jobs.php
+# in ~/lims/database/utils; a host without them skips those steps.
+lims_php_lims_user: us3

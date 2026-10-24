@@ -11,9 +11,12 @@
 # remove the settings once the vendor's fixed php is installed:
 #   ansible-playbook upgrade-php-playbook.yml -l <host> -e "mitigate=1" -e "lims_php_mitigation=false"
 #
-# The upgrade restarts php-fpm and httpd (mitigate: php-fpm) if they are running: run it with the
-# LIMS idle. A service stopped beforehand stays stopped, so to keep the LIMS down until you have
-# checked the host, stop httpd first. -e "lims_php_keep_stopped=false" starts stopped ones too.
+# The upgrade needs an idle LIMS. It stops before changing anything if squeue or
+# "uslims_jobs.php --running" lists a job (after checking by hand, -e "lims_php_require_idle=false"
+# skips that), stops the gridctl services (services.php) and starts them again at the end if any
+# was running. It restarts php-fpm and httpd (mitigate: php-fpm) if they are running. A service
+# stopped beforehand stays stopped, so to keep the LIMS down until you have checked the host, stop
+# httpd first. -e "lims_php_keep_stopped=false" starts stopped ones too.
 
 - name: Upgrade php on LIMS hosts
   hosts: all
