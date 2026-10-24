@@ -45,7 +45,9 @@
   ansible.builtin.shell: |
     PATH=$PATH:/usr/local/bin:/opt/slurm/bin    # sudo secure_path leaves out a source-built Slurm
     command -v squeue > /dev/null || { echo '@not-installed'; exit 0; }
-    squeue -h -o '%i %u %T %j'
+    # without a proxychains LD_PRELOAD from /etc/environment, which would send the connection to
+    # the local Slurm controller into the SOCKS tunnel (ultrascan-tickets#1173)
+    env -u LD_PRELOAD squeue -h -o '%i %u %T %j'
   register: lims_php_squeue
   changed_when: false
   failed_when: false
