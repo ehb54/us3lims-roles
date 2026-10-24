@@ -92,6 +92,9 @@
     quiet: true
   when: lims_php_mode == 'upgrade'
 
+- name: Check that the LIMS is idle, and stop its gridctl services for an upgrade
+  ansible.builtin.import_tasks: idle.yml
+
 - name: Name the CodeReady Builder / PowerTools repository
   ansible.builtin.set_fact:
     lims_php_crb_repo: >-

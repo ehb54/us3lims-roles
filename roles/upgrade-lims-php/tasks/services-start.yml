@@ -1,0 +1,38 @@
+---
+# The gridctl services idle.yml stopped (or an earlier failed run stopped, per the marker) start
+# again with the upgraded php; at least as many must be running as before. ultrascan-tickets#1171
+- name: Read how many gridctl services were running
+  ansible.builtin.slurp:
+    src: "{{ lims_php_services_marker }}"
+  register: lims_php_services_marker_read
+
+- name: Start the gridctl services
+  ansible.builtin.command: php services.php start
+  args:
+    chdir: "{{ lims_php_lims_bin }}"
+  become: true
+  become_user: "{{ lims_php_lims_user }}"
+  register: lims_php_services_start
+  changed_when: true
+
+- name: Check the gridctl services
+  ansible.builtin.assert:
+    that: >-
+      lims_php_services_start.stdout_lines | select('match', '^\S+\s+\d+\s+running$') | list | length
+      >= lims_php_services_marker_read.content | b64decode | trim | int
+    fail_msg: >-
+      Fewer gridctl services are running than before the upgrade:
+      {{ lims_php_services_start.stdout_lines | join(' / ') }}
+    quiet: true
+
+- name: Forget that the gridctl services were stopped
+  ansible.builtin.file:
+    path: "{{ lims_php_services_marker }}"
+    state: absent
+
+- name: Report the gridctl services
+  ansible.builtin.debug:
+    msg: >-
+      gridctl services started again:
+      {{ lims_php_services_start.stdout_lines | select('match', '^\S+\s+\d+\s+running$')
+         | map('regex_replace', '\s.*$', '') | join(', ') }}

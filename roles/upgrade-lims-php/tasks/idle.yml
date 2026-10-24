@@ -1,0 +1,163 @@
+---
+# LIMS upgrades need an idle server: no Slurm jobs, no analysis jobs in flight, and the gridctl
+# services (listen, submitctl, esign, manage-us3-pipe, run with php as the LIMS account) stopped.
+# The report run shows the state. An upgrade run refuses a busy server and stops the services
+# before anything changes; they are started again at the end only if they were running, and a
+# marker file remembers that across a failed run. ultrascan-tickets#1171
+- name: Find the LIMS account's home
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ lims_php_lims_user }}"
+    fail_key: false
+
+- name: Name the LIMS tools
+  ansible.builtin.set_fact:
+    lims_php_lims_bin: "{{ (ansible_facts['getent_passwd'].get(lims_php_lims_user) or ['', '', '', '', '/nonexistent'])[4] }}/lims/bin"
+    lims_php_lims_utils: "{{ (ansible_facts['getent_passwd'].get(lims_php_lims_user) or ['', '', '', '', '/nonexistent'])[4] }}/lims/database/utils"
+    lims_php_services_marker: "{{ lims_php_state_dir }}/gridctl-services-were-running"
+
+- name: Look for services.php, uslims_jobs.php and the services marker
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ lims_php_lims_bin }}/services.php"
+    - "{{ lims_php_lims_utils }}/uslims_jobs.php"
+    - "{{ lims_php_services_marker }}"
+  register: lims_php_lims_files
+
+- name: Record which LIMS tools are here
+  ansible.builtin.set_fact:
+    lims_php_has_services: "{{ lims_php_lims_files.results[0].stat.exists }}"
+    lims_php_has_jobs: "{{ lims_php_lims_files.results[1].stat.exists }}"
+    lims_php_has_marker: "{{ lims_php_lims_files.results[2].stat.exists }}"
+
+- name: Read the gridctl services
+  ansible.builtin.command: php services.php status
+  args:
+    chdir: "{{ lims_php_lims_bin }}"
+  become: true
+  become_user: "{{ lims_php_lims_user }}"
+  register: lims_php_services_read
+  changed_when: false
+  when: lims_php_has_services | bool
+
+- name: Read the Slurm queue
+  ansible.builtin.shell: |
+    PATH=$PATH:/usr/local/bin:/opt/slurm/bin    # sudo secure_path leaves out a source-built Slurm
+    command -v squeue > /dev/null || { echo '@not-installed'; exit 0; }
+    squeue -h -o '%i %u %T %j'
+  register: lims_php_squeue
+  changed_when: false
+  failed_when: false
+
+# prints "no currently active jobs" when idle, a table of jobs otherwise
+- name: Read the running LIMS analysis jobs
+  ansible.builtin.command: php uslims_jobs.php --running
+  args:
+    chdir: "{{ lims_php_lims_utils }}"
+  become: true
+  become_user: "{{ lims_php_lims_user }}"
+  register: lims_php_jobs
+  changed_when: false
+  failed_when: false
+  when: lims_php_has_jobs | bool
+
+# a marker left by an earlier upgrade run that failed after stopping the services counts too
+- name: Record the LIMS state
+  ansible.builtin.set_fact:
+    # the check and the stop apply when this run changes php (a stream switch or fallback RPMs); a
+    # re-run on an upgraded host changes nothing
+    lims_php_changes_php: >-
+      {{ lims_php_mode == 'upgrade' and (lims_php_stream_enabled != lims_php_stream or lims_php_rpm_dir | length > 0) }}
+    lims_php_services_running: >-
+      {{ (lims_php_services_read.stdout_lines | default([])) | select('match', '^\S+\s+\d+\s+running$')
+         | map('regex_replace', '\s.*$', '') | list }}
+    lims_php_squeue_ok: "{{ lims_php_squeue.rc == 0 }}"
+    lims_php_squeue_jobs: "{{ lims_php_squeue.stdout_lines | reject('equalto', '@not-installed') | list }}"
+    lims_php_jobs_ok: "{{ lims_php_jobs.rc | default(0) == 0 }}"
+    lims_php_jobs_idle: "{{ 'no currently active jobs' in lims_php_jobs.stdout | default('') }}"
+
+- name: Report the LIMS state
+  ansible.builtin.debug:
+    msg:
+      - >-
+        gridctl services: {{ ((lims_php_services_running | length) ~ ' running'
+                              ~ (' (' ~ lims_php_services_running | join(', ') ~ ')' if lims_php_services_running else ''))
+                             if lims_php_has_services | bool else 'no ' ~ lims_php_lims_bin ~ '/services.php, not checked' }}{{
+        '; an earlier upgrade run stopped them and the next one starts them again' if lims_php_has_marker | bool else '' }}
+      - >-
+        Slurm jobs: {{ 'squeue not installed' if '@not-installed' in lims_php_squeue.stdout_lines
+                       else ('squeue failed: ' ~ lims_php_squeue.stderr | trim) if not lims_php_squeue_ok | bool
+                       else (lims_php_squeue_jobs | length ~ ' (' ~ lims_php_squeue_jobs | join('; ') ~ ')')
+                       if lims_php_squeue_jobs else 'none' }}
+      - >-
+        LIMS analysis jobs: {{ 'no ' ~ lims_php_lims_utils ~ '/uslims_jobs.php, not checked' if not lims_php_has_jobs | bool
+                               else ('uslims_jobs.php --running failed: ' ~ (lims_php_jobs.stderr or lims_php_jobs.stdout) | trim)
+                               if not lims_php_jobs_ok | bool else 'none' if lims_php_jobs_idle | bool
+                               else 'see uslims_jobs.php --running below' }}
+
+- name: Show the running LIMS analysis jobs
+  ansible.builtin.debug:
+    msg: "{{ lims_php_jobs.stdout_lines }}"
+  when:
+    - lims_php_has_jobs | bool
+    - lims_php_jobs_ok | bool
+    - not lims_php_jobs_idle | bool
+
+- name: Stop on a busy LIMS
+  ansible.builtin.assert:
+    that:
+      - "'@not-installed' in lims_php_squeue.stdout_lines or (lims_php_squeue_ok | bool and lims_php_squeue_jobs | length == 0)"
+      - not lims_php_has_jobs | bool or (lims_php_jobs_ok | bool and lims_php_jobs_idle | bool)
+    fail_msg: >-
+      The LIMS is not idle, or its state could not be read (see the report above). Upgrade when
+      no Slurm jobs and no LIMS analysis jobs are running, or, after checking by hand, rerun with
+      -e lims_php_require_idle=false.
+    quiet: true
+  when:
+    - lims_php_changes_php | bool
+    - lims_php_require_idle | bool
+
+- name: Make the state directory
+  ansible.builtin.file:
+    path: "{{ lims_php_state_dir }}"
+    state: directory
+    mode: "0700"
+  when:
+    - lims_php_changes_php | bool
+    - lims_php_services_running | length > 0
+
+# written before stopping, so a run that fails later still starts them on the next run
+- name: Remember that the gridctl services were running
+  ansible.builtin.copy:
+    content: "{{ lims_php_services_running | length }}\n"
+    dest: "{{ lims_php_services_marker }}"
+    mode: "0600"
+  when:
+    - lims_php_changes_php | bool
+    - lims_php_services_running | length > 0
+
+- name: Stop the gridctl services
+  ansible.builtin.command: php services.php stop
+  args:
+    chdir: "{{ lims_php_lims_bin }}"
+  become: true
+  become_user: "{{ lims_php_lims_user }}"
+  register: lims_php_services_stop
+  changed_when: true
+  failed_when: >-
+    lims_php_services_stop.rc != 0
+    or lims_php_services_stop.stdout_lines | select('match', '^\S+\s+\d+\s+running$') | list | length > 0
+  when:
+    - lims_php_changes_php | bool
+    - lims_php_services_running | length > 0
+
+- name: Report the stopped gridctl services
+  ansible.builtin.debug:
+    msg: >-
+      stopped the gridctl services ({{ lims_php_services_running | join(', ') }}); they are started again
+      once the upgrade is verified. If this run fails, the next upgrade run starts them, or start them
+      by hand: cd {{ lims_php_lims_bin }} && sudo -u {{ lims_php_lims_user }} php services.php start
+  when:
+    - lims_php_changes_php | bool
+    - lims_php_services_running | length > 0
