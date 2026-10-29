@@ -29,7 +29,7 @@
       mysql -u root -p'{{ root_db_pass }}' -e
       "ALTER TABLE {{ us3_db_name }}.people ADD COLUMN IF NOT EXISTS account_enabled TINYINT(1) UNSIGNED NOT NULL DEFAULT 1"
   changed_when: false
-  when: not first_install
+  when: not first_install and not lims_pre_430 | default(false) | bool
 
 - name: Create global database
   mysql_db:

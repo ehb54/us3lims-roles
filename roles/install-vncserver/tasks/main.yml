@@ -108,4 +108,6 @@
     owner: root
     group: root
     mode: '0644'
-  when: not lims_admin_accounts_provisioned.stat.exists
+  when:
+    - not lims_admin_accounts_provisioned.stat.exists
+    - not (lims_pre_430 | default(false) | bool and global_config_existed_already.stat.exists)

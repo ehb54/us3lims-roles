@@ -40,6 +40,13 @@
            cmd: dnf config-manager --set-enabled ol8_codeready_builder
         when: ansible_facts['distribution'] == "OracleLinux"
 
+      ## the release RPM is installed from a URL, which dnf only accepts once its key is imported
+      - name: import the EPEL signing key
+        rpm_key:
+           key: "https://dl.fedoraproject.org/pub/epel/RPM-GPG-KEY-EPEL-{{ ansible_facts['distribution_major_version'] }}"
+           state: present
+        when: ansible_facts['distribution'] == "RedHat" or ansible_os_family == "Rocky" or ansible_facts['distribution'] == "OracleLinux"
+
       - name: install EPEL repo for RedHat
         yum:
            name: https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm
@@ -81,6 +88,12 @@
             the VERSION that ref carries (e.g. 4.2.0); each checkout's VERSION file is checked
             against it.
         when: site_release is defined and site_release_version | default('') | string | length == 0
+
+      ## Every 4.3.0-specific task, role and template line is skipped for an older release, so a
+      ## run on a 4.2.0 host changes nothing and a 4.2.0 install gets 4.2.0's configuration.
+      - name: "Note whether this site runs a release before 4.3.0"
+        ansible.builtin.set_fact:
+          lims_pre_430: "{{ site_release_version is defined and (site_release_version | string) is version('4.3.0', '<') }}"
 
       - name: "release-gate: refuse to continue if any branch variable disagrees with site_release"
         ansible.builtin.fail:
@@ -227,7 +240,8 @@
       ## (was included from
       ## inside config-lims-lims, which runs before either is built, so
       ## its own assert always failed on a fresh build).
-      - config-lims-mpi-runtime
+      - role: config-lims-mpi-runtime
+        when: not lims_pre_430 | default(false) | bool
       - install-vncserver
       - install-postfix
       - install-chrony
@@ -323,6 +337,8 @@
         newinst_branch:    "{{ site_release }}"
         webinfo_branch:    "{{ site_release }}"
         utils_branch:      "{{ site_release }}"
+        ## Pre-4.3.0 only: written into dbutils' db_config.php for the Airavata bridge.
+        airavata_branch:   "meta-scheduler-prod"
 
         postfix_relay_smtp_host: smtp.gmail.com
         postfix_relay_smtp_port: 587

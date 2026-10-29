@@ -23,7 +23,7 @@
 
 - name: Copy over us3-listen.service
   template:
-    src: us3-listen.service.j2
+    src: "{{ 'us3-listen-4.2.0.service.j2' if lims_pre_430 | default(false) | bool else 'us3-listen.service.j2' }}"
     dest: /etc/systemd/system/us3-listen.service
   notify:
     - reload daemon

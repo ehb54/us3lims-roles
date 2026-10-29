@@ -30,6 +30,7 @@
   ansible.builtin.file:
     path: /etc/systemd/system/php-fpm.service.d/
     state: directory
+  when: not lims_pre_430 | default(false) | bool
 
 - name: Install the php-fpm KillMode override
   ansible.builtin.template:
@@ -38,6 +39,7 @@
   notify:
     - reload daemon
     - restart php-fpm
+  when: not lims_pre_430 | default(false) | bool
 
 - name: Configure php.ini
   copy:
@@ -73,6 +75,7 @@
     owner: root
     group: apache
     mode: '0775'
+  when: not lims_pre_430 | default(false) | bool
 
 - name: Ensure the pool's own error and slow logs are writable by the pool
   ansible.builtin.file:
@@ -86,3 +89,4 @@
   loop:
     - /var/log/php-fpm/www-error.log
     - /var/log/php-fpm/www-slow.log
+  when: not lims_pre_430 | default(false) | bool

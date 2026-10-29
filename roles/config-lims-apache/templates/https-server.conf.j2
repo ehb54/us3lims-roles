@@ -11,9 +11,10 @@
     SSLCertificateFile {{ ssl_self_cert_path }} 
     SSLCertificateKeyFile {{ ssl_self_key_path }}
 {% else %}
-    SSLCertificateFile {{ ssl_cert_path }}
+    SSLCertificateFile {{ ssl_cert_path }} 
     SSLCertificateKeyFile {{ ssl_key_path }}
 {% endif %}
+{% if not lims_pre_430 | default(false) | bool %}
 
     # Shared static assets for newinst (and any other instance), served
     # directly rather than through a relative symlink chain back to
@@ -28,5 +29,6 @@
       Require all granted
     </Directory>
 {% endfor %}
+{% endif %}
   </VirtualHost>
 </IfModule>

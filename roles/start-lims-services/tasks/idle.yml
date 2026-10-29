@@ -60,7 +60,7 @@
 # KillMode=process before the stop: a unit from an older run kills every job monitor in its cgroup.
 - name: Install the current us3-listen unit before stopping it
   ansible.builtin.template:
-    src: us3-listen.service.j2
+    src: "{{ 'us3-listen-4.2.0.service.j2' if lims_pre_430 | default(false) | bool else 'us3-listen.service.j2' }}"
     dest: /etc/systemd/system/us3-listen.service
   register: lims_idle_unit
   when:
