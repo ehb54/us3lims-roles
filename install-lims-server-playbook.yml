@@ -201,6 +201,8 @@
         when: site_release is defined and uslims_upgrade_preflight_script.stat.exists
 
   roles:
+      # EL8: enable php:7.4 before any role installs php (default stream is the retired 7.2)
+      - config-lims-php-stream
       - config-lims-gui
       - config-lims-admin
       - config-lims-firewall

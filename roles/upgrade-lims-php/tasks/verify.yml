@@ -1,0 +1,91 @@
+---
+- name: Read php after the upgrade
+  ansible.builtin.command: >-
+    php -d display_errors=stderr -d display_startup_errors=1 -r
+    'echo json_encode(["version" => PHP_VERSION,
+    "modules" => array_map("strtolower", array_merge(get_loaded_extensions(), get_loaded_extensions(true)))]);'
+  register: lims_php_after
+  changed_when: false
+
+- name: Read php-fpm after the upgrade
+  ansible.builtin.command: php-fpm -m
+  register: lims_php_fpm_after
+  changed_when: false
+
+- name: Record php after the upgrade
+  ansible.builtin.set_fact:
+    lims_php_version_after: "{{ (lims_php_after.stdout | from_json).version }}"
+    lims_php_modules_lost: >-
+      {{ lims_php_modules_before | difference((lims_php_after.stdout | from_json).modules) | difference(lims_php_modules_dropped) }}
+    lims_php_fpm_modules: "{{ lims_php_fpm_after.stdout_lines | map('lower') | list }}"
+    # a run resumed after a failed rebuild starts without them loaded, so require them by name
+    lims_php_hand_built_lost: "{{ lims_php_hand_built | difference((lims_php_after.stdout | from_json).modules) }}"
+
+- name: Check the php version, modules and startup
+  ansible.builtin.assert:
+    that:
+      - lims_php_version_after.split('.')[0:2] | join('.') == lims_php_stream
+      - lims_php_modules_lost | length == 0
+      - lims_php_hand_built_lost | length == 0
+      - lims_php_after.stderr is not search('PHP Startup')
+      - lims_php_fpm_after.stderr is not search('PHP Startup')
+      - lims_php_hand_built | difference(lims_php_fpm_modules) | length == 0
+    fail_msg:
+      - "php {{ lims_php_version_after }} (want {{ lims_php_stream }})"
+      - "modules lost since php {{ lims_php_version_before }}: {{ (lims_php_modules_lost + lims_php_hand_built_lost) | unique | join(', ') or 'none' }}"
+      - "hand-built extensions missing from php-fpm: {{ lims_php_hand_built | difference(lims_php_fpm_modules) | join(', ') or 'none' }}"
+      - "php stderr: {{ lims_php_after.stderr }}"
+      - "php-fpm stderr: {{ lims_php_fpm_after.stderr }}"
+
+- name: Read the service states
+  ansible.builtin.service_facts:
+
+# with lims_php_keep_stopped, a service that was stopped before the play is expected to stay so
+- name: Check that php-fpm and httpd are running
+  ansible.builtin.assert:
+    that:
+      - (lims_php_keep_stopped | bool and 'php-fpm' not in lims_php_running_before)
+        or ansible_facts['services']['php-fpm.service']['state'] == 'running'
+      - (lims_php_keep_stopped | bool and 'httpd' not in lims_php_running_before)
+        or ansible_facts['services']['httpd.service']['state'] | default('running') == 'running'
+    fail_msg: "php-fpm or httpd is not running after the upgrade"
+    quiet: true
+
+- name: Read the php-common package and look for the PHP2Shell fix after the upgrade
+  ansible.builtin.shell: |
+    set -o pipefail
+    rpm -q php-common
+    rpm -q --changelog php-common | grep -c -E 'CVE-2026-10961[89]' || true
+  args:
+    executable: /bin/bash
+  register: lims_php_rpm_after
+  changed_when: false
+
+- name: Read dnf.conf and ImageMagick after the upgrade
+  ansible.builtin.shell: |
+    set -o pipefail
+    sha256sum /etc/dnf/dnf.conf | cut -d ' ' -f 1
+    rpm -q ImageMagick || true
+  args:
+    executable: /bin/bash
+  register: lims_php_dnf_after
+  changed_when: false
+
+# the role lifts dnf excludes only per command, so dnf.conf (with its exclude line) is as before
+- name: Check that dnf.conf is unchanged
+  ansible.builtin.assert:
+    that: lims_php_dnf_after.stdout_lines[0] == lims_php_dnf_before.stdout_lines[0]
+    fail_msg: "/etc/dnf/dnf.conf changed during the upgrade; check its exclude line"
+    quiet: true
+
+- name: Report the upgrade
+  ansible.builtin.debug:
+    msg:
+      - "ImageMagick: {{ lims_php_dnf_before.stdout_lines[1] }} -> {{ lims_php_dnf_after.stdout_lines[1] }}; dnf.conf unchanged"
+      - "php {{ lims_php_version_before }} -> {{ lims_php_version_after }} ({{ lims_php_rpm_after.stdout_lines[0] }})"
+      - "PHP2Shell fix in the installed php packages: {{ 'yes' if (lims_php_rpm_after.stdout_lines[1] | int) > 0 else 'no' }}"
+      - "rebuilt: {{ lims_php_rebuild_read.stdout_lines | default([]) | join(', ') or 'nothing' }}"
+      - >-
+        php-fpm {{ ansible_facts['services']['php-fpm.service']['state'] }},
+        httpd {{ ansible_facts['services']['httpd.service']['state'] | default('not installed') }}
+      - "packaged config files kept as .rpmnew next to the roles' versions; compare them when convenient"

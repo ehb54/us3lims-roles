@@ -1,0 +1,13 @@
+---
+# with lims_php_keep_stopped, a service stopped when the play started stays stopped
+- name: Restart php-fpm
+  ansible.builtin.service:
+    name: php-fpm
+    state: restarted
+  when: not (lims_php_keep_stopped | bool) or 'php-fpm' in lims_php_running_before
+
+- name: Restart httpd
+  ansible.builtin.service:
+    name: httpd
+    state: restarted
+  when: not (lims_php_keep_stopped | bool) or 'httpd' in lims_php_running_before

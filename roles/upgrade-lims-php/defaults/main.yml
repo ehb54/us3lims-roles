@@ -1,0 +1,91 @@
+---
+# Move an EL8 LIMS host to this php module stream (ultrascan-tickets#1150)
+lims_php_stream: "7.4"
+
+# info:     report the php stream, version and hand-built extensions, change nothing
+# mitigate: apply (or, with lims_php_mitigation false, remove) the PHP2Shell settings only
+# upgrade:  switch the stream, rebuild the hand-built PECL extensions, apply the
+#           PHP2Shell settings, verify
+lims_php_mode: info
+
+# Hand-built PECL extensions this role can rebuild, keyed by the .so name in the php
+# extension_dir. The controller downloads the tarballs and checks them against sha256,
+# so the hosts need no internet access. config-lims-php pins the same imagick version.
+lims_php_pecl:
+  imagick:
+    version: "3.8.1"
+    sha256: 3a3587c0a524c17d0dad9673a160b90cd776e836838474e173b549ed864352ee
+    build_deps:
+      - ImageMagick-devel
+  pam:
+    version: "2.2.5"
+    sha256: aa4e51a3f975b1462dd2cda82ce2288bd87efb5e01cd439ae086758b85e19b82
+    build_deps:
+      - pam-devel
+  # yaml 2.3.0 supports php 7.1 to 8.x; libyaml-devel is in CodeReady Builder / PowerTools
+  yaml:
+    version: "2.3.0"
+    sha256: bc8404807a3a4dc896b310af21a7f8063aa238424ff77f27eb6ffa88b5874b8a
+    build_deps:
+      - libyaml-devel
+lims_php_pecl_url: https://pecl.php.net/get
+# Controller directory for the tarballs. On a controller without internet access, copy
+# <name>-<version>.tgz here first.
+lims_php_pecl_cache: "{{ lookup('ansible.builtin.env', 'HOME') }}/.cache/us3lims-pecl"
+
+# Hand-built extensions (.so files that no rpm owns) to leave alone instead of stopping
+lims_php_ignore_extensions: []
+
+# Extensions that php 7.4 itself dropped (moved to PECL). EL8 php 7.2 loads wddx by
+# default; the LIMS code uses none of them. The upgrade reports them and does not count
+# them as lost.
+lims_php_modules_dropped:
+  - wddx
+  - recode
+  - interbase
+
+# Controller directory of fallback php RPMs to put over the vendor packages in upgrade mode,
+# e.g. RPMS/ from php-fallback/build.sh (ultrascan-tickets#1151). Only php packages already
+# installed are upgraded, and nothing happens once the vendor's packages are newer; a later
+# "dnf update" moves the host to the vendor's fixed packages. Empty: no fallback.
+lims_php_rpm_dir: ""
+
+# Host directory for the pre-upgrade snapshot and the PECL tarballs
+lims_php_state_dir: /root/us3lims-php-upgrade
+
+# PHP2Shell (CVE-2026-109618, CVE-2026-109619) configuration mitigations. They are not a
+# fix. Once the vendor's fixed php packages are installed, rerun in mitigate mode with
+# lims_php_mitigation false to remove them.
+lims_php_mitigation: true
+lims_php_fpm_pools:
+  - www
+lims_php_fpm_max_requests: 1
+
+# true: after changes, restart php-fpm and httpd only if each was running when the play started;
+# a service stopped beforehand (e.g. to keep the LIMS down until the host is checked) stays
+# stopped. false: restart both, which also starts a stopped one. ultrascan-tickets#1152
+lims_php_keep_stopped: true
+
+# true: when the upgrade switches the php stream (so a hand-built imagick is rebuilt anyway),
+# first update ImageMagick past dnf's exclude, so imagick is built against the current version.
+# LIMS hosts exclude ImageMagick* in dnf.conf so routine dnf updates cannot break the PECL-built
+# imagick; the role passes --disableexcludes=main to its own dnf commands only and never edits
+# dnf.conf. false: leave ImageMagick at the installed version. ultrascan-tickets#1154
+lims_php_update_imagemagick: true
+
+# Directories searched (4 levels deep) for LIMS CAPTCHA background images (cap_bg.jpg) that the
+# installed ImageMagick cannot write; those are stripped in place in upgrade mode.
+# ultrascan-tickets#1155
+lims_php_captcha_dirs:
+  - /srv/www/htdocs
+  - /var/www
+
+# An upgrade needs an idle LIMS: it stops before changing anything if squeue lists a job or
+# "php uslims_jobs.php --running" lists an analysis job. false skips this, after checking by hand.
+# The gridctl services (php services.php, as lims_php_lims_user) are stopped first and started
+# again at the end if any was running. ultrascan-tickets#1171
+lims_php_require_idle: true
+
+# The account the LIMS runs as. services.php is looked for in its ~/lims/bin and uslims_jobs.php
+# in ~/lims/database/utils; a host without them skips those steps.
+lims_php_lims_user: us3

@@ -1,0 +1,45 @@
+---
+# Fallback php RPMs from the controller (php-fallback/build.sh), ultrascan-tickets#1151
+- name: List the fallback php RPMs on the controller
+  ansible.builtin.find:
+    paths: "{{ lims_php_rpm_dir }}"
+    patterns: "php-*.rpm"
+    excludes: "*-debuginfo-*,*-debugsource-*,*.src.rpm"
+  delegate_to: localhost
+  become: false
+  register: lims_php_rpm_find
+
+- name: Check the fallback php RPMs
+  ansible.builtin.assert:
+    that: lims_php_rpm_find.files | length > 0
+    fail_msg: "no php-*.rpm in {{ lims_php_rpm_dir }} on the controller"
+    quiet: true
+
+- name: Make the fallback RPM directory
+  ansible.builtin.file:
+    path: "{{ lims_php_state_dir }}/rpms"
+    state: directory
+    mode: "0700"
+
+- name: Copy the fallback php RPMs to the host
+  ansible.builtin.copy:
+    src: "{{ item.path }}"
+    dest: "{{ lims_php_state_dir }}/rpms/{{ item.path | basename }}"
+    mode: "0600"
+  loop: "{{ lims_php_rpm_find.files }}"
+  loop_control:
+    label: "{{ item.path | basename }}"
+
+# upgrade, not install: only the php packages already on the host, and nothing when the
+# installed ones are newer (the vendor fix is in)
+- name: Upgrade the installed php packages to the fallback RPMs
+  ansible.builtin.command: >-
+    dnf -y upgrade
+    {% for f in lims_php_rpm_find.files | map(attribute='path') | map('basename') | sort %}
+    {{ lims_php_state_dir }}/rpms/{{ f }}
+    {% endfor %}
+  register: lims_php_rpm_upgrade
+  changed_when: "'Upgraded:' in lims_php_rpm_upgrade.stdout"
+  notify:
+    - Restart php-fpm
+    - Restart httpd

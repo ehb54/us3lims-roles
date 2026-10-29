@@ -1,0 +1,139 @@
+---
+- name: Check the platform and mode
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['os_family'] == 'RedHat'
+      - ansible_facts['distribution_major_version'] == '8'
+      - lims_php_mode in ['info', 'mitigate', 'upgrade']
+    fail_msg: "upgrade-lims-php handles EL8 php module streams only; lims_php_mode is info, mitigate or upgrade"
+    quiet: true
+
+- name: Read the enabled php module stream
+  ansible.builtin.include_role:
+    name: config-lims-php-stream
+    tasks_from: read.yml
+
+# stdout is JSON; startup warnings (e.g. an extension built for another php) go to stderr
+- name: Read the php version, extension directory and loaded modules
+  ansible.builtin.command: >-
+    php -d display_errors=stderr -d display_startup_errors=1 -r
+    'echo json_encode(["version" => PHP_VERSION, "ext_dir" => ini_get("extension_dir"),
+    "modules" => array_map("strtolower", array_merge(get_loaded_extensions(), get_loaded_extensions(true))),
+    "upload_progress" => ini_get("session.upload_progress.enabled")]);'
+  register: lims_php_before
+  changed_when: false
+
+- name: Record the php state
+  ansible.builtin.set_fact:
+    lims_php_version_before: "{{ (lims_php_before.stdout | from_json).version }}"
+    lims_php_ext_dir: "{{ (lims_php_before.stdout | from_json).ext_dir }}"
+    lims_php_modules_before: "{{ (lims_php_before.stdout | from_json).modules | unique | sort }}"
+    lims_php_upload_progress_before: "{{ (lims_php_before.stdout | from_json).upload_progress }}"
+
+- name: List the hand-built extensions (no rpm owns the .so)
+  ansible.builtin.shell: |
+    for f in {{ lims_php_ext_dir }}/*.so; do
+      [ -e "$f" ] || continue
+      rpm -qf "$f" > /dev/null 2>&1 || basename "$f" .so
+    done
+  register: lims_php_hand_built_read
+  changed_when: false
+
+- name: Record the hand-built extensions
+  ansible.builtin.set_fact:
+    lims_php_hand_built: "{{ lims_php_hand_built_read.stdout_lines | difference(lims_php_ignore_extensions) }}"
+
+# Vendor php packages keep the upstream version (7.4.33) and list backported fixes by
+# CVE in the rpm changelog. Line 1: the package, line 2: changelog lines naming PHP2Shell.
+- name: Read the php-common package and look for the PHP2Shell fix in its changelog
+  ansible.builtin.shell: |
+    set -o pipefail
+    rpm -q php-common
+    rpm -q --changelog php-common | grep -c -E 'CVE-2026-10961[89]' || true
+  args:
+    executable: /bin/bash
+  register: lims_php_rpm_read
+  changed_when: false
+
+- name: Read the service states
+  ansible.builtin.service_facts:
+
+- name: Record which of php-fpm and httpd are running
+  ansible.builtin.set_fact:
+    lims_php_running_before: >-
+      {{ ansible_facts['services'] | dict2items
+         | selectattr('key', 'in', ['php-fpm.service', 'httpd.service'])
+         | selectattr('value.state', 'equalto', 'running')
+         | map(attribute='key') | map('regex_replace', '\.service$', '') | list }}
+
+- name: Report the php state
+  ansible.builtin.debug:
+    msg:
+      - >-
+        php-fpm {{ 'running' if 'php-fpm' in lims_php_running_before else 'stopped' }},
+        httpd {{ 'running' if 'httpd' in lims_php_running_before else 'stopped' }};
+        {{ 'a stopped one stays stopped' if lims_php_keep_stopped | bool
+           else 'a stopped one will be started (lims_php_keep_stopped false)' }}
+      - "php module stream: {{ lims_php_stream_enabled | default('', true) or 'none enabled' }} (target {{ lims_php_stream }})"
+      - "php version: {{ lims_php_version_before }} ({{ lims_php_rpm_read.stdout_lines[0] }})"
+      - "PHP2Shell fix in the installed php packages: {{ 'yes' if (lims_php_rpm_read.stdout_lines[1] | int) > 0 else 'no' }}"
+      - "hand-built extensions: {{ lims_php_hand_built | join(', ') or 'none' }}"
+      - "loaded extensions php 7.4 dropped: {{ lims_php_modules_before | intersect(lims_php_modules_dropped) | join(', ') or 'none' }}"
+      - "session.upload_progress.enabled: {{ 'On' if lims_php_upload_progress_before in ['1', 'On', 'on'] else 'Off' }}"
+      - "php startup warnings: {{ lims_php_before.stderr_lines | select('search', 'PHP Startup') | list | length }}"
+
+- name: Stop on hand-built extensions this role cannot rebuild
+  ansible.builtin.assert:
+    that: lims_php_hand_built | difference(lims_php_pecl.keys() | list) | length == 0
+    fail_msg: >-
+      No rebuild recipe for hand-built extension(s)
+      {{ lims_php_hand_built | difference(lims_php_pecl.keys() | list) | join(', ') }} in {{ lims_php_ext_dir }}.
+      Add them to lims_php_pecl, or to lims_php_ignore_extensions to leave them as they are.
+    quiet: true
+  when: lims_php_mode == 'upgrade'
+
+- name: Check that the LIMS is idle, and stop its gridctl services for an upgrade
+  ansible.builtin.import_tasks: idle.yml
+
+- name: Name the CodeReady Builder / PowerTools repository
+  ansible.builtin.set_fact:
+    lims_php_crb_repo: >-
+      {{ 'codeready-builder-for-rhel-' ~ ansible_facts['distribution_major_version'] ~ '-' ~ ansible_facts['architecture'] ~ '-rpms'
+         if ansible_facts['distribution'] == 'RedHat' else
+         'ol' ~ ansible_facts['distribution_major_version'] ~ '_codeready_builder'
+         if ansible_facts['distribution'] == 'OracleLinux' else 'powertools' }}
+
+# ImageMagick is updated only when imagick is rebuilt anyway (the stream switch); a re-run on
+# an upgraded host leaves it alone
+- name: Decide whether to update ImageMagick
+  ansible.builtin.set_fact:
+    lims_php_im_update: >-
+      {{ lims_php_mode == 'upgrade' and lims_php_update_imagemagick | bool
+         and 'imagick' in lims_php_hand_built and lims_php_stream_enabled != lims_php_stream }}
+
+- name: Read dnf.conf and ImageMagick before the upgrade
+  ansible.builtin.shell: |
+    set -o pipefail
+    sha256sum /etc/dnf/dnf.conf | cut -d ' ' -f 1
+    rpm -q ImageMagick || true
+  args:
+    executable: /bin/bash
+  register: lims_php_dnf_before
+  changed_when: false
+
+# --disableexcludes applies to this one dnf command; dnf.conf is not edited
+- name: Update ImageMagick past the dnf exclude
+  ansible.builtin.command: dnf -y --disableexcludes=main --enablerepo={{ lims_php_crb_repo }} upgrade 'ImageMagick*'
+  register: lims_php_im_upgrade
+  changed_when: "'Upgraded:' in lims_php_im_upgrade.stdout"
+  when: lims_php_im_update | bool
+
+# Before the php stream switch, so a dependency that cannot be installed stops the run with
+# the host unchanged. The php-devel and php-pear for the new stream follow after the switch.
+- name: Install the build dependencies of the hand-built extensions
+  ansible.builtin.include_tasks: deps.yml
+  vars:
+    lims_php_deps: "{{ ['gcc', 'make'] + (lims_php_hand_built | map('extract', lims_php_pecl, 'build_deps') | flatten) }}"
+  when:
+    - lims_php_mode == 'upgrade'
+    - lims_php_hand_built | length > 0

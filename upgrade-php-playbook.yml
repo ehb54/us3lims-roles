@@ -1,0 +1,37 @@
+---
+# Move EL8 LIMS hosts from the retired php:7.2 module stream to php:7.4, rebuild the
+# hand-built PECL extensions (imagick, pam) and apply the PHP2Shell settings
+# (CVE-2026-109618, CVE-2026-109619). ultrascan-tickets#1150; see roles/upgrade-lims-php.
+#
+# report only:            ansible-playbook upgrade-php-playbook.yml -l <host>
+# PHP2Shell settings only: ansible-playbook upgrade-php-playbook.yml -l <host> -e "mitigate=1"
+# upgrade:                ansible-playbook upgrade-php-playbook.yml -l <host> -e "run=1"
+# upgrade, then put the PHP2Shell fallback RPMs (php-fallback/build.sh) over the vendor packages:
+#   ansible-playbook upgrade-php-playbook.yml -l <host> -e "run=1" -e "lims_php_rpm_dir=<controller dir>/RPMS"
+# remove the settings once the vendor's fixed php is installed:
+#   ansible-playbook upgrade-php-playbook.yml -l <host> -e "mitigate=1" -e "lims_php_mitigation=false"
+#
+# The upgrade needs an idle LIMS. It stops before changing anything if squeue or
+# "uslims_jobs.php --running" lists a job (after checking by hand, -e "lims_php_require_idle=false"
+# skips that), stops the gridctl services (services.php) and starts them again at the end if any
+# was running. It restarts php-fpm and httpd (mitigate: php-fpm) if they are running. A service
+# stopped beforehand stays stopped, so to keep the LIMS down until you have checked the host, stop
+# httpd first. -e "lims_php_keep_stopped=false" starts stopped ones too.
+
+- name: Upgrade php on LIMS hosts
+  hosts: all
+  gather_facts: true
+  remote_user: usadmin
+  become: true
+
+  pre_tasks:
+    - name: Require a host limit
+      ansible.builtin.assert:
+        that: ansible_limit is defined
+        fail_msg: "limit the hosts with -l <host>"
+        quiet: true
+
+  roles:
+    - role: upgrade-lims-php
+      vars:
+        lims_php_mode: "{{ 'upgrade' if run is defined else ('mitigate' if mitigate is defined else 'info') }}"

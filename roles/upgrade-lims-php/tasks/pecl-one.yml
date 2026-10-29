@@ -1,0 +1,66 @@
+---
+- name: Set the tarball name for {{ lims_php_ext }}
+  ansible.builtin.set_fact:
+    lims_php_tgz: "{{ lims_php_ext }}-{{ lims_php_pecl[lims_php_ext].version }}.tgz"
+
+- name: Install the build dependencies for {{ lims_php_ext }}
+  ansible.builtin.include_tasks: deps.yml
+  vars:
+    lims_php_deps: "{{ ['php-devel', 'php-pear', 'gcc', 'make'] + lims_php_pecl[lims_php_ext].build_deps }}"
+
+- name: Make the tarball cache on the controller
+  ansible.builtin.file:
+    path: "{{ lims_php_pecl_cache }}"
+    state: directory
+    mode: "0755"
+  delegate_to: localhost
+  become: false
+
+- name: Fetch the tarball on the controller, {{ lims_php_tgz }}
+  ansible.builtin.get_url:
+    url: "{{ lims_php_pecl_url }}/{{ lims_php_tgz }}"
+    dest: "{{ lims_php_pecl_cache }}/{{ lims_php_tgz }}"
+    checksum: "sha256:{{ lims_php_pecl[lims_php_ext].sha256 }}"
+    mode: "0644"
+  delegate_to: localhost
+  become: false
+  # one host at a time, so parallel hosts do not download the same file at once
+  throttle: 1
+
+- name: Make the state directory
+  ansible.builtin.file:
+    path: "{{ lims_php_state_dir }}"
+    state: directory
+    mode: "0700"
+
+- name: Copy the tarball to the host, {{ lims_php_tgz }}
+  ansible.builtin.copy:
+    src: "{{ lims_php_pecl_cache }}/{{ lims_php_tgz }}"
+    dest: "{{ lims_php_state_dir }}/{{ lims_php_tgz }}"
+    mode: "0600"
+
+# umask 022: hardened hosts run Ansible with umask 0027, which would leave the .so
+# unreadable to php-fpm. The newlines accept pecl's prompts (imagick asks for the
+# ImageMagick prefix).
+- name: Build and install with pecl, {{ lims_php_tgz }}
+  ansible.builtin.shell: |
+    set -o pipefail
+    umask 022
+    printf '\n\n\n' | pecl install -f {{ lims_php_state_dir }}/{{ lims_php_tgz }}
+  args:
+    executable: /bin/bash
+  register: lims_php_pecl_build
+  changed_when: true
+  notify: Restart php-fpm
+
+- name: Restore the SELinux label of the extension, {{ lims_php_ext }}
+  ansible.builtin.command: restorecon -v {{ lims_php_ext_dir }}/{{ lims_php_ext }}.so
+  register: lims_php_restorecon
+  changed_when: lims_php_restorecon.stdout | length > 0
+  when: ansible_facts['selinux']['status'] | default('disabled') == 'enabled'
+
+- name: Check that the extension loads, {{ lims_php_ext }}
+  ansible.builtin.command: >-
+    php -n -d extension_dir={{ lims_php_ext_dir }} -d extension={{ lims_php_ext }}.so
+    -r "exit(extension_loaded('{{ lims_php_ext }}') ? 0 : 1);"
+  changed_when: false

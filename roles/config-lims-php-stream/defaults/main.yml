@@ -1,0 +1,4 @@
+---
+# php module stream for EL8 LIMS hosts. php:7.2 (the EL8 default) was retired in 2021;
+# php:7.4 is supported for the life of RHEL 8.
+lims_php_stream: "7.4"

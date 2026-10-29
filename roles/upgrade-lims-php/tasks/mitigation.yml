@@ -1,0 +1,70 @@
+---
+# PHP2Shell (CVE-2026-109618, CVE-2026-109619) configuration mitigations, from the PHP
+# advisories GHSA-6wmf-4rv5-p3rp and GHSA-w8hw-w9fx-j79w. They narrow the attack; only
+# fixed php packages close it. The LIMS does not use session upload progress.
+
+- name: List the php-fpm pools defined outside the mitigation file
+  ansible.builtin.shell: |
+    set -o pipefail
+    find /etc/php-fpm.d -maxdepth 1 -name '*.conf' ! -name zz-us3lims-php2shell.conf -print0 |
+      xargs -0 -r grep -h -o -E '^[[:space:]]*\[[^]]+\]' | tr -d '[:space:][]' | sort -u
+  args:
+    executable: /bin/bash
+  register: lims_php_fpm_pools_read
+  changed_when: false
+
+# The mitigation file reopens these pools; php-fpm would treat a pool name that is not
+# defined elsewhere as a new, incomplete pool and refuse to start.
+- name: Check the php-fpm pools to change
+  ansible.builtin.assert:
+    that: lims_php_fpm_pools | difference(lims_php_fpm_pools_read.stdout_lines) | length == 0
+    fail_msg: >-
+      php-fpm pool(s) {{ lims_php_fpm_pools | difference(lims_php_fpm_pools_read.stdout_lines) | join(', ') }}
+      not found in /etc/php-fpm.d (found {{ lims_php_fpm_pools_read.stdout_lines | join(', ') }}); set lims_php_fpm_pools
+    quiet: true
+  when: lims_php_mitigation | bool
+
+- name: Write or remove the PHP2Shell settings
+  block:
+    - name: Write the php.ini setting
+      ansible.builtin.template:
+        src: php2shell.ini.j2
+        dest: /etc/php.d/zz-us3lims-php2shell.ini
+        mode: "0644"
+      when: lims_php_mitigation | bool
+      notify: Restart php-fpm
+
+    - name: Write the php-fpm pool settings
+      ansible.builtin.template:
+        src: php2shell-fpm.conf.j2
+        dest: /etc/php-fpm.d/zz-us3lims-php2shell.conf
+        mode: "0644"
+      when: lims_php_mitigation | bool
+      notify: Restart php-fpm
+
+    - name: Remove the PHP2Shell settings
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/php.d/zz-us3lims-php2shell.ini
+        - /etc/php-fpm.d/zz-us3lims-php2shell.conf
+      when: not (lims_php_mitigation | bool)
+      notify: Restart php-fpm
+
+    - name: Check the php-fpm configuration
+      ansible.builtin.command: php-fpm -t
+      changed_when: false
+
+  rescue:
+    - name: Remove the PHP2Shell settings php-fpm rejected
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/php.d/zz-us3lims-php2shell.ini
+        - /etc/php-fpm.d/zz-us3lims-php2shell.conf
+
+    - name: Stop on the php-fpm configuration error
+      ansible.builtin.fail:
+        msg: "php-fpm -t failed with the PHP2Shell settings; they were removed again. See the output above."

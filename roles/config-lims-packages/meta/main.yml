@@ -1,3 +1,4 @@
 --- 
 dependencies:
         -  geerlingguy.repo-epel
+        -  config-lims-php-stream
