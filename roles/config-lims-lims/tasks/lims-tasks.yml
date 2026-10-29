@@ -35,25 +35,12 @@
 ## uslims_upgrade.php stamps a "## BEGIN uslims_upgrade.php settings" banner
 ## into global_config.php when it writes cluster/sizing/breaker settings
 ## there, and says so in the banner itself: "rerun the script rather than
-## editing by hand". This task used to copy the plain template over
-## global_config.php on every run regardless, overwriting that banner (and
-## the sizing, pool and breaker settings inside it) with the un-upgraded
-## defaults on the very next ansible run after an operator upgraded the host
-## (round-13, us3lims-roles#24). Backing this off on the banner's presence
-## fixed an upgraded host, but not a fresh-built one that has never been
-## upgraded at all (round 15): config-lims-mpi-runtime's own task below
-## writes real ppbj/env_script_lines into this same file on a fresh
-## install's first run, but that host never gets the upgrade-script banner
-## either, so every later re-run still saw no banner and copied the
-## pristine template straight over those detected values -- ppbj observed
-## going 16 (detected) -> 8 (template) -> 16 (re-detected, since the MPI
-## task's own "fresh install only" gate happened to still read true from a
-## stale pre-run fact) on successive runs. The actual question this task
-## needs answered is "did this run just create the file, or has some
-## earlier run (this role's own copy, or an operator's upgrade) already
-## put something worth keeping there" -- answered by the same
-## global_config_existed_already fact the MPI task below already uses for
-## exactly this, not by grepping for one specific owner's marker.
+## editing by hand". config-lims-mpi-runtime's task below also writes
+## detected ppbj/env_script_lines into this file on a fresh install's first
+## run, without any banner. Copying the template on a later run would
+## overwrite either with the defaults, so the copy runs only when this run
+## creates the file, using the same global_config_existed_already fact the
+## MPI task below uses, not a grep for one owner's marker.
 - name: Check whether global_config.php exists yet (fresh install vs. an existing host)
   ansible.builtin.stat:
     path: "{{ www_common }}/global_config.php"

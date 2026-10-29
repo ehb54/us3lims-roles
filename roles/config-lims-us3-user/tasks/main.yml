@@ -118,32 +118,16 @@
 ## dbutils' uslims_upgrade.php migrates a pre-4.3.0 listen-config.php to its
 ## own "values only, version 2" contract, and from then on refuses to touch
 ## the file again once it reads $listen_config_version >= 2 -- "rerun the
-## script rather than editing by hand" is its own stated contract too. This
-## task used to re-template the file from this role's own (pre-upgrade-
-## shaped) template on every run regardless, which reverted that migration
-## on its very next run: gridctl's bootstrap refuses to start against a
-## pre-upgrade file (round-13, us3lims-roles#24), stranding every job on the
-## host until an operator reran the upgrade by hand. Originally gated on
-## $listen_config_version's presence, since that only exists in the v2
-## contract -- the same signal uslims_upgrade.php itself already checks for.
+## script rather than editing by hand" is its own stated contract too.
+## Re-templating it from this role's pre-upgrade-shaped template would revert
+## that migration, and gridctl's bootstrap refuses to start against a
+## pre-upgrade file, stranding every job on the host.
 ##
-## Round 15, us3lims-roles#24 blocking: that marker-based gate has the exact
-## same class of bug config-lims-lims's global_config.php copy task had.
-## $listen_config_version is 4.3.0-era and does not exist in a 4.2.0-pinned
-## site's own gridctl checkout's template at all -- so on a host pinned to
-## an older release (gridctl_branch tracking a pre-4.3.0 site_release),
-## this grep never matches, and this task re-templated the file from that
-## older template on EVERY run, not just the first. The older template has
-## no $host_name placeholder either, so the regex_replace below for that
-## key silently matched nothing each time, losing it from the file (a
-## GMP e-signature mail's From: header then has no host name) -- and every
-## other run changed five more files besides, none of them the one-time
-## convergence us3lims-roles#24 is supposed to be. Gated on the file's own
-## pre-existence instead, the same fix as global_config.php's: a run on a
-## host that already has a listen-config.php, 4.2.0 or 4.3.0 shaped,
-## upgraded or not, changes nothing here -- exactly the "a run on a 4.2.0
-## host changes nothing" requirement, with no dependency on which release's
-## template happens to define which variables.
+## Gated on the file's own pre-existence, not on $listen_config_version: a
+## 4.2.0-pinned gridctl checkout's template has no such marker (nor a
+## $host_name placeholder), so a marker gate would re-template the file on
+## every run. A run on a host that already has a listen-config.php, 4.2.0 or
+## 4.3.0 shaped, upgraded or not, changes nothing here.
 - name: Check whether listen-config.php exists yet (fresh install vs. an existing host, any release)
   ansible.builtin.stat:
     path: "{{ user_home }}/us3/lims/bin/listen-config.php"

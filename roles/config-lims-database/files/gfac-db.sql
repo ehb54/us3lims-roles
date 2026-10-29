@@ -81,15 +81,12 @@ CREATE TABLE `queue_messages` (
 
 --
 -- Table structure for table `metascheduler_decision` and `cluster_status_nudge`
--- (gridctl's pick_cluster(), round-13 should-fix gridctl#35: this dump never
--- carried either table, so a host built fresh by this role had no audit
--- trail and lost its double-booking protection for a configured pool --
--- "decisions are still made... but nudges are lost (two reservations both
--- pick the same cluster); no audit row is written". CREATE TABLE IF NOT
--- EXISTS, same as both tables' own source files
--- (home/us3/lims/bin/gridctl/metascheduler_decision_table.sql and
--- cluster_status_nudge_table.sql in the uslims_stack aggregator repo) and
--- us3_sql#41's gfac.sql fresh-install schema -- purely additive, so
+-- (gridctl's pick_cluster()): without them a host built fresh by this role
+-- has no audit trail and loses its double-booking protection for a
+-- configured pool. CREATE TABLE IF NOT EXISTS, same as both tables' own
+-- source files (home/us3/lims/bin/gridctl/metascheduler_decision_table.sql
+-- and cluster_status_nudge_table.sql in the uslims_stack aggregator repo)
+-- and us3_sql's gfac.sql fresh-install schema -- purely additive, so
 -- re-running this file leaves an existing table and its data alone.
 --
 

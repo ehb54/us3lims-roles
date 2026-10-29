@@ -17,9 +17,8 @@
 
 ## Only fires when something that actually changed us3-listen's config did
 ## so this run (its unit file or listen-config.php) -- see lims-tasks.yml.
-## round-13 (us3lims-roles#24): an unconditional restart on every ansible
-## run, whether or not anything changed, killed every running job's monitor
-## (and stranded its job) on a host that had nothing to apply.
+## A restart kills every running job's monitor (and strands its job), so a
+## run with nothing to apply must not restart it.
 - name: restart us3-listen
   service:
     name: us3-listen
