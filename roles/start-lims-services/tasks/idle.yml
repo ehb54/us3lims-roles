@@ -1,0 +1,96 @@
+---
+# Idles the host for a uslims_upgrade.php call. A busy host (Slurm jobs or LIMS analysis jobs, or a
+# state that cannot be read) is left running and lims_host_busy is set, so the caller skips the
+# call. A host without the us3-listen unit was never put in service and is never busy. Otherwise us3-listen is stopped through systemd, so the unit is inactive and resume.yml or
+# this role's main tasks start it again. A raw "php services.php stop" left the oneshot unit
+# reported active, and "state: started" then never started the daemons.
+- set_fact:
+    user_home: "/home"
+  when: user_home is undefined
+
+- name: Look for the us3-listen unit and uslims_jobs.php
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - /etc/systemd/system/us3-listen.service
+    - "{{ user_home }}/us3/lims/database/utils/uslims_jobs.php"
+  register: lims_idle_files
+
+- name: Read the Slurm queue
+  ansible.builtin.shell: |
+    PATH=$PATH:/usr/local/bin:/opt/slurm/bin    # sudo secure_path leaves out a source-built Slurm
+    command -v squeue > /dev/null || { echo '@not-installed'; exit 0; }
+    # without a proxychains LD_PRELOAD from /etc/environment, which would send the connection to
+    # the local Slurm controller into the SOCKS tunnel
+    env -u LD_PRELOAD squeue -h -o '%i %u %T %j'
+  register: lims_idle_squeue
+  changed_when: false
+  failed_when: false
+
+# prints "no currently active jobs" when idle
+- name: Read the running LIMS analysis jobs
+  ansible.builtin.command: php uslims_jobs.php --running
+  args:
+    chdir: "{{ user_home }}/us3/lims/database/utils"
+  become: yes
+  become_user: us3
+  register: lims_idle_jobs
+  changed_when: false
+  failed_when: false
+  when: lims_idle_files.results[1].stat.exists
+
+- name: Decide whether the host is busy
+  ansible.builtin.set_fact:
+    lims_host_busy: >-
+      {{ lims_idle_files.results[0].stat.exists
+         and (lims_idle_squeue.rc != 0
+              or lims_idle_squeue.stdout_lines | reject('equalto', '@not-installed') | list | length > 0
+              or (lims_idle_files.results[1].stat.exists
+                  and (lims_idle_jobs.rc != 0 or 'no currently active jobs' not in lims_idle_jobs.stdout))) }}
+    lims_idle_stopped_listen: false
+
+- name: Report the busy host
+  ansible.builtin.debug:
+    msg:
+      - "The host is busy or its job state could not be read; the gridctl services stay up and uslims_upgrade.php is skipped this run."
+      - "Slurm: {{ lims_idle_squeue.stdout_lines | join('; ') or lims_idle_squeue.stderr | default('') }}"
+      - "LIMS jobs: {{ (lims_idle_jobs.stdout_lines | default([])) | join('; ') }}"
+  when: lims_host_busy | bool
+
+# KillMode=process before the stop: a unit from an older run kills every job monitor in its cgroup.
+- name: Install the current us3-listen unit before stopping it
+  ansible.builtin.template:
+    src: us3-listen.service.j2
+    dest: /etc/systemd/system/us3-listen.service
+  register: lims_idle_unit
+  when:
+    - not lims_host_busy | bool
+    - lims_idle_files.results[0].stat.exists
+
+- name: Reload systemd for the new unit
+  ansible.builtin.systemd:
+    daemon_reload: yes
+  when: lims_idle_unit is changed
+
+- name: Check whether us3-listen is active
+  ansible.builtin.command: systemctl is-active us3-listen
+  register: lims_idle_listen_active
+  changed_when: false
+  failed_when: false
+  when: not lims_host_busy | bool
+
+# ExecStop is "php services.php stop" as us3, the graceful shutdown
+- name: Stop us3-listen
+  ansible.builtin.service:
+    name: us3-listen
+    state: stopped
+  when:
+    - not lims_host_busy | bool
+    - lims_idle_listen_active.stdout | default('') == 'active'
+
+- name: Record that this run stopped us3-listen
+  ansible.builtin.set_fact:
+    lims_idle_stopped_listen: true
+  when:
+    - not lims_host_busy | bool
+    - lims_idle_listen_active.stdout | default('') == 'active'

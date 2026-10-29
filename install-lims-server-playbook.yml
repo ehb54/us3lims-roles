@@ -117,7 +117,8 @@
       ## between runs. Without idling first, --check would always refuse
       ## on business alone, telling us nothing about the actual upgrade
       ## state. Same idle dance config-lims-lims uses before its own
-      ## --apply call: stop us3-listen gracefully, snapshot and restore
+      ## --apply call: stop us3-listen through systemd (left running on a
+      ## busy host, which skips the check), snapshot and restore
       ## the whole crontab verbatim (not pattern-based), so a
       ## deliberately-disabled line stays indistinguishable from one this
       ## task itself commented out.
@@ -136,23 +137,11 @@
           replace: '#\1'
         when: site_release is defined and uslims_upgrade_preflight_script.stat.exists
 
-      - name: "Check whether us3-listen is currently active"
-        ansible.builtin.command: systemctl is-active us3-listen
-        register: us3_listen_active_before_preflight
-        changed_when: false
-        failed_when: false
-        when: site_release is defined and uslims_upgrade_preflight_script.stat.exists
-
       - name: "Idle the host for uslims_upgrade.php's preflight check"
-        become: yes
-        become_user: us3
-        ansible.builtin.command:
-          chdir: "{{ user_home }}/us3/lims/bin"
-          cmd: "php services.php stop"
-        when: >-
-          site_release is defined and uslims_upgrade_preflight_script.stat.exists
-          and us3_listen_active_before_preflight.stdout | default('') == 'active'
-        changed_when: true
+        ansible.builtin.include_role:
+          name: start-lims-services
+          tasks_from: idle.yml
+        when: site_release is defined and uslims_upgrade_preflight_script.stat.exists
 
       - block:
           - name: "Check the currently-deployed release's upgrade state (uslims_upgrade.php --check)"
@@ -177,6 +166,7 @@
             failed_when: >-
               uslims_upgrade_preflight_result.rc != 0
               and 'the host is not idle' not in uslims_upgrade_preflight_result.stderr
+            when: not lims_host_busy | default(false) | bool
 
           - name: "Note that uslims_upgrade.php's preflight check found the host genuinely busy (outside this play's control)"
             ansible.builtin.debug:
@@ -185,8 +175,15 @@
                 after stopping this role's own services -- something else
                 is using it. Could not verify the upgrade state this run --
                 rerun once it is clear.
-            when: uslims_upgrade_preflight_result.rc != 0 and 'the host is not idle' in uslims_upgrade_preflight_result.stderr
+            when: >-
+              not lims_host_busy | default(false) | bool and uslims_upgrade_preflight_result.rc != 0
+              and 'the host is not idle' in uslims_upgrade_preflight_result.stderr
         always:
+          - name: "Start us3-listen again if the idle step stopped it"
+            ansible.builtin.include_role:
+              name: start-lims-services
+              tasks_from: resume.yml
+
           - name: "Restore /etc/crontab exactly as it was before uslims_upgrade.php's preflight check"
             ansible.builtin.copy:
               src: /etc/crontab.pre-upgrade-preflight
