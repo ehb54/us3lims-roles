@@ -131,6 +131,34 @@
           uslims_upgrade_preflight_script: { stat: { exists: false } }
         when: site_release is defined and NO_LIMS | default(false) | bool
 
+      ## A snapshot still here means a run died while the host was idled, with the
+      ## LIMS cron lines commented out; restore it before any new snapshot is taken.
+      - name: "Check for a crontab snapshot left by a run that died while the host was idled"
+        ansible.builtin.stat:
+          path: "{{ item }}"
+        loop:
+          - /etc/crontab.pre-upgrade-preflight
+          - /etc/crontab.pre-upgrade-idle
+        register: lims_leftover_crontab
+
+      - name: "Restore /etc/crontab from the leftover snapshot"
+        ansible.builtin.copy:
+          src: "{{ item.item }}"
+          dest: /etc/crontab
+          remote_src: yes
+          mode: preserve
+        loop: "{{ lims_leftover_crontab.results | selectattr('stat.exists') | list }}"
+        loop_control:
+          label: "{{ item.item }}"
+
+      - name: "Remove the leftover crontab snapshot"
+        ansible.builtin.file:
+          path: "{{ item.item }}"
+          state: absent
+        loop: "{{ lims_leftover_crontab.results | selectattr('stat.exists') | list }}"
+        loop_control:
+          label: "{{ item.item }}"
+
       ## uslims_upgrade.php's own idle check (step 1) refuses outright,
       ## unconditionally, for either --check or --apply, whenever anything
       ## LIMS-related is live -- the normal state of an in-service host
