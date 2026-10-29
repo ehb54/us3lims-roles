@@ -44,9 +44,8 @@
   when: utils_branch is undefined and site_release is defined
 
 - name: make {{ user_home }}/us3/lims/database/sql safe
-  shell: git config --global --get-all safe.directory | grep -qxF '{{ user_home }}/us3/lims/database/sql' || { git config --global --add safe.directory '{{ user_home }}/us3/lims/database/sql' && echo added; }
-  register: safe_directory_add
-  changed_when: "'added' in safe_directory_add.stdout"
+  shell:
+    cmd: "git config --global --add safe.directory {{ user_home }}/us3/lims/database/sql"
 
 - include_role:
     name: release-gate
@@ -62,9 +61,8 @@
    dest: "{{ user_home }}/us3/lims/database/sql"
 
 - name: make {{ user_home }}/us3/lims/database/utils safe
-  shell: git config --global --get-all safe.directory | grep -qxF '{{ user_home }}/us3/lims/database/utils' || { git config --global --add safe.directory '{{ user_home }}/us3/lims/database/utils' && echo added; }
-  register: safe_directory_add
-  changed_when: "'added' in safe_directory_add.stdout"
+  shell:
+    cmd: "git config --global --add safe.directory {{ user_home }}/us3/lims/database/utils"
 
 - include_role:
     name: release-gate
@@ -92,9 +90,8 @@
   when: gridctl_branch is undefined
 
 - name: make {{ user_home }}/us3/lims/database/utils safe
-  shell: git config --global --get-all safe.directory | grep -qxF '{{ user_home }}/us3/lims/bin' || { git config --global --add safe.directory '{{ user_home }}/us3/lims/bin' && echo added; }
-  register: safe_directory_add
-  changed_when: "'added' in safe_directory_add.stdout"
+  shell:
+    cmd: "git config --global --add safe.directory {{ user_home }}/us3/lims/bin"
 
 - include_role:
     name: release-gate

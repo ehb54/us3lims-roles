@@ -8,17 +8,13 @@
     owner: root
     group: root
     mode: '0644'
-  register: mariadb_nice_conf
 
-# only when nice.conf changed: a restart drops every in-flight database connection
 - name: reload systemd daemon
   systemd:
        daemon_reload: yes
-  when: mariadb_nice_conf is changed
 
 - name: restart MariaDB
   service:
        name: mariadb
        enabled: yes
        state: restarted
-  when: mariadb_nice_conf is changed

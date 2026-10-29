@@ -28,13 +28,10 @@
     dest: /tmp/msttcore-fonts-installer-2.6-1.noarch.rpm
     mode: '0440'
     
-# rpm -i fails on a package that is already installed, which stopped every re-run here
 - name: Install rpm
-  shell:
-    cmd: rpm -q msttcore-fonts-installer > /dev/null || { rpm -i --nodeps msttcore-fonts-installer-2.6-1.noarch.rpm && echo installed; }
+  command:
+    cmd: rpm -i --nodeps msttcore-fonts-installer-2.6-1.noarch.rpm 
     chdir: /tmp
-  register: msttcore_install
-  changed_when: "'installed' in msttcore_install.stdout"
 
 - name: Run fc-cache -f
   command:

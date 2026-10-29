@@ -14,9 +14,7 @@
   when: webinfo_branch is undefined
 
 - name: Add common directory to git safe directories
-  shell: git config --global --get-all safe.directory | grep -qxF '{{ www_common }}' || { git config --global --add safe.directory '{{ www_common }}' && echo added; }
-  register: safe_directory_add
-  changed_when: "'added' in safe_directory_add.stdout"
+  command: git config --global --add safe.directory {{ www_common }}
 
 - include_role:
     name: release-gate
@@ -93,10 +91,8 @@
 ## operator's own edit to -- this is a plain repo checkout, kept in
 ## sync like webinfo's or common's own clone just above.
 - name: Add common directory to git safe directories (pre-4.3.0 installs only -- see the Airavata/GFAC note above)
-  shell: git config --global --get-all safe.directory | grep -qxF '{{ us_airavata_bridge_path }}' || { git config --global --add safe.directory '{{ us_airavata_bridge_path }}' && echo added; }
-  register: safe_directory_add
-  changed_when: "'added' in safe_directory_add.stdout"
-  when: lims_pre_430 | default(false) | bool
+  command: git config --global --add safe.directory {{ us_airavata_bridge_path }}
+  when: site_release_version is defined and (site_release_version | string) is version('4.3.0', '<')
 
 - name: Clone airavata repo (pre-4.3.0 installs only -- see the Airavata/GFAC note above)
   git:
@@ -105,7 +101,7 @@
    version: "{{ us_airavata_bridge_branch }}"
    force: yes
   changed_when: false
-  when: lims_pre_430 | default(false) | bool
+  when: site_release_version is defined and (site_release_version | string) is version('4.3.0', '<')
 
 ## do we need this? - not any more
 #- name: Run update_local.sh
@@ -121,9 +117,7 @@
 
 # Web info dir.
 - name: Add common directory to git safe directories
-  shell: git config --global --get-all safe.directory | grep -qxF '{{ www_uslims }}' || { git config --global --add safe.directory '{{ www_uslims }}' && echo added; }
-  register: safe_directory_add
-  changed_when: "'added' in safe_directory_add.stdout"
+  command: git config --global --add safe.directory {{ www_uslims }}
 
 - include_role:
     name: release-gate
@@ -162,9 +156,7 @@
 
 # Newlims dir.
 - name: Add common directory to git safe directories
-  shell: git config --global --get-all safe.directory | grep -qxF '{{ www_newlims }}' || { git config --global --add safe.directory '{{ www_newlims }}' && echo added; }
-  register: safe_directory_add
-  changed_when: "'added' in safe_directory_add.stdout"
+  command: git config --global --add safe.directory {{ www_newlims }}
 
 - include_role:
     name: release-gate

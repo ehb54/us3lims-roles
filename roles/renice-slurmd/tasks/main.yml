@@ -1,12 +1,6 @@
 ---
 # tasks file for renice-slurmd
 
-# The copy and the Nice line rewrite the unit every run; restart only when the result differs.
-- name: read the current slurmd unit
-  ansible.builtin.stat:
-    path: /etc/systemd/system/slurmd.service
-  register: slurmd_unit_before
-
 - name: copy /usr/lib/systemd/system/slurmd.service to /etc/systemd/system/
   ansible.builtin.copy:
     src: /usr/lib/systemd/system/slurmd.service
@@ -22,19 +16,12 @@
     insertafter: '^\[Service\]'
     line: 'Nice=10'
 
-- name: read the new slurmd unit
-  ansible.builtin.stat:
-    path: /etc/systemd/system/slurmd.service
-  register: slurmd_unit_after
-
 - name: reload systemd daemon
   systemd:
        daemon_reload: yes
-  when: slurmd_unit_before.stat.checksum | default('') != slurmd_unit_after.stat.checksum
 
 - name: restart slurmd
   service:
        name: slurmd
        enabled: yes
        state: restarted
-  when: slurmd_unit_before.stat.checksum | default('') != slurmd_unit_after.stat.checksum

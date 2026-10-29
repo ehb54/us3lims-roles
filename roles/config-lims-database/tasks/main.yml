@@ -80,15 +80,7 @@
     dest: /etc/my.cnf
     backup: yes
 
-## lineinfile cannot match a multi-line line, so it appended the block again on every run.
-- name: Check whether mariadb-server.cnf already has Gary's settings
-  ansible.builtin.command: grep -q "^# Gary's settings" /etc/my.cnf.d/mariadb-server.cnf
-  register: mariadb_gary_settings
-  changed_when: false
-  failed_when: false
-
 - name: add Gary's settings to mariadb-server
-  when: mariadb_gary_settings.rc != 0
   ansible.builtin.lineinfile:
     path: /etc/my.cnf.d/mariadb-server.cnf
     insertafter: '^\[mysqld\]'

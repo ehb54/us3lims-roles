@@ -49,20 +49,11 @@
     src: sasl_passwd.j2
     dest: /etc/postfix/sasl/sasl_passwd
     mode: '0600'
-  register: postfix_sasl_passwd
 
-- name: Look for the sasl_passwd map
-  ansible.builtin.stat:
-    path: /etc/postfix/sasl/sasl_passwd.db
-  register: postfix_sasl_db
-
-# postmap rewrites the map every run; only when sasl_passwd changed or the map is missing
 - name: Run postmap
   command:
     chdir: /etc/postfix/sasl
     cmd: postmap /etc/postfix/sasl/sasl_passwd
-  when: postfix_sasl_passwd is changed or not postfix_sasl_db.stat.exists
-  register: postfix_postmap
 
 - name: Fix permissions of sasl_passwd
   file:
@@ -74,12 +65,11 @@
     - /etc/postfix/sasl/sasl_passwd.db
     - /etc/postfix/sasl/sasl_passwd
 
-# postconf -e rewrites main.cf only when a value differs; compared before and after so postfix
-# restarts only when its configuration changed, not on every run
-- name: Read main.cf before configuring postfix
-  ansible.builtin.stat:
-    path: /etc/postfix/main.cf
-  register: postfix_main_cf_before
+- name: Stop postfix
+  service:
+    name : postfix
+    enabled: yes
+    state: stopped
 
 - name: Configure postfix
   command:
@@ -97,13 +87,7 @@
     - mydomain={{ postfix_hostname }}
     - myorigin={{ postfix_hostname }}
     - mydestination=
-  changed_when: false
-
-- name: Read main.cf after configuring postfix
-  ansible.builtin.stat:
-    path: /etc/postfix/main.cf
-  register: postfix_main_cf_after
-
+    
 - name: Set postfix permissions
   command:
     cmd: /usr/sbin/postfix set-permissions
@@ -122,12 +106,4 @@
     name : postfix
     enabled: yes
     state: started
-
-- name: Restart postfix for the new configuration
-  service:
-    name: postfix
-    state: restarted
-  when: >-
-    postfix_main_cf_before.stat.checksum | default('') != postfix_main_cf_after.stat.checksum
-    or postfix_postmap is changed
     

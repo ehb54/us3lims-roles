@@ -1,13 +1,4 @@
 ---
-# skip-name-resolve (mariadb-server.cnf) makes MariaDB ignore every account whose host is a name:
-# the row stays in mysql.user but SHOW GRANTS fails (1141), so a grant to a host name fails every
-# re-run after a restart. server_name is granted only when it is an IP address.
-- name: Name the hosts the LIMS database accounts are granted on
-  ansible.builtin.set_fact:
-    db_grant_hosts: >-
-      {{ ([server_name] if server_name is match('^[0-9.]+$') or ':' in server_name else [])
-         + ['127.0.0.1', 'localhost', '::1'] }}
-
 # new_us3user privs
 - name: Do new_us3user grants 
   mysql_user:
@@ -19,7 +10,11 @@
         login_unix_socket: /var/lib/mysql/mysql.sock
         login_user: root
         login_password: "{{ root_db_pass }}"
-  loop: "{{ db_grant_hosts }}"
+  with_items:
+        - "{{ server_name }}"
+        - 127.0.0.1
+        - localhost
+        - ::1
 
 # us3php privs
 - name: Do us3php grants
@@ -32,7 +27,11 @@
         login_unix_socket: /var/lib/mysql/mysql.sock
         login_user: root
         login_password: "{{ root_db_pass }}"
-  loop: "{{ db_grant_hosts }}"
+  with_items:
+        - "{{ server_name }}"
+        - 127.0.0.1
+        - localhost
+        - ::1
 
 # gfac privs
 #
@@ -59,7 +58,11 @@
         login_unix_socket: /var/lib/mysql/mysql.sock
         login_user: root
         login_password: "{{ root_db_pass }}"
-  loop: "{{ db_grant_hosts }}"
+  with_items:
+        - "{{ server_name }}"
+        - 127.0.0.1
+        - localhost
+        - ::1
 
 # us3_notice privs
 - name: Grant SELECT on to us3_notice user on us3_notice
@@ -71,6 +74,10 @@
         login_unix_socket: /var/lib/mysql/mysql.sock
         login_user: root
         login_password: "{{ root_db_pass }}"
-  loop: "{{ db_grant_hosts }}"
+  with_items:
+        - "{{ server_name }}"
+        - 127.0.0.1
+        - localhost
+        - ::1
 
 

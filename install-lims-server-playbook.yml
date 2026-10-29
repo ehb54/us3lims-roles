@@ -40,13 +40,6 @@
            cmd: dnf config-manager --set-enabled ol8_codeready_builder
         when: ansible_facts['distribution'] == "OracleLinux"
 
-      ## the release RPM is installed from a URL, which dnf only accepts once its key is imported
-      - name: import the EPEL signing key
-        rpm_key:
-           key: "https://dl.fedoraproject.org/pub/epel/RPM-GPG-KEY-EPEL-{{ ansible_facts['distribution_major_version'] }}"
-           state: present
-        when: ansible_facts['distribution'] == "RedHat" or ansible_os_family == "Rocky" or ansible_facts['distribution'] == "OracleLinux"
-
       - name: install EPEL repo for RedHat
         yum:
            name: https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm
