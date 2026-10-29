@@ -80,8 +80,8 @@
     path: /etc/lims-admin-accounts-provisioned
   register: lims_admin_accounts_provisioned
 
-## lims_admin_global_config_existed_already is registered by config-lims-admin,
-## which always runs before this role (config-lims-lims does not under NO_LIMS) -- same reasoning
+## lims_admin_fresh is set by config-lims-admin, which always runs before
+## this role (config-lims-lims does not under NO_LIMS) -- same reasoning
 ## as config-lims-admin's own matching guard: an existing host's first
 ## run under this marker must not re-register VNC access for an admin an
 ## operator already removed.
@@ -93,8 +93,11 @@
     - alexey
     - ehb
     - saeed
+  register: lims_vnc_admin_add
+  # a user registered by an earlier, partly failed run is already done
+  failed_when: lims_vnc_admin_add.rc != 0 and 'is already defined' not in lims_vnc_admin_add.stderr
   ignore_errors: yes
-  when: not lims_admin_accounts_provisioned.stat.exists and not lims_admin_global_config_existed_already.stat.exists
+  when: lims_admin_fresh | bool
 
 ## Written here, not by config-lims-admin: this role runs after it in the
 ## install playbook and is the last consumer of "not yet provisioned" --
@@ -111,3 +114,10 @@
   when:
     - not lims_admin_accounts_provisioned.stat.exists
     - not (lims_pre_430 | default(false) | bool and lims_admin_global_config_existed_already.stat.exists)
+    - lims_vnc_admin_add is not failed
+
+- name: Clear the pending admin provisioning marker
+  ansible.builtin.file:
+    path: /etc/lims-admin-accounts-pending
+    state: absent
+  when: lims_vnc_admin_add is not failed
