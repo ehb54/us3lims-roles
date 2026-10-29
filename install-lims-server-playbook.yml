@@ -125,6 +125,12 @@
         register: uslims_upgrade_preflight_script
         when: site_release is defined
 
+      ## NO_LIMS installs no LIMS, so there is no upgrade state to check.
+      - name: "Skip uslims_upgrade.php's preflight check under NO_LIMS"
+        ansible.builtin.set_fact:
+          uslims_upgrade_preflight_script: { stat: { exists: false } }
+        when: site_release is defined and NO_LIMS | default(false) | bool
+
       ## uslims_upgrade.php's own idle check (step 1) refuses outright,
       ## unconditionally, for either --check or --apply, whenever anything
       ## LIMS-related is live -- the normal state of an in-service host

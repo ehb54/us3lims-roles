@@ -80,8 +80,8 @@
     path: /etc/lims-admin-accounts-provisioned
   register: lims_admin_accounts_provisioned
 
-## global_config_existed_already is registered by config-lims-lims,
-## which runs before this role in the install playbook -- same reasoning
+## lims_admin_global_config_existed_already is registered by config-lims-admin,
+## which always runs before this role (config-lims-lims does not under NO_LIMS) -- same reasoning
 ## as config-lims-admin's own matching guard: an existing host's first
 ## run under this marker must not re-register VNC access for an admin an
 ## operator already removed.
@@ -94,7 +94,7 @@
     - ehb
     - saeed
   ignore_errors: yes
-  when: not lims_admin_accounts_provisioned.stat.exists and not global_config_existed_already.stat.exists
+  when: not lims_admin_accounts_provisioned.stat.exists and not lims_admin_global_config_existed_already.stat.exists
 
 ## Written here, not by config-lims-admin: this role runs after it in the
 ## install playbook and is the last consumer of "not yet provisioned" --
@@ -110,4 +110,4 @@
     mode: '0644'
   when:
     - not lims_admin_accounts_provisioned.stat.exists
-    - not (lims_pre_430 | default(false) | bool and global_config_existed_already.stat.exists)
+    - not (lims_pre_430 | default(false) | bool and lims_admin_global_config_existed_already.stat.exists)
