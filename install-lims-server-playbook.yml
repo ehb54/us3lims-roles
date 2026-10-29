@@ -339,6 +339,10 @@
         install_commercial:  true
         NO_LIMS:             false
 
+        # GMP/PAM sites set these in the inventory (play vars override it); both default false
+        # lims_enable_gmp:   true
+        # lims_enable_pam:   true
+
         # set the desired compiler optimization
         # for hardware installs
         comp_opt: "-march=native"
