@@ -157,6 +157,14 @@
           tasks_from: idle.yml
         when: site_release is defined and uslims_upgrade_preflight_script.stat.exists
 
+      - name: "Grant the gfac account its 4.3.0 privileges before the preflight check"
+        ansible.builtin.include_role:
+          name: config-lims-database
+          tasks_from: gfac-preflight-grant.yml
+        when: >-
+          site_release is defined and uslims_upgrade_preflight_script.stat.exists
+          and not lims_pre_430 | default(false) | bool and not lims_host_busy | default(false) | bool
+
       - block:
           - name: "Check the currently-deployed release's upgrade state (uslims_upgrade.php --check)"
             ansible.builtin.command:
@@ -177,9 +185,23 @@
             ## uslims_upgrade.php printed to stdout above it). Exit 3 (an
             ## open [input]) is refused by the next task instead.
             failed_when: >-
-              uslims_upgrade_preflight_result.rc not in [0, 3]
+              uslims_upgrade_preflight_result.rc not in [0, 1, 3]
               and 'the host is not idle' not in uslims_upgrade_preflight_result.stderr
             when: not lims_host_busy | default(false) | bool
+
+          ## Exit 1: a check failed. The one failure this play could fix later in the run, the gfac
+          ## grant, is granted above; what remains needs the operator.
+          - name: "Refuse to continue while uslims_upgrade.php --check reports failures this play cannot fix"
+            ansible.builtin.fail:
+              msg: >-
+                uslims_upgrade.php --check reports failures that need the operator:
+                {{ uslims_upgrade_preflight_result.stdout_lines | select('search', '[[]FAIL') | map('trim') | join('; ') }}.
+                Nothing was changed and the gridctl services are started again. Fix these, then
+                rerun this play.
+            when:
+              - not lims_host_busy | default(false) | bool
+              - uslims_upgrade_preflight_result.rc == 1
+              - "'the host is not idle' not in uslims_upgrade_preflight_result.stderr"
 
           ## Exit 3: settings only an operator can give are open; stop before any checkout moves.
           - name: "Refuse to continue while uslims_upgrade.php needs settings only an operator can give"

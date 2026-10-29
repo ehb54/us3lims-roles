@@ -1,0 +1,19 @@
+---
+# The gfac account's CREATE, ALTER and INDEX on gfac, granted before the upgrade preflight: on a
+# 4.3.0 host with a metascheduler pool, uslims_upgrade.php --check fails without them, before
+# create-grants.yml later in the play could add them. Local hosts only: the account
+# uslims_upgrade.php connects as.
+- name: Grant the gfac account CREATE, ALTER and INDEX on gfac before the upgrade preflight
+  mysql_user:
+        name: '{{ gbl_db_user }}'
+        host: "{{ item }}"
+        priv: "{{ gbl_db_name }}.*:SELECT,INSERT,UPDATE,DELETE,CREATE,ALTER,INDEX/uslims3_*.*:SELECT,UPDATE/uslims3_*.*:INSERT"
+        append_privs: yes
+        password: '{{ gbl_db_pass }}'
+        login_unix_socket: /var/lib/mysql/mysql.sock
+        login_user: root
+        login_password: "{{ root_db_pass }}"
+  with_items:
+        - 127.0.0.1
+        - localhost
+        - ::1
