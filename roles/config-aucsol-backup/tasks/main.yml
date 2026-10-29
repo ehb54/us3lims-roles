@@ -111,10 +111,18 @@
   changed_when: false
   failed_when: false
 
-- name: install in cronic (skipped if deliberately disabled -- see the check above)
+# same as config-lims-backup: a line for this command at a site-chosen time is left alone
+- name: Check whether the daily backup cronjob already has an active line, at any time
+  ansible.builtin.shell:
+    cmd: grep -qE '^[0-9*/,-]+ [0-9*/,-]+ [0-9*/,-]+ [0-9*/,-]+ [0-9*/,-]+ root /usr/bin/cronic php {{ (user_home ~ "/us3/lims/database/utils/uslims_daily_backup.php /home/us3/lims/database/utils/db_config_aucsol.php") | regex_escape }}$' /etc/crontab
+  register: daily_backup_present
+  changed_when: false
+  failed_when: false
+
+- name: install in cronic (skipped if deliberately disabled or already present at a site-chosen time -- see the checks above)
   ansible.builtin.lineinfile:
     path: /etc/crontab
     regexp: '^10 0 \* \* \* root /usr/bin/cronic php {{ (user_home ~ "/us3/lims/database/utils/uslims_daily_backup.php /home/us3/lims/database/utils/db_config_aucsol.php") | regex_escape }}$'
     line: "10 0 * * * root /usr/bin/cronic php {{ user_home }}/us3/lims/database/utils/uslims_daily_backup.php /home/us3/lims/database/utils/db_config_aucsol.php"
     insertafter: '^# Ansible: daily backup$'
-  when: daily_backup_disabled.rc != 0
+  when: daily_backup_disabled.rc != 0 and daily_backup_present.rc != 0
