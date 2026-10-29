@@ -5,6 +5,13 @@
       name: "{{ packages }}"
       update_cache: yes
 
+## dbinst's show_image.php calls mb_strlen()
+- name: Install php-mbstring
+  dnf:
+      name: php-mbstring
+      state: present
+  when: not lims_pre_430 | default(false) | bool
+
 # an imagick.so built for another php version exists but does not load
 - name: Check if magik loads
   command: >-
