@@ -137,28 +137,25 @@
 ## config-lims-lims starts us3-listen again after its own call and restores the crontab, so this
 ## call idles the host again. The crontab is snapshotted and restored whole, not by pattern: see
 ## config-lims-lims's task.
-- name: Idle the host for this call to uslims_upgrade.php
-  ansible.builtin.include_role:
-    name: start-lims-services
-    tasks_from: idle.yml
-  when: (NO_LIMS is undefined or NO_LIMS == false or NO_LIMS == '') and demo_uslims_upgrade_script.stat.exists
-
-- name: Snapshot /etc/crontab before idling it for this call to uslims_upgrade.php
-  ansible.builtin.copy:
-    src: /etc/crontab
-    dest: /etc/crontab.pre-upgrade-idle-demo
-    remote_src: yes
-    mode: preserve
-  when: (NO_LIMS is undefined or NO_LIMS == false or NO_LIMS == '') and demo_uslims_upgrade_script.stat.exists
-
-- name: Comment out any active LIMS cron entry in /etc/crontab before this call (restored verbatim in 'always', regardless of outcome)
-  ansible.builtin.replace:
-    path: /etc/crontab
-    regexp: '^(?!\s*#)(.*\b(?:gridctl(?:_pro|_dev)?\.php|cluster_status\.php|update_notice\.php|listen\.php|jobmonitor\.php|uslims_daily_backup\.php|uslims_daily_rsync\.php|save-jobstats\.sh)\b.*)$'
-    replace: '#\1'
-  when: (NO_LIMS is undefined or NO_LIMS == false or NO_LIMS == '') and demo_uslims_upgrade_script.stat.exists
-
 - block:
+    - name: Snapshot /etc/crontab before idling it for this call to uslims_upgrade.php
+      ansible.builtin.copy:
+        src: /etc/crontab
+        dest: /etc/crontab.pre-upgrade-idle-demo
+        remote_src: yes
+        mode: preserve
+
+    - name: Comment out any active LIMS cron entry in /etc/crontab before this call (restored verbatim in 'always', regardless of outcome)
+      ansible.builtin.replace:
+        path: /etc/crontab
+        regexp: '^(?!\s*#)(.*\b(?:gridctl(?:_pro|_dev)?\.php|cluster_status\.php|update_notice\.php|listen\.php|jobmonitor\.php|uslims_daily_backup\.php|uslims_daily_rsync\.php|save-jobstats\.sh)\b.*)$'
+        replace: '#\1'
+
+    - name: Idle the host for this call to uslims_upgrade.php
+      ansible.builtin.include_role:
+        name: start-lims-services
+        tasks_from: idle.yml
+
     - name: Run uslims_upgrade.php so uslims3_Demo gets a UTC boundary and its people_audit migration
       ansible.builtin.command:
         chdir: "{{ user_home }}/us3/lims/database/utils"
@@ -176,11 +173,13 @@
       ansible.builtin.debug:
         msg: "uslims_upgrade.php found the host still not idle; something outside this play is using it -- rerun once it is clear."
       when: not lims_host_busy | default(false) | bool and demo_uslims_upgrade_result.rc != 0 and 'the host is not idle' in demo_uslims_upgrade_result.stderr
+  ## The crontab first and us3-listen second, each attempted whatever the other does; the
+  ## snapshot is kept unless it was restored, for the next run's leftover check.
   always:
-    - name: Start us3-listen again if the idle step stopped it
-      ansible.builtin.include_role:
-        name: start-lims-services
-        tasks_from: resume.yml
+    - name: Look for the crontab snapshot
+      ansible.builtin.stat:
+        path: /etc/crontab.pre-upgrade-idle-demo
+      register: lims_idle_snapshot
 
     - name: Restore /etc/crontab exactly as it was before idling it for this call
       ansible.builtin.copy:
@@ -188,11 +187,27 @@
         dest: /etc/crontab
         remote_src: yes
         mode: preserve
+      register: lims_idle_restore
+      ignore_errors: true
+      when: lims_idle_snapshot.stat.exists
 
     - name: Remove the crontab snapshot
       ansible.builtin.file:
         path: /etc/crontab.pre-upgrade-idle-demo
         state: absent
+      when: lims_idle_snapshot.stat.exists and lims_idle_restore is succeeded
+
+    - name: Start us3-listen again if the idle step stopped it
+      ansible.builtin.include_role:
+        name: start-lims-services
+        tasks_from: resume.yml
+
+    - name: Refuse to continue when /etc/crontab could not be restored
+      ansible.builtin.fail:
+        msg: >-
+          /etc/crontab could not be restored from /etc/crontab.pre-upgrade-idle-demo, so its LIMS lines are still
+          commented out; the next run restores it before anything else.
+      when: lims_idle_restore is failed
   when: (NO_LIMS is undefined or NO_LIMS == false or NO_LIMS == '') and demo_uslims_upgrade_script.stat.exists
 
 - name: Note that uslims_upgrade.php was skipped (dbutils checkout predates it)

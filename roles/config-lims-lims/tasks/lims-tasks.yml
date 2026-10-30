@@ -269,33 +269,27 @@
 ## and restoring it verbatim afterward (not a pattern-based restore)
 ## sidesteps that ambiguity entirely: nothing here needs to know, or
 ## guess, which lines it is safe to turn back on.
-- name: Snapshot /etc/crontab before idling it for uslims_upgrade.php
-  ansible.builtin.copy:
-    src: /etc/crontab
-    dest: /etc/crontab.pre-upgrade-idle
-    remote_src: yes
-    mode: preserve
-  when: uslims_upgrade_script.stat.exists
-
-- name: Comment out any active LIMS cron entry in /etc/crontab before uslims_upgrade.php (restored verbatim in 'always', regardless of outcome)
-  ansible.builtin.replace:
-    path: /etc/crontab
-    regexp: '^(?!\s*#)(.*\b(?:gridctl(?:_pro|_dev)?\.php|cluster_status\.php|update_notice\.php|listen\.php|jobmonitor\.php|uslims_daily_backup\.php|uslims_daily_rsync\.php|save-jobstats\.sh)\b.*)$'
-    replace: '#\1'
-  when: uslims_upgrade_script.stat.exists
-
-- name: Idle the host for uslims_upgrade.php
-  ansible.builtin.include_role:
-    name: start-lims-services
-    tasks_from: idle.yml
-  when: uslims_upgrade_script.stat.exists
-
-## block/always, not a plain task list: a genuine failure (not the
-## tolerated "not idle" case just below) must still restore the crontab
-## snapshot before the play stops, or a hard failure here would leave
-## every LIMS cron entry disabled behind it -- worse than the "not idle"
-## refusal this is meant to fix.
+## The snapshot and the idling sit inside the block, so any failure from the first change on
+## still restores the crontab and starts us3-listen again.
 - block:
+    - name: Snapshot /etc/crontab before idling it for uslims_upgrade.php
+      ansible.builtin.copy:
+        src: /etc/crontab
+        dest: /etc/crontab.pre-upgrade-idle
+        remote_src: yes
+        mode: preserve
+
+    - name: Comment out any active LIMS cron entry in /etc/crontab before uslims_upgrade.php (restored verbatim in 'always', regardless of outcome)
+      ansible.builtin.replace:
+        path: /etc/crontab
+        regexp: '^(?!\s*#)(.*\b(?:gridctl(?:_pro|_dev)?\.php|cluster_status\.php|update_notice\.php|listen\.php|jobmonitor\.php|uslims_daily_backup\.php|uslims_daily_rsync\.php|save-jobstats\.sh)\b.*)$'
+        replace: '#\1'
+
+    - name: Idle the host for uslims_upgrade.php
+      ansible.builtin.include_role:
+        name: start-lims-services
+        tasks_from: idle.yml
+
     - name: Converge the host through uslims_upgrade.php (breaker/ssh-control/elog directories, managed config blocks, CSP)
       ansible.builtin.command:
         chdir: "{{ user_home }}/us3/lims/database/utils"
@@ -318,11 +312,13 @@
       ansible.builtin.debug:
         msg: "uslims_upgrade.php found the host still not idle after stopping this role's own services -- something else is using it; rerun once it is clear."
       when: not lims_host_busy | default(false) | bool and uslims_upgrade_result.rc != 0 and 'the host is not idle' in uslims_upgrade_result.stderr
+  ## The crontab first and us3-listen second, each attempted whatever the other does; the
+  ## snapshot is kept unless it was restored, for the next run's leftover check.
   always:
-    - name: Start us3-listen again if the idle step stopped it
-      ansible.builtin.include_role:
-        name: start-lims-services
-        tasks_from: resume.yml
+    - name: Look for the crontab snapshot
+      ansible.builtin.stat:
+        path: /etc/crontab.pre-upgrade-idle
+      register: lims_idle_snapshot
 
     - name: Restore /etc/crontab exactly as it was before idling it for uslims_upgrade.php
       ansible.builtin.copy:
@@ -330,11 +326,27 @@
         dest: /etc/crontab
         remote_src: yes
         mode: preserve
+      register: lims_idle_restore
+      ignore_errors: true
+      when: lims_idle_snapshot.stat.exists
 
     - name: Remove the crontab snapshot
       ansible.builtin.file:
         path: /etc/crontab.pre-upgrade-idle
         state: absent
+      when: lims_idle_snapshot.stat.exists and lims_idle_restore is succeeded
+
+    - name: Start us3-listen again if the idle step stopped it
+      ansible.builtin.include_role:
+        name: start-lims-services
+        tasks_from: resume.yml
+
+    - name: Refuse to continue when /etc/crontab could not be restored
+      ansible.builtin.fail:
+        msg: >-
+          /etc/crontab could not be restored from /etc/crontab.pre-upgrade-idle, so its LIMS lines are still
+          commented out; the next run restores it before anything else.
+      when: lims_idle_restore is failed
   when: uslims_upgrade_script.stat.exists
 
 - name: Note that uslims_upgrade.php was skipped (dbutils checkout predates it)
