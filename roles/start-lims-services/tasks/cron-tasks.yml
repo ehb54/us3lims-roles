@@ -59,6 +59,30 @@
     insertafter: '^#Ansible: cluster_status cronjob$'
   when: cluster_status_disabled.rc != 0
 
+## The dispatch worker's independent heartbeat check (see gridctl's
+## dispatch_heartbeat_check.php). Same deliberate-disable handling as the
+## cluster_status job above; not run under cronic, since the alert item it
+## opens, not cron mail, is the record of a stale heartbeat.
+- name: set dispatch heartbeat cronjob marker
+  lineinfile:
+    path: /etc/crontab
+    line: '#Ansible: dispatch heartbeat cronjob'
+
+- name: Check whether the dispatch heartbeat cronjob has been deliberately disabled
+  ansible.builtin.shell:
+    cmd: grep -qE '^#.*{{ (user_home ~ "/us3/lims/bin/dispatch_heartbeat_check.php") | regex_escape }}' /etc/crontab
+  register: dispatch_heartbeat_disabled
+  changed_when: false
+  failed_when: false
+
+- name: set dispatch heartbeat cronjob (skipped if deliberately disabled)
+  lineinfile:
+    path: /etc/crontab
+    regexp: '^\*/5 \* \* \* \* us3 /usr/bin/php {{ (user_home ~ "/us3/lims/bin/dispatch_heartbeat_check.php") | regex_escape }} >/dev/null 2>&1$'
+    line: '*/5 * * * * us3 /usr/bin/php {{ user_home }}/us3/lims/bin/dispatch_heartbeat_check.php >/dev/null 2>&1'
+    insertafter: '^#Ansible: dispatch heartbeat cronjob$'
+  when: dispatch_heartbeat_disabled.rc != 0
+
 - name: set update_notice cronjob marker
   lineinfile:
     path: /etc/crontab

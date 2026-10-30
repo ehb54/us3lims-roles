@@ -37,11 +37,11 @@
 #
 # CREATE,ALTER,INDEX on gfac.*: this is the account uslims_upgrade.php's
 # step 5 and gridctl's own migrations connect to gfac as (listen-config.php's
-# guser/gpasswd). Without CREATE it cannot make gfac.metascheduler_decision/
-# gfac.cluster_status_nudge, so a configured metascheduler pool makes
+# guser/gpasswd). Without CREATE it cannot make the gfac tables it owns
+# (since 4.3.0, the dispatch tables), so a configured metascheduler pool makes
 # uslims_upgrade.php --apply (run on every play) exit rc 1, and with no pool
-# neither table is ever created. ALTER/INDEX: both tables also pick up
-# additive schema changes over time (an index, a column).
+# they are never created. ALTER/INDEX: these tables also pick up additive
+# schema changes over time (an index, a column).
 - name: Grant SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX to gfac user on gfac
   mysql_user:
         name: '{{ gbl_db_user }}'
