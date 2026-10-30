@@ -14,5 +14,21 @@
     SSLCertificateFile {{ ssl_cert_path }} 
     SSLCertificateKeyFile {{ ssl_key_path }}
 {% endif %}
+{% if not lims_pre_430 | default(false) | bool %}
+
+    # Shared static assets for newinst (and any other instance), served
+    # directly rather than through a relative symlink chain back to
+    # www_common. Scoped to css/images/js only -- NOT the whole common
+    # checkout, which would also publish templates as plain text and let
+    # class/*.php be requested and run directly.
+{% for subdir in ['css', 'images', 'js'] %}
+    Alias /common/{{ subdir }} "{{ www_common }}/{{ subdir }}"
+    <Directory "{{ www_common }}/{{ subdir }}">
+      Options +FollowSymLinks
+      AllowOverride None
+      Require all granted
+    </Directory>
+{% endfor %}
+{% endif %}
   </VirtualHost>
 </IfModule>

@@ -31,7 +31,16 @@
     group: us3
     mode: 0755
 
-- name: copy cluster_config.php.template to cluser_config.php
+## An operator's cluster_config.php is where cluster/pool entries actually
+## live once a site is running -- copying the template over it on every
+## run, with no existence check at all, reverted every edit on the very
+## next ansible run.
+- name: Check whether cluster_config.php already exists
+  ansible.builtin.stat:
+    path: '{{ user_home }}/us3/lims/bin/cluster_config.php'
+  register: cluster_config_exists
+
+- name: copy cluster_config.php.template to cluster_config.php (first install only -- see the check above)
   ansible.builtin.copy:
    remote_src: yes
    src: '{{ user_home }}/us3/lims/bin/cluster_config.php.template'
@@ -39,6 +48,7 @@
    owner: us3
    group: us3
    mode: 0644
+  when: not cluster_config_exists.stat.exists
 
 - name: Change permissions in gridctl
   file:
@@ -69,23 +79,10 @@
   become: yes
   when: us3pipe.stat.exists == false
 
-- name: Include cron related tasks
-  import_tasks: cron-tasks.yml
-
-- name: Copy over us3-listen.service
-  template:
-    src: us3-listen.service.j2
-    dest: /etc/systemd/system/us3-listen.service
-
-- name: Reload systemd daemon
-  systemd:
-    daemon_reload: yes
-
-- name: Start us3-listen service
-  service:
-    name: us3-listen
-    enabled: yes
-    state: restarted
-  changed_when: false
+## Cron entries and the us3-listen service itself are started by the
+## start-lims-services role instead, much later in the play -- starting them here, before config-lims-
+## lims and install-demo-dbinst run uslims_upgrade.php, left the host not
+## idle by the time either of those checked, so the upgrade always refused.
+## See UPGRADE-AND-INSTALL-MODEL.md.
 
 

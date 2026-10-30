@@ -79,3 +79,9 @@ CREATE TABLE `queue_messages` (
 ) ENGINE=MyISAM AUTO_INCREMENT=5287341 DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
+--
+-- metascheduler_decision and cluster_status_nudge belonged to the retired
+-- job-count selector and are no longer created. The dispatch tables are
+-- created by uslims_upgrade.php's 4.3.0 migrations, which this role runs.
+--
+

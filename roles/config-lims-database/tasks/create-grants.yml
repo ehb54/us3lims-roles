@@ -34,11 +34,19 @@
         - ::1
 
 # gfac privs
-- name: Grant SELECT, INSERT, UPDATE, DELETE to gfac user on gfac
+#
+# CREATE,ALTER,INDEX on gfac.*: this is the account uslims_upgrade.php's
+# step 5 and gridctl's own migrations connect to gfac as (listen-config.php's
+# guser/gpasswd). Without CREATE it cannot make the gfac tables it owns
+# (since 4.3.0, the dispatch tables), so a configured metascheduler pool makes
+# uslims_upgrade.php --apply (run on every play) exit rc 1, and with no pool
+# they are never created. ALTER/INDEX: these tables also pick up additive
+# schema changes over time (an index, a column).
+- name: Grant SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX to gfac user on gfac
   mysql_user:
         name: '{{ gbl_db_user }}'
         host: "{{ item }}"
-        priv: "{{ gbl_db_name }}.*:SELECT,INSERT,UPDATE,DELETE/uslims3_*.*:SELECT,UPDATE/uslims3_*.*:INSERT"
+        priv: "{{ gbl_db_name }}.*:SELECT,INSERT,UPDATE,DELETE{{ '' if lims_pre_430 | default(false) | bool else ',CREATE,ALTER,INDEX' }}/uslims3_*.*:SELECT,UPDATE/uslims3_*.*:INSERT"
         append_privs: yes
         password: '{{ gbl_db_pass }}'
         login_unix_socket: /var/lib/mysql/mysql.sock

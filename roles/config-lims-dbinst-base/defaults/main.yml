@@ -1,0 +1,38 @@
+---
+dbinst_config_root: "{{ user_home | default('/home') }}/us3/lims/etc/config"
+
+## The full key set and types are fixed by us3_dbinst_config_base_types() in
+## dbinst's lib/dbinst_config_loader.php -- adding, renaming or dropping a
+## key here needs a new versioned base (dbinst-base.v2.php), not an edit to
+## this one. Values mirror the vars this role already uses elsewhere so the
+## base agrees with whatever newinst/webinfo render for the same site.
+dbinst_base_values:
+  org_name: "{{ org_name }}"
+  site_author: "{{ site_author }}"
+  site_keywords: 'ultrascan analytical ultracentrifugation lims'
+  site_desc: 'Website for the UltraScan3 LIMS portal'
+  globaldbuser: "{{ gbl_db_user }}"
+  globaldbname: "{{ gbl_db_name }}"
+  globaldbhost: "{{ gbl_db_host }}"
+  ipaddr: "{{ ipaddr_ext }}"
+  ipa_ext: "{{ ipaddr_ext }}"
+  udpport: 12233
+  top_image: '#'
+  top_banner: 'images/#'
+  submit_dir: "{{ submit_dir }}"
+  class_dir: "{{ class_dir_p }}"
+  common_dir: "{{ www_base | default('/srv/www/htdocs') }}/common/"
+  disclaimer_file: ''
+  timezone: "{{ time_zone }}"
+  dbinst_root: "{{ www_base | default('/srv/www/htdocs') }}/uslims3/"
+  ## Per-site GMP/PAM enablement is a separate, not-yet-built role; until
+  ## then a site declares it through lims_enable_gmp/lims_enable_pam
+  ## (both default off, matching a fresh instance's own overlay). This
+  ## base is rendered once, on first install under this role -- an
+  ## existing GMP site upgrading to it needs its real setting at that
+  ## first render, not a hardcoded false every new --base-overlay
+  ## instance would otherwise silently inherit until someone remembers
+  ## to hand-edit the already-deployed base.
+  enable_GMP: "{{ lims_enable_gmp | default(false) | bool }}"
+  enable_PAM: "{{ lims_enable_pam | default(false) | bool }}"
+  trust_proxy_https_header: false

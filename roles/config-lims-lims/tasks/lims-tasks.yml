@@ -6,15 +6,22 @@
     update_cache: yes
 
 - set_fact:
-    common_branch: "{{ branch }}"
+    common_branch: "{{ site_release | default(branch) }}"
   when: common_branch is undefined
 
 - set_fact:
-    webinfo_branch: "{{ branch }}"
+    webinfo_branch: "{{ site_release | default(branch) }}"
   when: webinfo_branch is undefined
 
 - name: Add common directory to git safe directories
   command: git config --global --add safe.directory {{ www_common }}
+
+- include_role:
+    name: release-gate
+  vars:
+    release_gate_dest: "{{ www_common }}"
+    release_gate_label: "us3lims_common"
+    release_gate_branch: "{{ common_branch }}"
 
 # Common dir.
 - name: Clone commons repo
@@ -25,7 +32,21 @@
    force: yes
   changed_when: false
 
-- name: copy global_config.php.template to global_config.php
+## uslims_upgrade.php stamps a "## BEGIN uslims_upgrade.php settings" banner
+## into global_config.php when it writes cluster/sizing/breaker settings
+## there, and says so in the banner itself: "rerun the script rather than
+## editing by hand". config-lims-mpi-runtime's task below also writes
+## detected ppbj/env_script_lines into this file on a fresh install's first
+## run, without any banner. Copying the template on a later run would
+## overwrite either with the defaults, so the copy runs only when this run
+## creates the file, using the same global_config_existed_already fact the
+## MPI task below uses, not a grep for one owner's marker.
+- name: Check whether global_config.php exists yet (fresh install vs. an existing host)
+  ansible.builtin.stat:
+    path: "{{ www_common }}/global_config.php"
+  register: global_config_existed_already
+
+- name: copy global_config.php.template to global_config.php (first install only -- see the check above)
   ansible.builtin.copy:
    remote_src: yes
    src: "{{ www_common }}/global_config.php.template"
@@ -33,20 +54,41 @@
    owner: us3
    group: us3
    mode: 0644
+  when: not global_config_existed_already.stat.exists
 
-# Install {{ us_airavata_bridge_url }}
+## config-lims-mpi-runtime moved to its own entry in the top-level
+## playbook, after build-mpich/build-us-mpi: it shells out to mpirun/us_mpi_analysis, neither
+## of which exist yet at this point in the play -- this role runs before
+## the roles that build them, so its own assert always failed on a fresh
+## build. $global_config_existed_already, registered above, is a host fact
+## and still readable from that later role in the same play. See
+## UPGRADE-AND-INSTALL-MODEL.md.
 
-- name: Add common directory to git safe directories
+## A fresh pre-4.3.0 install has no other submission path: 4.3.0
+## replaced the Airavata/GFAC bridge with direct Slurm submission
+## (UPGRADE-AND-INSTALL-MODEL.md), so this clone was dropped as dead
+## weight for every release this playbook actually targets -- but any
+## numeric release before 4.3.0 (4.2.x, and any earlier minor) still
+## runs pre-4.3.0 code, which still submits through this bridge and has
+## nothing else to use. Without it: web submission 500s, manage/submit/
+## esign down. Keyed on site_release_version (the VERSION the ref
+## carries), never on the ref name, which can be any label.
+## Not gated on file pre-existence like global_config.php/
+## listen-config.php above, since there is nothing here to preserve an
+## operator's own edit to -- this is a plain repo checkout, kept in
+## sync like webinfo's or common's own clone just above.
+- name: Add common directory to git safe directories (pre-4.3.0 installs only -- see the Airavata/GFAC note above)
   command: git config --global --add safe.directory {{ us_airavata_bridge_path }}
+  when: site_release_version is defined and (site_release_version | string) is version('4.3.0', '<')
 
-- name: Clone airavata repo
+- name: Clone airavata repo (pre-4.3.0 installs only -- see the Airavata/GFAC note above)
   git:
    repo: "{{ us_airavata_bridge_url }}"
    dest: "{{ us_airavata_bridge_path }}"
    version: "{{ us_airavata_bridge_branch }}"
    force: yes
-   
   changed_when: false
+  when: site_release_version is defined and (site_release_version | string) is version('4.3.0', '<')
 
 ## do we need this? - not any more
 #- name: Run update_local.sh
@@ -64,25 +106,51 @@
 - name: Add common directory to git safe directories
   command: git config --global --add safe.directory {{ www_uslims }}
 
+- include_role:
+    name: release-gate
+  vars:
+    release_gate_dest: "{{ www_uslims }}"
+    release_gate_label: "us3lims_webinfo"
+    release_gate_branch: "{{ webinfo_branch }}"
+
 - name: clone webinfo repo
   git:
    repo: "{{ webinfo_url }}"
    dest: "{{ www_uslims }}"
    version: "{{ webinfo_branch }}"
 
+## backup: yes has no way to redirect
+## where it writes (ansible.builtin.template's own option is a bare
+## boolean) -- it always drops the timestamped copy right next to the
+## file, which here is inside webinfo's own git checkout. Git already
+## tracks every actual repo file's history; a backup ansible itself wrote
+## is just an ever-accumulating untracked file in a tree uslims_git_info.php
+## otherwise manages cleanly. config.php itself is template-generated, not
+## a file an operator hand-edits in place, so there is nothing here worth
+## keeping a side-copy of anyway.
 - name: Template webinfo config
   template:
     src: "webinfo-config.php.j2"
     dest: "{{ www_uslims }}/config.php"
-    backup: yes
+
+- include_role:
+    name: config-lims-dbinst-base
+  when: not lims_pre_430 | default(false) | bool
 
 - set_fact:
-    newinst_branch: "{{ branch }}"
+    newinst_branch: "{{ site_release | default(branch) }}"
   when: newinst_branch is undefined
 
 # Newlims dir.
 - name: Add common directory to git safe directories
   command: git config --global --add safe.directory {{ www_newlims }}
+
+- include_role:
+    name: release-gate
+  vars:
+    release_gate_dest: "{{ www_newlims }}"
+    release_gate_label: "us3lims_newinst"
+    release_gate_branch: "{{ newinst_branch }}"
 
 - name: Clone newinst repo
   git:
@@ -90,11 +158,13 @@
     version: "{{ newinst_branch }}"
     dest: "{{ www_newlims }}"
 
+## Same reasoning as webinfo's own config
+## template just above -- the backup would land inside newinst's git
+## checkout, which git already tracks the real history of.
 - name: Template newinst config
   template:
     src: "newinst-config.php.j2"
     dest: "{{ www_newlims }}/config.php"
-    backup: yes
 
 - name: Install cluster_config.php local submit only
   copy:
@@ -139,3 +209,147 @@
     recurse: yes
     state: directory
   changed_when: false
+
+## Runs uslims_upgrade.php itself rather than reimplementing any of its
+## steps here, so a fresh build converges through the exact same logic an
+## existing host's upgrade does -- including the circuit-breaker, ssh-
+## control and elog directories, and the Report-Only CSP install (step 7,
+## idempotent: once installed, every later run reports it and changes
+## nothing). This used to say "the CSP install above" --
+## stale ever since config-lims-apache's own, separately-scoped CSP copy
+## task was removed in favor of this one, the sole installer now; there
+## is no CSP task left anywhere above this one in this role to point at.
+## --accept-host-keys is deliberately not passed:
+## trusting a freshly scanned host key is a decision this run should not
+## make unattended, same reasoning as the script's own comment on it. A
+## default template install never needs it (its only active cluster entry
+## is 'localhost' => true), and a site with real remote clusters configured
+## sets those up through step 4's own confirm() prompts by hand.
+##
+## This task itself runs on
+## BOTH a fresh install and an upgrade, deliberately -- it is not only a
+## one-time migration (which a fresh host would have nothing to migrate
+## for), it is also the one place that provisions the breaker/ssh-control/
+## elog directories and the CSP policy every host needs, migrated or not.
+## Skipping it on a fresh host would skip that provisioning too. The two
+## real problems were ordering and a missing script: (1) the host staying
+## idle through THIS run's own first call, which start-lims-services
+## (moved to the end of the play) guarantees regardless of fresh/upgraded;
+## (2) an older dbutils checkout (a 4.2.0 host pinned to an old branch for
+## compatibility testing) not having this script at all -- checked here,
+## so the play continues with a clear note instead of failing outright on
+## "Could not open input file".
+##
+## (1) above only ever covered one
+## play's first call -- it is also start-lims-services that starts
+## us3-listen and writes the LIMS cron entries, and that state carries
+## into the NEXT run untouched, since nothing before this point in a later
+## run ever stops them again. So every re-run on an already-converged host
+## hit the exact same "not idle" refusal moving start-lims-services
+## solved only for a play's own first run. This play now re-idles itself
+## immediately before the call, rather than assuming a prior run left the
+## host in a state this one can still rely on. See
+## UPGRADE-AND-INSTALL-MODEL.md.
+- name: Check whether uslims_upgrade.php exists (an older dbutils checkout, e.g. a 4.2.0-pinned host, may not have it)
+  ansible.builtin.stat:
+    path: "{{ user_home }}/us3/lims/database/utils/uslims_upgrade.php"
+  register: uslims_upgrade_script
+
+## Stopping the daemon
+## alone is not enough -- uslims_upgrade.php's idle check separately
+## refuses on any UNCOMMENTED crontab line matching its own LIMS-job
+## pattern (live_lims_crontabs(), uslims_upgrade.php), and start-lims-
+## services' cron-tasks.yml (cluster_status, update_notice) and config-
+## lims-backup/config-aucsol-backup (the nightly backup job) all write
+## exactly such lines, active, on every prior run. A plain comment-out/
+## uncomment-after pair here would misfire against cron-tasks.yml's own
+## "deliberately disabled" detection -- a line this task left commented
+## would be indistinguishable from one an operator deliberately disabled,
+## so a later run would never re-enable it. Snapshotting the whole file
+## and restoring it verbatim afterward (not a pattern-based restore)
+## sidesteps that ambiguity entirely: nothing here needs to know, or
+## guess, which lines it is safe to turn back on.
+## The snapshot and the idling sit inside the block, so any failure from the first change on
+## still restores the crontab and starts us3-listen again.
+- block:
+    - name: Snapshot /etc/crontab before idling it for uslims_upgrade.php
+      ansible.builtin.copy:
+        src: /etc/crontab
+        dest: /etc/crontab.pre-upgrade-idle
+        remote_src: yes
+        mode: preserve
+
+    - name: Comment out any active LIMS cron entry in /etc/crontab before uslims_upgrade.php (restored verbatim in 'always', regardless of outcome)
+      ansible.builtin.replace:
+        path: /etc/crontab
+        regexp: '^(?!\s*#)(.*\b(?:gridctl(?:_pro|_dev)?\.php|cluster_status\.php|update_notice\.php|listen\.php|jobmonitor\.php|uslims_daily_backup\.php|uslims_daily_rsync\.php|save-jobstats\.sh)\b.*)$'
+        replace: '#\1'
+
+    - name: Idle the host for uslims_upgrade.php
+      ansible.builtin.include_role:
+        name: start-lims-services
+        tasks_from: idle.yml
+
+    - name: Converge the host through uslims_upgrade.php (breaker/ssh-control/elog directories, managed config blocks, CSP)
+      ansible.builtin.command:
+        chdir: "{{ user_home }}/us3/lims/database/utils"
+        cmd: "php uslims_upgrade.php --apply --yes --www {{ www_base }}"
+      register: uslims_upgrade_result
+      changed_when: uslims_upgrade_result.rc == 0 and 'Nothing to change' not in uslims_upgrade_result.stdout
+      ## A refusal because the host is STILL not idle after the idle step
+      ## just above means something outside this play's control is using
+      ## it (a manually-started daemon, a job genuinely in flight) --
+      ## noted below, not a reason to fail the whole play; every other
+      ## non-zero exit is a real problem and still fails it. error_exit()
+      ## (utility.php) writes that message to the real PHP STDERR stream,
+      ## not stdout -- checked against .stdout, this phrase is never found
+      ## there at all, so the tolerance below never actually fired; every
+      ## "not idle" refusal hard-failed the play instead.
+      failed_when: uslims_upgrade_result.rc != 0 and 'the host is not idle' not in uslims_upgrade_result.stderr
+      when: not lims_host_busy | default(false) | bool
+
+    - name: Note that uslims_upgrade.php refused because the host is genuinely busy (outside this play's control)
+      ansible.builtin.debug:
+        msg: "uslims_upgrade.php found the host still not idle after stopping this role's own services -- something else is using it; rerun once it is clear."
+      when: not lims_host_busy | default(false) | bool and uslims_upgrade_result.rc != 0 and 'the host is not idle' in uslims_upgrade_result.stderr
+  ## The crontab first and us3-listen second, each attempted whatever the other does; the
+  ## snapshot is kept unless it was restored, for the next run's leftover check.
+  always:
+    - name: Look for the crontab snapshot
+      ansible.builtin.stat:
+        path: /etc/crontab.pre-upgrade-idle
+      register: lims_idle_snapshot
+
+    - name: Restore /etc/crontab exactly as it was before idling it for uslims_upgrade.php
+      ansible.builtin.copy:
+        src: /etc/crontab.pre-upgrade-idle
+        dest: /etc/crontab
+        remote_src: yes
+        mode: preserve
+      register: lims_idle_restore
+      ignore_errors: true
+      when: lims_idle_snapshot.stat.exists
+
+    - name: Remove the crontab snapshot
+      ansible.builtin.file:
+        path: /etc/crontab.pre-upgrade-idle
+        state: absent
+      when: lims_idle_snapshot.stat.exists and lims_idle_restore is succeeded
+
+    - name: Start us3-listen again if the idle step stopped it
+      ansible.builtin.include_role:
+        name: start-lims-services
+        tasks_from: resume.yml
+
+    - name: Refuse to continue when /etc/crontab could not be restored
+      ansible.builtin.fail:
+        msg: >-
+          /etc/crontab could not be restored from /etc/crontab.pre-upgrade-idle, so its LIMS lines are still
+          commented out; the next run restores it before anything else.
+      when: lims_idle_restore is failed
+  when: uslims_upgrade_script.stat.exists
+
+- name: Note that uslims_upgrade.php was skipped (dbutils checkout predates it)
+  ansible.builtin.debug:
+    msg: "{{ user_home }}/us3/lims/database/utils has no uslims_upgrade.php -- skipping the host convergence step; pin utils_branch/site_release to 4.3.0 or newer to run it."
+  when: not uslims_upgrade_script.stat.exists

@@ -1,0 +1,8 @@
+---
+# Starts us3-listen again after a uslims_upgrade.php call, when idle.yml stopped it. Called from
+# the caller's always block, so a failed call does not leave the daemons down.
+- name: Start us3-listen again
+  ansible.builtin.service:
+    name: us3-listen
+    state: started
+  when: lims_idle_stopped_listen | default(false) | bool

@@ -1,0 +1,107 @@
+---
+# https://habilis.net/cronic/
+- name: Copy over cronic script
+  copy:
+    src: cronic
+    dest: /usr/bin/cronic
+    mode: '0755'
+    owner: root
+    group: root
+
+# the cron module refuses cron_file: /etc/crontab, so write the lines it used to put there:
+# MAILTO at the top, and each job under its "#Ansible: <name>" marker
+- name: Set Cron Admin
+  lineinfile:
+    path: /etc/crontab
+    regexp: '^MAILTO='
+    line: 'MAILTO="{{ cron_admin }}"'
+    insertbefore: BOF
+
+# - deprecated
+#- name: Set gridctl_pro cronjob
+#  cron:
+#    name: gridctl_pro cronjob
+#    minute: "*/1"
+#    job: /usr/bin/cronic php {{ user_home }}/us3/lims/bin/gridctl_pro.php
+#    user: us3
+#    cron_file: /etc/crontab
+#  when: cron_enable_pro == 'yes'
+
+- name: set cluster_status cronjob marker
+  lineinfile:
+    path: /etc/crontab
+    line: '#Ansible: cluster_status cronjob'
+
+## Anchoring the regexp (above) stopped it from
+## matching a commented-out line as if it were already active -- but
+## lineinfile's insertafter still inserts a brand-new, active copy of the
+## line whenever its own regexp finds no match anywhere in the file, which
+## is always true once the line is commented out. So anchoring alone
+## changed HOW the job got re-enabled (a fresh duplicate line next to the
+## commented one, instead of uncommenting it in place) without changing
+## THAT it got re-enabled -- confirmed directly: a commented job followed
+## by a re-run left both the commented line and a freshly inserted active
+## one. The actual fix has to detect a deliberately-commented line and
+## skip the lineinfile task entirely in that case, not just avoid matching
+## it as already-active.
+- name: Check whether the cluster_status cronjob has been deliberately disabled
+  ansible.builtin.shell:
+    cmd: grep -qE '^#.*{{ (user_home ~ "/us3/lims/bin/cluster_status.php") | regex_escape }}$' /etc/crontab
+  register: cluster_status_disabled
+  changed_when: false
+  failed_when: false
+
+- name: set cluster_status cronjob (skipped if deliberately disabled -- see the check above)
+  lineinfile:
+    path: /etc/crontab
+    regexp: '^\*/12 \* \* \* \* us3 /usr/bin/cronic php {{ (user_home ~ "/us3/lims/bin/cluster_status.php") | regex_escape }}$'
+    line: '*/12 * * * * us3 /usr/bin/cronic php {{ user_home }}/us3/lims/bin/cluster_status.php'
+    insertafter: '^#Ansible: cluster_status cronjob$'
+  when: cluster_status_disabled.rc != 0
+
+## The dispatch worker's independent heartbeat check (see gridctl's
+## dispatch_heartbeat_check.php). Same deliberate-disable handling as the
+## cluster_status job above; not run under cronic, since the alert item it
+## opens, not cron mail, is the record of a stale heartbeat.
+- name: set dispatch heartbeat cronjob marker
+  lineinfile:
+    path: /etc/crontab
+    line: '#Ansible: dispatch heartbeat cronjob'
+
+- name: Check whether the dispatch heartbeat cronjob has been deliberately disabled
+  ansible.builtin.shell:
+    cmd: grep -qE '^#.*{{ (user_home ~ "/us3/lims/bin/dispatch_heartbeat_check.php") | regex_escape }}' /etc/crontab
+  register: dispatch_heartbeat_disabled
+  changed_when: false
+  failed_when: false
+
+- name: set dispatch heartbeat cronjob (skipped if deliberately disabled)
+  lineinfile:
+    path: /etc/crontab
+    regexp: '^\*/5 \* \* \* \* us3 /usr/bin/php {{ (user_home ~ "/us3/lims/bin/dispatch_heartbeat_check.php") | regex_escape }} >/dev/null 2>&1$'
+    line: '*/5 * * * * us3 /usr/bin/php {{ user_home }}/us3/lims/bin/dispatch_heartbeat_check.php >/dev/null 2>&1'
+    insertafter: '^#Ansible: dispatch heartbeat cronjob$'
+  when: dispatch_heartbeat_disabled.rc != 0
+
+- name: set update_notice cronjob marker
+  lineinfile:
+    path: /etc/crontab
+    line: '#Ansible: update_notice cronjob'
+  when: cron_enable_update_notice == 'yes'
+
+## Same reasoning as the cluster_status job above.
+- name: Check whether the update_notice cronjob has been deliberately disabled
+  ansible.builtin.shell:
+    cmd: grep -qE '^#.*{{ (user_home ~ "/us3/lims/bin/update_notice.php") | regex_escape }}$' /etc/crontab
+  register: update_notice_disabled
+  changed_when: false
+  failed_when: false
+  when: cron_enable_update_notice == 'yes'
+
+- name: set update_notice cronjob (skipped if deliberately disabled -- see the check above)
+  lineinfile:
+    path: /etc/crontab
+    regexp: '^\*/20 \* \* \* \* us3 /usr/bin/cronic php {{ (user_home ~ "/us3/lims/bin/update_notice.php") | regex_escape }}$'
+    line: '*/20 * * * * us3 /usr/bin/cronic php {{ user_home }}/us3/lims/bin/update_notice.php'
+    insertafter: '^#Ansible: update_notice cronjob$'
+  when: cron_enable_update_notice == 'yes' and update_notice_disabled.rc != 0

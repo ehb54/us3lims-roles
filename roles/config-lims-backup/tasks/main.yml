@@ -4,8 +4,48 @@
     user_home: "/home"
   when: user_home is undefined
 
-- name: Check if db_config setup
-  stat: 
+## Previously only install-demo-dbinst (an optional, demo-only role) ever
+## rendered this file; a production host without it got no backups,
+## rsyncs or domain-update notices at all, and this role's own next check
+## failed outright demanding a file nothing in the production play created.
+- name: Check if db_config.php already exists
+  stat:
+    path: "{{ user_home }}/us3/lims/database/utils/db_config.php"
+  register: db_config_details
+
+- name: copy db_config.php.template to db_config.php (first install only -- see the check above)
+  ansible.builtin.copy:
+    remote_src: yes
+    src: "{{ user_home }}/us3/lims/database/utils/db_config.php.template"
+    dest: "{{ user_home }}/us3/lims/database/utils/db_config.php"
+    owner: us3
+    group: us3
+    mode: '0600'
+  when: not db_config_details.stat.exists
+
+- name: Set db_config.php's site-specific values (first install only)
+  ansible.builtin.replace:
+    path: "{{ user_home }}/us3/lims/database/utils/db_config.php"
+    regexp: "{{ item.regexp }}"
+    replace: "{{ item.replace }}"
+  loop:
+    - { regexp: 'SET_HOSTNAME', replace: "{{ hostname }}" }
+    - { regexp: 'SET_HOST', replace: "localhost" }
+    - { regexp: 'SET_USER', replace: "root" }
+    - { regexp: 'SET_PASSWORD', replace: "{{ root_db_pass }}" }
+    - { regexp: 'SET_EMAIL', replace: "{{ admin_email }}" }
+    - { regexp: 'SET-us3_branch', replace: "{{ us3_branch | default(branch) }}" }
+    - { regexp: 'SET-sql_branch', replace: "{{ sql_branch | default(branch) }}" }
+    - { regexp: 'SET-dbinst_branch', replace: "{{ dbinst_branch | default(branch) }}" }
+    - { regexp: 'SET-gridctl_branch', replace: "{{ gridctl_branch | default(branch) }}" }
+    - { regexp: 'SET-common_branch', replace: "{{ common_branch | default(branch) }}" }
+    - { regexp: 'SET-webinfo_branch', replace: "{{ webinfo_branch | default(branch) }}" }
+    - { regexp: 'SET-newinst_branch', replace: "{{ newinst_branch | default(branch) }}" }
+    - { regexp: 'SET-utils_branch', replace: "{{ utils_branch | default(branch) }}" }
+  when: not db_config_details.stat.exists
+
+- name: Check if db_config.php is now in place
+  stat:
     path: "{{ user_home }}/us3/lims/database/utils/db_config.php"
   register: db_config_details
   failed_when: not db_config_details.stat.exists
@@ -36,9 +76,43 @@
     path: /etc/crontab
     line: "# Ansible: daily backup"
 
-- name: install in cronic
+## Anchoring
+## alone (matching cron-tasks.yml's cluster_status/update_notice jobs)
+## isn't enough: lineinfile's insertafter still inserts a fresh, active
+## copy of the line whenever its own regexp finds no match, which is
+## always true once the line is commented out -- so a disabled job came
+## back as a duplicate active line next to the commented one, not by
+## uncommenting it. The real fix detects a deliberately-commented line and
+## skips the task entirely.
+- name: Check whether the daily backup cronjob has been deliberately disabled
+  ansible.builtin.shell:
+    cmd: grep -qE '^#.*{{ (user_home ~ "/us3/lims/database/utils/uslims_daily_backup.php") | regex_escape }}$' /etc/crontab
+  register: daily_backup_disabled
+  changed_when: false
+  failed_when: false
+
+## The lineinfile below used to match only its own hardcoded time
+## ("10 0 * * *"). A site that changed the backup time by hand still runs
+## the identical command, just on a different schedule -- the regexp
+## never matched that line, so lineinfile did what it always does when
+## nothing matches: inserted a second, active line at the role's own
+## default time, leaving two nightly backups running. Detected by command
+## alone (any schedule), the same "match by identity, not by value"
+## principle the deliberately-disabled check above already uses -- if a
+## line for this command exists at all, whatever time it runs at is left
+## alone, and only a host with no line for it yet gets the default-timed
+## one inserted.
+- name: Check whether the daily backup cronjob already has an active line, at any time
+  ansible.builtin.shell:
+    cmd: grep -qE '^[0-9*/,-]+ [0-9*/,-]+ [0-9*/,-]+ [0-9*/,-]+ [0-9*/,-]+ root /usr/bin/cronic php {{ (user_home ~ "/us3/lims/database/utils/uslims_daily_backup.php") | regex_escape }}$' /etc/crontab
+  register: daily_backup_present
+  changed_when: false
+  failed_when: false
+
+- name: install in cronic (skipped if deliberately disabled, or already present at a site-chosen time -- see the checks above)
   ansible.builtin.lineinfile:
     path: /etc/crontab
-    regexp: '/uslims_daily_backup\.php$'
+    regexp: '^10 0 \* \* \* root /usr/bin/cronic php {{ (user_home ~ "/us3/lims/database/utils/uslims_daily_backup.php") | regex_escape }}$'
     line: "10 0 * * * root /usr/bin/cronic php {{ user_home }}/us3/lims/database/utils/uslims_daily_backup.php"
     insertafter: '^# Ansible: daily backup$'
+  when: daily_backup_disabled.rc != 0 and daily_backup_present.rc != 0

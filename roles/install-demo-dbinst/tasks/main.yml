@@ -73,16 +73,10 @@
     path: "{{ user_home }}/us3/lims/database/utils/db_config.php"
     regexp: "SET-{{ item }}"
     replace: "{{ lookup('vars', '{{ item }}' ) }}"
-  loop:
-    - us3_branch
-    - sql_branch
-    - dbinst_branch
-    - gridctl_branch
-    - common_branch
-    - newinst_branch
-    - webinfo_branch
-    - airavata_branch
-    - utils_branch
+  loop: >-
+    {{ ['us3_branch', 'sql_branch', 'dbinst_branch', 'gridctl_branch', 'common_branch',
+        'newinst_branch', 'webinfo_branch', 'utils_branch']
+       + (['airavata_branch'] if lims_pre_430 | default(false) | bool else []) }}
 
 - name: import data in case of failure notice
   ansible.builtin.debug:
@@ -117,5 +111,108 @@
     chdir: "{{ user_home }}/us3/lims/bin"
     cmd: "php set_cluster_authorizations.php uslims3_Demo updatepeople"
   when: NO_LIMS is undefined or NO_LIMS == false or NO_LIMS == ''
+
+## The imported dump's people_audit rows predate the UTC migration, and
+## nothing records a per-instance UTC boundary for uslims3_Demo on its
+## own: this role's import goes straight through stage3_import_databases.php,
+## never through uslims_upgrade.php step 0 where that boundary is normally
+## recorded for every discovered instance. Without one,
+## migrate_people_audit_utc.php's own --apply refuses outright ("no UTC
+## boundary is recorded for this instance") rather than guess whether every
+## row needs converting -- running the full upgrade here, the same remedy
+## its own refusal message names, is what lets it record one and then
+## migrate through step 9, exactly as it would for any other instance on
+## this host.
+## Same as config-lims-lims's
+## own call to this script: checked for existence first, so a host
+## pinned to a pre-4.3.0 utils_branch for compatibility testing skips this
+## with a clear note instead of failing the play on "Could not open input
+## file". See UPGRADE-AND-INSTALL-MODEL.md.
+- name: Check whether uslims_upgrade.php exists (an older dbutils checkout, e.g. a 4.2.0-pinned host, may not have it)
+  ansible.builtin.stat:
+    path: "{{ user_home }}/us3/lims/database/utils/uslims_upgrade.php"
+  register: demo_uslims_upgrade_script
+  when: NO_LIMS is undefined or NO_LIMS == false or NO_LIMS == ''
+
+## config-lims-lims starts us3-listen again after its own call and restores the crontab, so this
+## call idles the host again. The crontab is snapshotted and restored whole, not by pattern: see
+## config-lims-lims's task.
+- block:
+    - name: Snapshot /etc/crontab before idling it for this call to uslims_upgrade.php
+      ansible.builtin.copy:
+        src: /etc/crontab
+        dest: /etc/crontab.pre-upgrade-idle-demo
+        remote_src: yes
+        mode: preserve
+
+    - name: Comment out any active LIMS cron entry in /etc/crontab before this call (restored verbatim in 'always', regardless of outcome)
+      ansible.builtin.replace:
+        path: /etc/crontab
+        regexp: '^(?!\s*#)(.*\b(?:gridctl(?:_pro|_dev)?\.php|cluster_status\.php|update_notice\.php|listen\.php|jobmonitor\.php|uslims_daily_backup\.php|uslims_daily_rsync\.php|save-jobstats\.sh)\b.*)$'
+        replace: '#\1'
+
+    - name: Idle the host for this call to uslims_upgrade.php
+      ansible.builtin.include_role:
+        name: start-lims-services
+        tasks_from: idle.yml
+
+    - name: Run uslims_upgrade.php so uslims3_Demo gets a UTC boundary and its people_audit migration
+      ansible.builtin.command:
+        chdir: "{{ user_home }}/us3/lims/database/utils"
+        cmd: "php uslims_upgrade.php --apply --yes --www {{ www_base }}"
+      register: demo_uslims_upgrade_result
+      changed_when: demo_uslims_upgrade_result.rc == 0 and 'Nothing to change' not in demo_uslims_upgrade_result.stdout
+      ## error_exit() (utility.php) writes "the host is not idle" to the
+      ## real PHP STDERR stream, not stdout -- checked against .stdout,
+      ## this phrase is never found there, so the tolerance below never
+      ## actually fired; every "not idle" refusal hard-failed the play.
+      failed_when: demo_uslims_upgrade_result.rc != 0 and 'the host is not idle' not in demo_uslims_upgrade_result.stderr
+      when: not lims_host_busy | default(false) | bool
+
+    - name: Note that uslims_upgrade.php refused because the host is genuinely busy (outside this play's control)
+      ansible.builtin.debug:
+        msg: "uslims_upgrade.php found the host still not idle; something outside this play is using it -- rerun once it is clear."
+      when: not lims_host_busy | default(false) | bool and demo_uslims_upgrade_result.rc != 0 and 'the host is not idle' in demo_uslims_upgrade_result.stderr
+  ## The crontab first and us3-listen second, each attempted whatever the other does; the
+  ## snapshot is kept unless it was restored, for the next run's leftover check.
+  always:
+    - name: Look for the crontab snapshot
+      ansible.builtin.stat:
+        path: /etc/crontab.pre-upgrade-idle-demo
+      register: lims_idle_snapshot
+
+    - name: Restore /etc/crontab exactly as it was before idling it for this call
+      ansible.builtin.copy:
+        src: /etc/crontab.pre-upgrade-idle-demo
+        dest: /etc/crontab
+        remote_src: yes
+        mode: preserve
+      register: lims_idle_restore
+      ignore_errors: true
+      when: lims_idle_snapshot.stat.exists
+
+    - name: Remove the crontab snapshot
+      ansible.builtin.file:
+        path: /etc/crontab.pre-upgrade-idle-demo
+        state: absent
+      when: lims_idle_snapshot.stat.exists and lims_idle_restore is succeeded
+
+    - name: Start us3-listen again if the idle step stopped it
+      ansible.builtin.include_role:
+        name: start-lims-services
+        tasks_from: resume.yml
+
+    - name: Refuse to continue when /etc/crontab could not be restored
+      ansible.builtin.fail:
+        msg: >-
+          /etc/crontab could not be restored from /etc/crontab.pre-upgrade-idle-demo, so its LIMS lines are still
+          commented out; the next run restores it before anything else.
+      when: lims_idle_restore is failed
+  when: (NO_LIMS is undefined or NO_LIMS == false or NO_LIMS == '') and demo_uslims_upgrade_script.stat.exists
+
+- name: Note that uslims_upgrade.php was skipped (dbutils checkout predates it)
+  ansible.builtin.debug:
+    msg: "{{ user_home }}/us3/lims/database/utils has no uslims_upgrade.php -- skipping uslims3_Demo's UTC boundary/migration step; pin utils_branch/site_release to 4.3.0 or newer to run it."
+  when: (NO_LIMS is undefined or NO_LIMS == false or NO_LIMS == '') and not demo_uslims_upgrade_script.stat.exists
 
 

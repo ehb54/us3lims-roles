@@ -168,8 +168,32 @@
           login_user: root
           login_password: "{{ root_db_pass }}"
 
+## root_pwd_check (mysqladmin -u root status, with no explicit -p) is only
+## ever meant to answer "does root have no password yet", so the initial
+## password-set task above can tell a genuinely fresh host apart from one
+## already provisioned. It does NOT reliably answer that once a root
+## ~/.my.cnf exists: mysqladmin then authenticates from the cached
+## credentials and reports rc==0 regardless of whether a password is
+## already set, on every single run from then on. create-database.yml's
+## imports used to gate on this same rc, so a re-run against an already-
+## provisioned host with a root ~/.my.cnf re-ran every DROP TABLE IF
+## EXISTS ... CREATE TABLE ... import in this role, including gfac-db.sql
+## and newus3's people/metadata tables, silently emptying live data.
+## Whether newus3.people already exists is checked directly instead, and
+## is what every import task below is actually gated on.
+- name: Check whether newus3 has already been populated (first install vs. a re-run)
+  ansible.builtin.shell:
+    cmd: >-
+      mysql -N -B -u root -p'{{ root_db_pass }}' -e
+      "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='newus3' AND table_name='people'"
+  register: newus3_already_populated
+  changed_when: false
+  failed_when: false
+
 - name: Create databases and tables
   import_tasks: create-database.yml
+  vars:
+    first_install: "{{ (newus3_already_populated.stdout | default('0')) | trim == '0' }}"
 
 - name: Create db grants
   import_tasks: create-grants.yml

@@ -1,0 +1,17 @@
+---
+lims_local_cluster: us3iab-node0
+lims_mpi_manifest: /etc/ultrascan/mpi-runtime.json
+lims_mpi_candidates:
+  - implementation: mpich
+    mpi_module: "mpi/mpich-{{ ansible_architecture }}"
+    analysis_module: ultrascan/mpi
+    library_prefix: /usr/lib64/mpich/
+  - implementation: openmpi
+    mpi_module: "mpi/openmpi-{{ ansible_architecture }}"
+    analysis_module: ultrascan/mpi
+    library_prefix: /usr/lib64/openmpi/
+lims_modules_init: /etc/profile.d/modules.sh
+lims_mpi_environment: |
+  source {{ lims_modules_init | quote }}
+  module purge
+  module load {{ lims_selected_mpi.mpi_module | quote }} {{ lims_selected_mpi.analysis_module | quote }}

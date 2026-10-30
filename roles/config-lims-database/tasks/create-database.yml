@@ -11,6 +11,26 @@
         login_user: root
         login_password: "{{ root_db_pass }}"
 
+## account_enabled is newer than this role's own people_create.sql used to
+## be: an existing host provisioned before this column existed never gets
+## people_create.sql re-run (first_install is false for it, and that is
+## correct -- re-running it would be the DROP TABLE this role's own
+## comment above warns about), so nothing else ever adds the column there.
+## Without it, checkuser.php/activate.php's `$row["account_enabled"] != 1`
+## check reads an undefined array key as not-1 and refuses every login on
+## that host. ADD COLUMN IF NOT EXISTS is additive and backfills the
+## DEFAULT for every existing row (verified against a real MariaDB
+## 10.3.39 instance) -- it is safe to run on every single pass, first
+## install included, once people_create.sql has already created the table
+## with the column itself.
+- name: Ensure newus3.people has the account_enabled column (hosts that predate it)
+  ansible.builtin.command:
+    cmd: >-
+      mysql -u root -p'{{ root_db_pass }}' -e
+      "ALTER TABLE {{ us3_db_name }}.people ADD COLUMN IF NOT EXISTS account_enabled TINYINT(1) UNSIGNED NOT NULL DEFAULT 1"
+  changed_when: false
+  when: not first_install and not lims_pre_430 | default(false) | bool
+
 - name: Create global database
   mysql_db:
         name: "{{ gbl_db_name }}"
@@ -62,7 +82,7 @@
   copy:
         src: us3_notice.sql
         dest: /tmp
-  when: root_pwd_check.rc == 0
+  when: first_install
 
 - name: Inject tables for us3_notice
   mysql_db:
@@ -73,14 +93,14 @@
         state: import
         login_host: localhost
         target: /tmp/us3_notice.sql
-  when: root_pwd_check.rc == 0
+  when: first_install
 
 # newus3user
 - name: Copy over the metadata_create file
   copy:
         src: metadata_create.sql
         dest: /tmp
-  when: root_pwd_check.rc == 0
+  when: first_install
 
 - name: Inject metadata file for newus3
   mysql_db:
@@ -91,13 +111,13 @@
         state: import
         login_host: localhost
         target: /tmp/metadata_create.sql
-  when: root_pwd_check.rc == 0
+  when: first_install
 
 - name: Copy over the people_create tables for newus3
   copy:
         src: people_create.sql
         dest: /tmp
-  when: root_pwd_check.rc == 0
+  when: first_install
 
 - name: Inject the people_create file into newus3
   mysql_db:
@@ -107,14 +127,14 @@
         name: newus3
         state: import
         target: /tmp/people_create.sql
-  when: root_pwd_check.rc == 0
+  when: first_install
 
 # gfac
 - name: Copy over the gfac file
   copy:
         src: gfac-db.sql
         dest: /tmp
-  when: root_pwd_check.rc == 0
+  when: first_install
 
 - name: Inject gfac-db file into gfac
   mysql_db:
@@ -124,14 +144,14 @@
         name: gfac
         state: import
         target: /tmp/gfac-db.sql
-  when: root_pwd_check.rc == 0
+  when: first_install
 
   # insert default admins for newus3_db
 - name: Create a temp people sql file for dumping admins to newus3 database
   template:
           src: new_people_inject.sql.j2
           dest: /tmp/new_people_inject.sql
-  when: root_pwd_check.rc == 0
+  when: first_install
 
 - name: Inject the temp people sql file
   mysql_db:
@@ -141,20 +161,20 @@
         name: newus3
         state: import
         target: /tmp/new_people_inject.sql
-  when: root_pwd_check.rc == 0
+  when: first_install
 
 - name: Clean up tmp people sql file
   file :
         path: /tmp/new_people_inject.sql
         state: absent
-  when: root_pwd_check.rc == 0
+  when: first_install
 
 # global
 - name: Copy over the global file
   copy:
         src: global-db.sql
         dest: /tmp
-  when: root_pwd_check.rc == 0
+  when: first_install
 
 - name: Inject global-db file into uslims3_global
   mysql_db:
@@ -164,7 +184,7 @@
         name: uslims3_global
         state: import
         target: /tmp/global-db.sql
-  when: root_pwd_check.rc == 0
+  when: first_install
 
 # Ansible's mysql_db does not support a "chdir" option, so need to use the shell
 #- name: Populate us3 tables
@@ -176,7 +196,7 @@
 #        name: us3
 #        state: import
 #        target: 
-#  when: root_pwd_check.rc == 0
+#  when: first_install
 
 - name: Create us3 db
   mysql_db:
@@ -185,10 +205,10 @@
     login_password: "{{ root_db_pass }}"
     name: us3
     state: present
-  when: root_pwd_check.rc == 0
+  when: first_install
 
 - name: Populate us3 tables
   shell:
     chdir: "{{ user_home }}/us3/lims/database/sql"
     cmd: mysql -u root -p'{{ root_db_pass }}' us3 < {{ user_home }}/us3/lims/database/sql/us3.sql
-  when: root_pwd_check.rc == 0
+  when: first_install

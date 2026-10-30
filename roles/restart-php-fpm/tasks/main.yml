@@ -1,14 +1,27 @@
 ---
 # tasks file for restart-php-fpm
+#
+# state: restarted is
+# unconditional in Ansible's own service module -- it bounces the service
+# (and every live PHP-FPM worker's in-flight request, every open GMP
+# e-signature web session) on every single complete run, whether or not
+# anything this play touched would actually need it. config-lims-php and
+# config-lims-apache already notify their own "restart php-fpm"/"restart
+# apache" handlers correctly, only when a task that changed a config file
+# actually ran -- this role's own job is just to guarantee both services
+# are up and enabled by the end of the play (a genuinely idempotent
+# safety net, not a second, unconditional restart), so state: started
+# is the right primitive for that: it starts a stopped service, and
+# changes nothing on one already running.
 
-- name: restart php-fpm
+- name: ensure php-fpm is running and enabled
   service:
        name: php-fpm
        enabled: yes
-       state: restarted
+       state: started
 
-- name: restart httpd
+- name: ensure httpd is running and enabled
   service:
        name: httpd
        enabled: yes
-       state: restarted
+       state: started

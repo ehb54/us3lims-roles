@@ -28,7 +28,7 @@ ansible-galaxy install -r requirements.yml
 
 ## Using it
 
-Modifying the example-playbook.yml is a good starting ground. 
+Modifying the install-lims-server-playbook.yml is a good starting ground. 
 
 ### Some required variable definitons: 
 
@@ -51,6 +51,14 @@ Modifying the example-playbook.yml is a good starting ground.
 `ipaddr_int` - The internal IP address of the host
  
 `cron_admin` - MAILTO cron admin needs to be defined. 
+
+### Optional variables:
+
+`lims_enable_gmp` - `true` for a GMP site; sets `enable_GMP` in the dbinst base config written on first install. Default `false`.
+
+`lims_enable_pam` - `true` to enable PAM login; sets `enable_PAM` in the same base config. Default `false`.
+
+Set both in the inventory or host_vars, not in the playbook's `vars:`, which would override them.
 
 
 ### Running it: 

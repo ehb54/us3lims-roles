@@ -1,0 +1,482 @@
+---
+- hosts: example-host
+  remote_user: usadmin
+
+  pre_tasks:
+# uncomment to get all ansible_facts for target host
+#      - name: Print all available facts
+#        ansible.builtin.debug:
+#          var: ansible_facts
+
+      - name: set www_user for Debian
+        set_fact:
+          www_user: "www-data"
+        when: ansible_os_family == "Debian"
+
+      - name:  set www_user for RedHat
+        set_fact:
+          www_user: "apache"
+        when: ansible_os_family == "RedHat"
+
+      - name: disable selinux
+        selinux:
+           state: disabled
+
+      - name: update system
+        yum: name=* state=latest
+        when: ansible_facts['os_family'] == "RedHat"
+
+      - name: install EPEL repo for CentOS
+        yum: name=epel-release state=present
+        when: ansible_facts['distribution'] == "CentOS"
+
+      - name: enable codeready for RedHat
+        command:
+           cmd: subscription-manager repos --enable "codeready-builder-for-rhel-8-x86_64-rpms"
+        when: ansible_facts['distribution'] == "RedHat"
+
+      - name: enable codeready for Oracle
+        command:
+           cmd: dnf config-manager --set-enabled ol8_codeready_builder
+        when: ansible_facts['distribution'] == "OracleLinux"
+
+      - name: install EPEL repo for RedHat
+        yum:
+           name: https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm
+           state: present
+        when: ansible_facts['distribution'] == "RedHat" or ansible_os_family == "Rocky" or ansible_facts['distribution'] == "OracleLinux"
+
+      - name: set powertools / crb
+        set_fact:
+          powertools: "crb"
+        when: ansible_facts['distribution_major_version'] == '9'
+
+      - name: set powertools / crb
+        set_fact:
+          powertools: "powertools"
+        when: ansible_facts['distribution_major_version'] == '8'
+
+      - name: set user_home
+        set_fact:
+          user_home: "/home"
+        when: user_home is undefined
+
+      ## release-gate's per-checkout comparison first runs in
+      ## config-lims-us3-user, the 5th role below, so the *_branch vars are
+      ## checked against site_release here, in pre_tasks, before any role
+      ## runs. This needs no filesystem access and covers all eight branch
+      ## vars, including dbinst_branch and us3_branch, which release-gate is
+      ## not included in front of. A real checkout already on disk disagreeing
+      ## with site_release is still release-gate's own job, per repo, since that
+      ## needs the filesystem; this only catches a misconfigured *_branch
+      ## var itself, as early as the play can.
+      - name: "release-gate: refuse to continue without site_release_version"
+        ansible.builtin.fail:
+          msg: >-
+            site_release is '{{ site_release }}' but site_release_version is not set. Set it to
+            the VERSION that ref carries (e.g. 4.2.0); each checkout's VERSION file is checked
+            against it.
+        when: site_release is defined and site_release_version | default('') | string | length == 0
+
+      ## Every 4.3.0-specific task, role and template line is skipped for an older release, so a
+      ## run on a 4.2.0 host changes nothing and a 4.2.0 install gets 4.2.0's configuration.
+      - name: "Note whether this site runs a release before 4.3.0"
+        ansible.builtin.set_fact:
+          lims_pre_430: "{{ site_release_version is defined and (site_release_version | string) is version('4.3.0', '<') }}"
+
+      - name: "release-gate: refuse to continue if any branch variable disagrees with site_release"
+        ansible.builtin.fail:
+          msg: >-
+            {{ item.key }} is '{{ item.value }}', not this site's declared
+            release '{{ site_release }}'. Refusing to continue -- either
+            this repo's own branch variable needs to track site_release, or
+            site_release needs updating to match what this run actually
+            intends to pull.
+        loop: "{{ {
+            'us3_branch': us3_branch, 'sql_branch': sql_branch, 'dbinst_branch': dbinst_branch,
+            'gridctl_branch': gridctl_branch, 'common_branch': common_branch, 'newinst_branch': newinst_branch,
+            'webinfo_branch': webinfo_branch, 'utils_branch': utils_branch
+          } | dict2items }}"
+        when: item.value != site_release
+
+      ## site_release and VERSION (release-gate, above and its own task
+      ## file) only say which CODE release is declared and checked out --
+      ## neither says whether that release's own config/data migration
+      ## (uslims_upgrade.php --apply) ever actually completed on this
+      ## host. uslims_upgrade.php itself already is the one place that
+      ## knows: --check reports a FAIL for every step (idle, listen-
+      ## config, global_config, host keys, breaker/ssh-control/elog, CSP/
+      ## common-alias, submission sizing, people_audit UTC) that is not
+      ## actually satisfied, and exits non-zero only when at least one
+      ## did -- "the upgrade's state", read directly, with no new
+      ## release-to-state mapping invented. Checked here, in pre_tasks,
+      ## before any role touches a checkout -- so a drifted host is
+      ## caught before this run makes it worse by pulling it further
+      ## ahead on code while its data/config stays behind. Only when a
+      ## dbutils checkout already exists: a fresh install has nothing to
+      ## check yet, and gets none of this, same as release-gate itself.
+      - name: "Check whether uslims_upgrade.php exists yet (an older or fresh host may not have it)"
+        ansible.builtin.stat:
+          path: "{{ user_home }}/us3/lims/database/utils/uslims_upgrade.php"
+        register: uslims_upgrade_preflight_script
+        when: site_release is defined
+
+      ## NO_LIMS installs no LIMS, so there is no upgrade state to check.
+      - name: "Skip uslims_upgrade.php's preflight check under NO_LIMS"
+        ansible.builtin.set_fact:
+          uslims_upgrade_preflight_script: { stat: { exists: false } }
+        when: site_release is defined and NO_LIMS | default(false) | bool
+
+      ## A snapshot still here means a run died while the host was idled, with the
+      ## LIMS cron lines commented out; restore it before any new snapshot is taken.
+      - name: "Check for a crontab snapshot left by a run that died while the host was idled"
+        ansible.builtin.stat:
+          path: "{{ item }}"
+        loop:
+          - /etc/crontab.pre-upgrade-preflight
+          - /etc/crontab.pre-upgrade-idle
+          - /etc/crontab.pre-upgrade-idle-demo
+        register: lims_leftover_crontab
+
+      - name: "Restore /etc/crontab from the leftover snapshot"
+        ansible.builtin.copy:
+          src: "{{ item.item }}"
+          dest: /etc/crontab
+          remote_src: yes
+          mode: preserve
+        loop: "{{ lims_leftover_crontab.results | selectattr('stat.exists') | list }}"
+        loop_control:
+          label: "{{ item.item }}"
+
+      - name: "Remove the leftover crontab snapshot"
+        ansible.builtin.file:
+          path: "{{ item.item }}"
+          state: absent
+        loop: "{{ lims_leftover_crontab.results | selectattr('stat.exists') | list }}"
+        loop_control:
+          label: "{{ item.item }}"
+
+      ## uslims_upgrade.php's own idle check (step 1) refuses outright,
+      ## unconditionally, for either --check or --apply, whenever anything
+      ## LIMS-related is live -- the normal state of an in-service host
+      ## between runs. Without idling first, --check would always refuse
+      ## on business alone, telling us nothing about the actual upgrade
+      ## state. Same idle dance config-lims-lims uses before its own
+      ## --apply call: stop us3-listen through systemd (left running on a
+      ## busy host, which is refused), snapshot and restore
+      ## the whole crontab verbatim (not pattern-based), so a
+      ## deliberately-disabled line stays indistinguishable from one this
+      ## task itself commented out.
+      - block:
+          - name: "Snapshot /etc/crontab before idling it for uslims_upgrade.php's preflight check"
+            ansible.builtin.copy:
+              src: /etc/crontab
+              dest: /etc/crontab.pre-upgrade-preflight
+              remote_src: yes
+              mode: preserve
+
+          - name: "Comment out any active LIMS cron entry before uslims_upgrade.php's preflight check (restored verbatim in 'always')"
+            ansible.builtin.replace:
+              path: /etc/crontab
+              regexp: '^(?!\s*#)(.*\b(?:gridctl(?:_pro|_dev)?\.php|cluster_status\.php|update_notice\.php|listen\.php|jobmonitor\.php|uslims_daily_backup\.php|uslims_daily_rsync\.php|save-jobstats\.sh)\b.*)$'
+              replace: '#\1'
+
+          - name: "Idle the host for uslims_upgrade.php's preflight check"
+            ansible.builtin.include_role:
+              name: start-lims-services
+              tasks_from: idle.yml
+
+          ## A busy host keeps its 4.2.0-era behavior on a pre-4.3.0 release; on 4.3.0 nothing may move under running jobs.
+          - name: "Refuse to continue on a busy host"
+            ansible.builtin.fail:
+              msg: >-
+                The host is busy or its job state could not be read. Nothing was changed and the
+                gridctl services are left running. Rerun this play once the jobs have finished.
+            when: lims_host_busy | default(false) | bool and not lims_pre_430 | default(false) | bool
+
+          - name: "Grant the gfac account its 4.3.0 privileges before the preflight check"
+            ansible.builtin.include_role:
+              name: config-lims-database
+              tasks_from: gfac-preflight-grant.yml
+            when: not lims_pre_430 | default(false) | bool and not lims_host_busy | default(false) | bool
+
+          - name: "Check the currently-deployed release's upgrade state (uslims_upgrade.php --check)"
+            ansible.builtin.command:
+              chdir: "{{ user_home }}/us3/lims/database/utils"
+              cmd: "php uslims_upgrade.php --check --www {{ www_base | default('/srv/www/htdocs') }}"
+            register: uslims_upgrade_preflight_result
+            changed_when: false
+            ## Same tolerance as config-lims-lims's own --apply call: a
+            ## refusal because the host is STILL not idle after the idle
+            ## step just above means something outside this play's
+            ## control is using it, noted below rather than failing the
+            ## whole play. error_exit() (utility.php) writes that message
+            ## to the real PHP STDERR stream, not stdout. Every OTHER
+            ## non-zero exit -- including a genuine FAIL reported for the
+            ## currently-deployed release's own upgrade state -- fails
+            ## this task outright, which stops the play here with
+            ## ansible's own failure output (including the [FAIL] lines
+            ## uslims_upgrade.php printed to stdout above it). Exit 3 (an
+            ## open [input]) is refused by the next task instead.
+            failed_when: >-
+              uslims_upgrade_preflight_result.rc not in [0, 1, 3]
+              and 'the host is not idle' not in uslims_upgrade_preflight_result.stderr
+            when: not lims_host_busy | default(false) | bool
+
+          ## Exit 1: a check failed. The one failure this play could fix later in the run, the gfac
+          ## grant, is granted above; what remains needs the operator.
+          - name: "Refuse to continue while uslims_upgrade.php --check reports failures this play cannot fix"
+            ansible.builtin.fail:
+              msg: >-
+                uslims_upgrade.php --check reports failures that need the operator:
+                {{ uslims_upgrade_preflight_result.stdout_lines | select('search', '[[]FAIL') | map('trim') | join('; ') }}.
+                Nothing was changed and the gridctl services are started again. Fix these, then
+                rerun this play.
+            when:
+              - not lims_host_busy | default(false) | bool
+              - uslims_upgrade_preflight_result.rc == 1
+              - "'the host is not idle' not in uslims_upgrade_preflight_result.stderr"
+
+          ## Exit 3: settings only an operator can give are open; stop before any checkout moves.
+          - name: "Refuse to continue while uslims_upgrade.php needs settings only an operator can give"
+            ansible.builtin.fail:
+              msg: >-
+                uslims_upgrade.php --check reports settings it cannot choose itself:
+                {{ uslims_upgrade_preflight_result.stdout_lines | select('search', '[[]input[]]') | map('trim') | join('; ') }}.
+                Nothing was changed. Run, as root, cd {{ user_home }}/us3/lims/database/utils &&
+                php uslims_upgrade.php --apply with the option each line names, then rerun this play.
+            when:
+              - not lims_host_busy | default(false) | bool
+              - uslims_upgrade_preflight_result.rc == 3
+
+          - name: "Refuse to continue when uslims_upgrade.php --check finds the host still not idle"
+            ansible.builtin.fail:
+              msg: >-
+                uslims_upgrade.php --check found the host still not idle after stopping this
+                role's own services; something else is using it. Nothing was changed and the
+                gridctl services are started again. Rerun this play once it is clear.
+            when: >-
+              not lims_host_busy | default(false) | bool and uslims_upgrade_preflight_result.rc != 0
+              and 'the host is not idle' in uslims_upgrade_preflight_result.stderr
+              and not lims_pre_430 | default(false) | bool
+
+          - name: "Note that uslims_upgrade.php's preflight check found the host genuinely busy (outside this play's control)"
+            ansible.builtin.debug:
+              msg: >-
+                uslims_upgrade.php --check found the host still not idle
+                after stopping this role's own services -- something else
+                is using it. Could not verify the upgrade state this run --
+                rerun once it is clear.
+            when: >-
+              not lims_host_busy | default(false) | bool and uslims_upgrade_preflight_result.rc != 0
+              and 'the host is not idle' in uslims_upgrade_preflight_result.stderr
+              and lims_pre_430 | default(false) | bool
+        ## The crontab first and us3-listen second, each attempted whatever the other does; the
+        ## snapshot is kept unless it was restored, for the next run's leftover check.
+        always:
+          - name: "Look for the preflight crontab snapshot"
+            ansible.builtin.stat:
+              path: /etc/crontab.pre-upgrade-preflight
+            register: lims_preflight_snapshot
+
+          - name: "Restore /etc/crontab exactly as it was before uslims_upgrade.php's preflight check"
+            ansible.builtin.copy:
+              src: /etc/crontab.pre-upgrade-preflight
+              dest: /etc/crontab
+              remote_src: yes
+              mode: preserve
+            register: lims_preflight_restore
+            ignore_errors: true
+            when: lims_preflight_snapshot.stat.exists
+
+          - name: "Remove the preflight crontab snapshot"
+            ansible.builtin.file:
+              path: /etc/crontab.pre-upgrade-preflight
+              state: absent
+            when: lims_preflight_snapshot.stat.exists and lims_preflight_restore is succeeded
+
+          - name: "Start us3-listen again if the idle step stopped it"
+            ansible.builtin.include_role:
+              name: start-lims-services
+              tasks_from: resume.yml
+
+          - name: "Refuse to continue when /etc/crontab could not be restored"
+            ansible.builtin.fail:
+              msg: >-
+                /etc/crontab could not be restored from /etc/crontab.pre-upgrade-preflight, so its
+                LIMS lines are still commented out; the next run restores it before anything else.
+            when: lims_preflight_restore is failed
+        when: site_release is defined and uslims_upgrade_preflight_script.stat.exists
+
+  roles:
+      # EL8: enable php:7.4 before any role installs php (default stream is the retired 7.2)
+      - config-lims-php-stream
+      - config-lims-gui
+      - config-lims-admin
+      - config-lims-firewall
+      - config-lims-repo
+      - config-lims-us3-user
+      - config-lims-database
+      - config-lims-apache
+      - config-lims-php
+      - config-lims-lims
+      - config-lims-slurm
+      - build-qt
+      - build-qwt
+      - build-us3
+      - build-mpich
+      - build-us-mpi
+      ## Needs mpirun/us_mpi_analysis, built by the two roles just above
+      ## (was included from
+      ## inside config-lims-lims, which runs before either is built, so
+      ## its own assert always failed on a fresh build).
+      - role: config-lims-mpi-runtime
+        when: not lims_pre_430 | default(false) | bool
+      - install-vncserver
+      - install-postfix
+      - install-chrony
+      - install-google-fonts
+      - install-msttcore-fonts
+      - install-reverse-tunnel-service
+      - renice-mariadb
+      - renice-slurmd
+      - restart-php-fpm
+      - install-demo-dbinst
+      ## Starts us3-listen and writes the LIMS cron entries -- moved here,
+      ## after every role that calls uslims_upgrade.php (config-lims-lims,
+      ## install-demo-dbinst), so the host is still idle when either does
+      ## See UPGRADE-AND-INSTALL-MODEL.md.
+      - start-lims-services
+      - config-lims-backup
+      - install-xrdp
+      - install-proxychains4
+#optional    - install-fail2ban
+#scigap-only - config-lims-scigap
+      - config-authentication-messages
+      
+  become: yes
+  ## Ansible's vars: on a play takes a mapping, not a sequence -- every
+  ## entry here was written as "- key: value", a list of one-key
+  ## mappings. A list satisfies no schema vars: actually accepts, so
+  ## ansible-playbook --syntax-check refused this whole file outright
+  ## ("Vars in a Play must be specified as a dictionary"); nothing in
+  ## this list was ever validated as a playbook, pre_tasks included.
+  ## Converted here to a plain mapping -- same keys, same values, same
+  ## comments, just without the leading "- " on each one.
+  vars:
+        user_home:           "/home"
+        install_workstation: false
+        install_commercial:  true
+        NO_LIMS:             false
+
+        # GMP/PAM sites set these in the inventory (play vars override it); both default false
+        # lims_enable_gmp:   true
+        # lims_enable_pam:   true
+
+        # set the desired compiler optimization
+        # for hardware installs
+        comp_opt: "-march=native"
+        # perhaps for VM installs if qt core dumps
+        # comp_opt: "-m64"
+
+        # innodb_buffer_pool_size
+        innodb_buffer_pool_size: "2G"
+        # innodb_buffer_pool_size: "8G"
+
+        # uncomment one of the below for default allowed submissions
+        submit_localonly: true
+        # submit_remoteonly : true
+        # submit_localandremote : true
+
+        # Required variables to define:
+        # N.B. once you set these, you can't change them simply by rerunning ansible-playbook for the same remote host!
+        us3_db_pass:       "foobar-demo"
+        root_db_pass:      "foobar-super"
+        admins_db_pass:    "foobar-admin"
+        gbl_db_pass:       "foobar-global"
+        us3php_db_pass:    "foobar-php"
+        limsadmin_db_pass: "foobar-iam-admin"
+
+        admin_email:       "example@email.org"
+        cron_admin:        "example@email.org" # root@localhost
+
+        ipaddr_ext:        "192.168.5.30"
+        ipaddr_int:        "192.168.5.30"
+
+        self_signed: 'yes' # change to 'no' to use certbot
+
+        qt_major_version:  "5.15"
+        qt_version:        "5.15.19"
+        qwt_version:       "6.3.0"
+        cores_for_parallel_compile: "{{ ansible_processor_vcpus }}"
+        ## release-gate (and the pre_tasks check above) is off unless
+        ## site_release is set. The eight pins below derive from it by
+        ## default, so the gate is active out of the box; a site that wants
+        ## one repo pinned differently can override that one *_branch var.
+        site_release:      "release-2026-Q2"
+        ## The VERSION file site_release carries; release-gate compares each checkout with it.
+        site_release_version: "4.1.0"
+        us3_branch:        "{{ site_release }}"
+        sql_branch:        "{{ site_release }}"
+        dbinst_branch:     "{{ site_release }}"
+        gridctl_branch:    "{{ site_release }}"
+        common_branch:     "{{ site_release }}"
+        newinst_branch:    "{{ site_release }}"
+        webinfo_branch:    "{{ site_release }}"
+        utils_branch:      "{{ site_release }}"
+        ## Pre-4.3.0 only: written into dbutils' db_config.php for the Airavata bridge.
+        airavata_branch:   "meta-scheduler-prod"
+
+        postfix_relay_smtp_host: smtp.gmail.com
+        postfix_relay_smtp_port: 587
+        postfix_relay_smtp_user: us.etc.tests@gmail.com
+        postfix_relay_smtp_password: put_app_password_here
+
+        # required for role install-reverse-tunnel-service
+        # you will manually need to install usadmin's public key on the rtunnel_user @ rtunnel_ip's authorized keys
+        rtunnel_user: "ultrascan"
+        rtunnel_ip: "secure.aucsolutions.com"
+        # assign unique port (if both rtunnel & rtunnel service installed, use different ports!
+        rtunnel_service_port: "220XX"
+        # any extra command options required to ssh, e.g. "-J user@jumpserver" etc.
+        rtunnel_service_ssh_extras: ""
+        ## enabled at boot up - "no" or "yes"
+        rtunnel_service_enabled: "yes"
+        ## current state -  "started" or "stopped"
+        rtunnel_service_state: "started"
+
+        # set this to a specific value (could be numeric ip) instead of {{ ansible_fqdn }} if you with, e.g. if the host is private
+        # N.B. you can only configure one host per ansible-playbook run if you do not use {{ ansible_fqdn }}
+        hostname: "{{ ansible_fqdn }}"
+        postfix_hostname: "{{ hostname }}"
+        # N.B. if your host name is pure ip (e.g. 1.2.3.4 etc), you need to configure a text string prefix as commented below
+        # postfix_hostname: "us-{{ hostname }}"
+
+        # Doesn't matter if self-signed is enabled but here as an example for some certbot uses
+        certbot_create_if_missing: true
+        certbot_admin_email: "{{ admin_email }}"
+        certbot_create_standalone_stop_services: [httpd] # centos/RHEL
+        certbot_certs:
+            - domains:
+                  - "{{ hostname }}"
+
+        certbot_auto_renew: true
+        certbot_auto_renew_hour: "1"
+        certbot_auto_renew_minute: "30"
+        cerbot_auto_renew_options: "--quiet --no-self-upgrade"
+
+        slurm_ver: 25.11.5 # Change to appropriate version
+        slurm_md5: 5bf9efcb4ec746cf31c22e723e42f909
+
+        # N.B. slurm_cores can not exceed available cores, if it does, the node will be stuck "draining" (waiting for available resources)
+        #      if you want to develop (not production!) on a smaller system
+        #         add "#SBATCH -O" to your sbatch submission scripts to allow overcommitting
+        #         set slurm_sbatch_extras : "#SBATCH -O\n" for slurm testing scripts via ansible
+        slurm_cores : "{{ ansible_processor_vcpus }}"
+        slurm_sbatch_extras : ""
+        # slurm_sbatch_extras : "#SBATCH -O\n"
+
+        # Overrride variables that are default
+        lims_admin: "John Smith"
+        org_name: "Ultrascan Example LIMS"
+
