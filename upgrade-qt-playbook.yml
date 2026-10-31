@@ -24,6 +24,8 @@
 ## cli example, but double check esp. user_home, us3_branch & optimization
 ## ansible-playbook upgrade-qt-playbook.yml -e "optimization='-march=native'" -e "us3_branch='release-2024-Q4'" -e "qt_force_rebuild=1" -e "user_home='/home'" -e "install_commercial=XXXtrue or falseXXX" -e "run=1"
 ## ansible-playbook upgrade-qt-playbook.yml -e "optimization='-march=native'" -e "us3_branch='main'" -e "qt_force_rebuild=1" -e "user_home='/home'" -e "install_commercial=true" -e "run=1"
+## qwt-only upgrade, keeping the installed qt (here 5.15.16):
+## ansible-playbook upgrade-qt-playbook.yml -e "optimization='-march=native'" -e "us3_branch='main'" -e "qt_force_rebuild=1" -e "skip_qt_build=1" -e "qt_version='5.15.16'" -e "user_home='/home'" -e "install_commercial=true" -e "run=1"
 
   - name: Usage
     ansible.builtin.debug:
@@ -33,6 +35,8 @@
       -e \"optimization='X'\"     : set optimization level. X contains your desired optimization flags (e.g. -m64,-march=native)\n\
       _________________________ : note that VMs may need -m64 as on some vm hosts -march=native fails\n\
       -e \"qt_force_rebuild=1\"   : recommended unless you *know* your qt,qwt & ultrascan are all compiled correctly\n\
+      -e \"skip_qt_build=1\"      : keep the installed qt and skip build-qt, for a qwt-only upgrade. requires qt_force_rebuild=1\n\
+      _________________________ : add -e \"qt_version='X'\" if the installed qt is not {{ qt_version }}\n\
       -e \"us3_branch='X'\"       : required branch specification. typically 'release-YYYY-Q#', perhaps 'master' on some systems\n\
       -e \"user_home='X'\"        : required home directory specification. typically '/home', but some client system have alternate home\n\
       -e \"install_commercial=X\" : required true or false, no quotes. If true, will install/update us_comproject icon\n\
@@ -57,6 +61,11 @@
     fail:
       msg: "use -e \"install_commercial=X\". Required true or false, no quotes. If true, will install/update us_comproject icon"
     when: install_commercial is not defined and run is defined
+
+  - name: validate skip_qt_build needs qt_force_rebuild
+    fail:
+      msg: "-e \"skip_qt_build=1\" also needs -e \"qt_force_rebuild=1\", so ultrascan and us_mpi_analysis are rebuilt against the new qwt"
+    when: skip_qt_build is defined and qt_force_rebuild is not defined and run is defined
 
   - name: set powertools / crb
     set_fact:
@@ -103,6 +112,17 @@
       mpi_version: "{{ mpiinfo.stdout_lines[0] }}"
   - debug: msg="os_version {{ os_version }}\nqt_version_ref {{ qt_version_ref }}\nqwt_version_ref {{ qwt_version_ref }}\nmysql_version {{ mysql_version }}\nopenssl_version {{ openssl_version }}\nphp_version {{ php_version }}\nmpi_version {{ mpi_version }}"
 
+  - name: Check if qt {{ qt_version }} is installed for skip_qt_build, using /opt/qt-{{ qt_version }}/lib/libQt5Core.so as a proxy
+    stat:
+      path: /opt/qt-{{ qt_version }}/lib/libQt5Core.so
+    register: qt_skip_installed_details
+    when: skip_qt_build is defined
+
+  - name: validate skip_qt_build qt_version
+    fail:
+      msg: "-e \"skip_qt_build=1\" keeps the installed qt, but /opt/qt-{{ qt_version }} is not installed. use -e \"qt_version='X'\" with the installed qt (the gui-build modulefile has {{ qt_version_ref }})"
+    when: skip_qt_build is defined and run is defined and not qt_skip_installed_details.stat.exists
+
   - name: "check disk space"
     shell: df -h
     register: dfinfo
@@ -115,7 +135,9 @@
   roles:
   # lims-gui updates the desktop apps for the new path
   #  - config-lims-gui 
-    - build-qt
+  # skip_qt_build keeps the installed qt (qwt-only upgrade)
+    - role: build-qt
+      when: skip_qt_build is not defined
     - build-qwt
     - build-us3
     - install-rasmol
