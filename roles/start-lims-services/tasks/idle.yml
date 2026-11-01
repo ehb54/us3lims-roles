@@ -1,6 +1,7 @@
 ---
-# Idles the host for a uslims_upgrade.php call. A busy host (Slurm jobs or LIMS analysis jobs, or a
-# state that cannot be read) is left running and lims_host_busy is set, so the caller skips the
+# Idles the host for a uslims_upgrade.php call. A busy host (Slurm jobs, or work uslims_jobs.php
+# --busy counts as uslims_upgrade.php's idle check does, or a state that cannot be read) is left
+# running and lims_host_busy is set, with lims_idle_reasons naming why, so the caller skips the
 # call. A host without the us3-listen unit was never put in service and is never busy. Otherwise us3-listen is stopped through systemd, so the unit is inactive and resume.yml or
 # this role's main tasks start it again. A raw "php services.php stop" left the oneshot unit
 # reported active, and "state: started" then never started the daemons.
@@ -27,9 +28,19 @@
   changed_when: false
   failed_when: false
 
-# prints "no currently active jobs" when idle
-- name: Read the running LIMS analysis jobs
-  ansible.builtin.command: php uslims_jobs.php --running
+# --busy (4.3.0) prints "idle", or the work in flight with exit 1; an older uslims_jobs.php has
+# only --running, which prints "no currently active jobs" when idle.
+- name: Check whether uslims_jobs.php has --busy
+  ansible.builtin.command: grep -q -- '"--busy"' uslims_jobs.php
+  args:
+    chdir: "{{ user_home }}/us3/lims/database/utils"
+  register: lims_idle_has_busy
+  changed_when: false
+  failed_when: false
+  when: lims_idle_files.results[1].stat.exists
+
+- name: Read the LIMS work in flight
+  ansible.builtin.command: "php uslims_jobs.php {{ '--busy' if lims_idle_has_busy.rc | default(1) == 0 else '--running' }}"
   args:
     chdir: "{{ user_home }}/us3/lims/database/utils"
   become: yes
@@ -39,14 +50,26 @@
   failed_when: false
   when: lims_idle_files.results[1].stat.exists
 
+- name: Read whether LIMS work is in flight
+  ansible.builtin.set_fact:
+    lims_idle_jobs_busy: >-
+      {{ lims_idle_files.results[1].stat.exists
+         and (lims_idle_jobs.rc != 0
+              or (lims_idle_has_busy.rc != 0 and 'no currently active jobs' not in lims_idle_jobs.stdout)) }}
+
 - name: Decide whether the host is busy
   ansible.builtin.set_fact:
     lims_host_busy: >-
       {{ lims_idle_files.results[0].stat.exists
          and (lims_idle_squeue.rc != 0
               or lims_idle_squeue.stdout_lines | reject('equalto', '@not-installed') | list | length > 0
-              or (lims_idle_files.results[1].stat.exists
-                  and (lims_idle_jobs.rc != 0 or 'no currently active jobs' not in lims_idle_jobs.stdout))) }}
+              or lims_idle_jobs_busy | bool) }}
+    lims_idle_reasons: >-
+      {{ (lims_idle_squeue.stdout_lines | default([]) | reject('equalto', '@not-installed')
+          | map('regex_replace', '^', 'Slurm job ') | list)
+         + ([('could not read the Slurm queue: ' ~ (lims_idle_squeue.stderr | default('')))] if lims_idle_squeue.rc | default(0) != 0 else [])
+         + ((lims_idle_jobs.stdout_lines | default([]) | reject('match', '^(idle|note: )') | list
+             + lims_idle_jobs.stderr_lines | default([])) if lims_idle_jobs_busy | bool else []) }}
     lims_idle_stopped_listen: false
 
 - name: Report the busy host
@@ -54,7 +77,7 @@
     msg:
       - "The host is busy or its job state could not be read; the gridctl services stay up and uslims_upgrade.php is skipped this run."
       - "Slurm: {{ lims_idle_squeue.stdout_lines | join('; ') or lims_idle_squeue.stderr | default('') }}"
-      - "LIMS jobs: {{ (lims_idle_jobs.stdout_lines | default([])) | join('; ') }}"
+      - "LIMS work: {{ (lims_idle_jobs.stdout_lines | default([])) | join('; ') }}"
   when: lims_host_busy | bool
 
 # KillMode=process before the stop: a unit from an older run kills every job monitor in its cgroup.
