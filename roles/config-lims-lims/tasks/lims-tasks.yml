@@ -295,7 +295,8 @@
         chdir: "{{ user_home }}/us3/lims/database/utils"
         cmd: "php uslims_upgrade.php --apply --yes --www {{ www_base }}"
       register: uslims_upgrade_result
-      changed_when: uslims_upgrade_result.rc == 0 and 'Nothing to change' not in uslims_upgrade_result.stdout
+      ## From the SUMMARY line: a converged host prints changes=0.
+      changed_when: (uslims_upgrade_result.stdout | regex_search('changes=(\\d+)', '\\1') | default(['1'], true) | first | int) > 0
       ## A refusal because the host is STILL not idle after the idle step
       ## just above means something outside this play's control is using
       ## it (a manually-started daemon, a job genuinely in flight) --
@@ -305,7 +306,10 @@
       ## not stdout -- checked against .stdout, this phrase is never found
       ## there at all, so the tolerance below never actually fired; every
       ## "not idle" refusal hard-failed the play instead.
-      failed_when: uslims_upgrade_result.rc != 0 and 'the host is not idle' not in uslims_upgrade_result.stderr
+      ## Failures that each concern one instance only (instance_failures) do not fail the run.
+      failed_when: >-
+        uslims_upgrade_result.rc != 0 and 'the host is not idle' not in uslims_upgrade_result.stderr
+        and not ((uslims_upgrade_result.stdout | regex_search('instance_failures=(\\d+)', '\\1') | default(['0'], true) | first | int) > 0 and (uslims_upgrade_result.stdout | regex_search('instance_failures=(\\d+)', '\\1') | default(['0'], true) | first | int) == (uslims_upgrade_result.stdout | regex_search('SUMMARY failures=(\\d+)', '\\1') | default(['0'], true) | first | int))
       when: not lims_host_busy | default(false) | bool
 
     - name: Note that uslims_upgrade.php refused because the host is genuinely busy (outside this play's control)

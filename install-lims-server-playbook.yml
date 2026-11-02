@@ -242,6 +242,20 @@
 
           ## Exit 1: a check failed. The one failure this play could fix later in the run, the gfac
           ## grant, is granted above; what remains needs the operator.
+          ## Failures that each concern one instance only leave the rest of the host to this run;
+          ## the broken instances are named and stay for the operator.
+          - name: "Note the instances uslims_upgrade.php --check reports as broken"
+            ansible.builtin.debug:
+              msg: >-
+                uslims_upgrade.php --check reports these instances broken; the rest of the host is
+                converged by this run and they are left for the operator:
+                {{ uslims_upgrade_preflight_result.stdout_lines | select('search', '[[]FAIL') | map('trim') | join('; ') }}
+            when:
+              - not lims_host_busy | default(false) | bool
+              - uslims_upgrade_preflight_result.rc == 1
+              - (uslims_upgrade_preflight_result.stdout | regex_search('instance_failures=(\\d+)', '\\1') | default(['0'], true) | first | int) > 0
+              - (uslims_upgrade_preflight_result.stdout | regex_search('instance_failures=(\\d+)', '\\1') | default(['0'], true) | first | int) == (uslims_upgrade_preflight_result.stdout | regex_search('SUMMARY failures=(\\d+)', '\\1') | default(['0'], true) | first | int)
+
           - name: "Refuse to continue while uslims_upgrade.php --check reports failures this play cannot fix"
             ansible.builtin.fail:
               msg: >-
@@ -252,6 +266,7 @@
               - not lims_host_busy | default(false) | bool
               - uslims_upgrade_preflight_result.rc == 1
               - "'the host is not idle' not in uslims_upgrade_preflight_result.stderr"
+              - (uslims_upgrade_preflight_result.stdout | regex_search('instance_failures=(\\d+)', '\\1') | default(['0'], true) | first | int) != (uslims_upgrade_preflight_result.stdout | regex_search('SUMMARY failures=(\\d+)', '\\1') | default(['0'], true) | first | int) or (uslims_upgrade_preflight_result.stdout | regex_search('instance_failures=(\\d+)', '\\1') | default(['0'], true) | first | int) == 0
 
           ## Exit 3: settings only an operator can give are open; stop before any checkout moves.
           - name: "Refuse to continue while uslims_upgrade.php needs settings only an operator can give"
@@ -279,7 +294,7 @@
             when:
               - not lims_host_busy | default(false) | bool
               - not lims_pre_430 | default(false) | bool
-              - uslims_upgrade_preflight_result.rc == 0
+              - uslims_upgrade_preflight_result.rc == 0 or (uslims_upgrade_preflight_result.rc == 1 and (uslims_upgrade_preflight_result.stdout | regex_search('instance_failures=(\\d+)', '\\1') | default(['0'], true) | first | int) == (uslims_upgrade_preflight_result.stdout | regex_search('SUMMARY failures=(\\d+)', '\\1') | default(['0'], true) | first | int))
               - (uslims_upgrade_preflight_result.stdout | regex_search('SUMMARY failures=\\d+ pending=(\\d+)', '\\1')
                  | default(['0'], true) | first | int) > 0
 
