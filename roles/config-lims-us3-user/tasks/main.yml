@@ -142,10 +142,17 @@
 - name: Write listen-config.php with this site's values (first install only -- see the check above)
   ansible.builtin.copy:
     content: |-
-      {%- set ns = namespace(text=listen_config_template.content | b64decode) -%}
+      {#- A value the template has no line for (4.2.0's has no $host_name, which esign's From: reads) is added. -#}
+      {%- set ns = namespace(text=listen_config_template.content | b64decode, missing='') -%}
       {%- for key, value in listen_config_values.items() -%}
-      {%- set ns.text = ns.text | regex_replace('(?m)^[$]' ~ key ~ '[ ]*=[^;]*;', '$' ~ key ~ ' = ' ~ php_quote ~ (value | replace(php_quote, php_escaped_quote)) ~ php_quote ~ ';') -%}
+      {%- set line = '$' ~ key ~ ' = ' ~ php_quote ~ (value | replace(php_quote, php_escaped_quote)) ~ php_quote ~ ';' -%}
+      {%- if ns.text is search('(?m)^[$]' ~ key ~ '[ ]*=') -%}
+      {%- set ns.text = ns.text | regex_replace('(?m)^[$]' ~ key ~ '[ ]*=[^;]*;', line) -%}
+      {%- else -%}
+      {%- set ns.missing = ns.missing ~ line ~ '\n' -%}
+      {%- endif -%}
       {%- endfor -%}
+      {%- set ns.text = (ns.text | regex_replace('\\?>\\s*$', '') | trim) ~ '\n' ~ ns.missing if ns.missing else ns.text -%}
       {{ ns.text | regex_replace('(?m)^date_default_timezone_set[(][^)]*[)]', 'date_default_timezone_set( ' ~ php_quote ~ time_zone ~ php_quote ~ ' )') }}
     dest: "{{ user_home }}/us3/lims/bin/listen-config.php"
     owner: us3
