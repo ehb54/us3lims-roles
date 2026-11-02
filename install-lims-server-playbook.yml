@@ -99,6 +99,21 @@
           } | dict2items }}"
         when: item.value != site_release
 
+      ## The existing checkouts against site_release/site_release_version, read-only, before the
+      ## preflight below idles the host or replaces its us3-listen unit: a mismatched release must
+      ## stop before anything changes. The roles repeat the check in front of each pull.
+      - name: "release-gate: check the existing checkouts before anything changes"
+        ansible.builtin.include_role:
+          name: release-gate
+        vars:
+          release_gate_dest: "{{ item.dest }}"
+          release_gate_label: "{{ item.label }}"
+        loop:
+          - { dest: "{{ user_home }}/us3/lims/database/sql", label: us3_sql }
+          - { dest: "{{ user_home }}/us3/lims/database/utils", label: us3lims_dbutils }
+          - { dest: "{{ user_home }}/us3/lims/bin", label: us3lims_gridctl }
+        when: site_release is defined and not NO_LIMS | default(false) | bool
+
       ## site_release and VERSION (release-gate, above and its own task
       ## file) only say which CODE release is declared and checked out --
       ## neither says whether that release's own config/data migration
@@ -232,8 +247,7 @@
               msg: >-
                 uslims_upgrade.php --check reports failures that need the operator:
                 {{ uslims_upgrade_preflight_result.stdout_lines | select('search', '[[]FAIL') | map('trim') | join('; ') }}.
-                Nothing was changed and the gridctl services are started again. Fix these, then
-                rerun this play.
+                Only the us3-listen unit and the gfac grant were brought up to date; the gridctl services are started again. Fix these, then rerun this play.
             when:
               - not lims_host_busy | default(false) | bool
               - uslims_upgrade_preflight_result.rc == 1
@@ -245,11 +259,29 @@
               msg: >-
                 uslims_upgrade.php --check reports settings it cannot choose itself:
                 {{ uslims_upgrade_preflight_result.stdout_lines | select('search', '[[]input[]]') | map('trim') | join('; ') }}.
-                Nothing was changed. Run, as root, cd {{ user_home }}/us3/lims/database/utils &&
+                Only the us3-listen unit and the gfac grant were brought up to date; the gridctl services are started again. Run, as root, cd {{ user_home }}/us3/lims/database/utils &&
                 php uslims_upgrade.php --apply with the option each line names, then rerun this play.
             when:
               - not lims_host_busy | default(false) | bool
               - uslims_upgrade_preflight_result.rc == 3
+
+          ## Exit 0 with work pending: the code is on this release but the host is not converted (an
+          ## upgrade left partway, or an instance restored from an older release). The play does not
+          ## convert a host itself; the operator finishes the upgrade.
+          - name: "Refuse to continue while uslims_upgrade.php --check reports conversion work not yet done"
+            ansible.builtin.fail:
+              msg: >-
+                The deployed code is on {{ site_release_version }} but uslims_upgrade.php --check reports
+                work not yet done on this host:
+                {{ uslims_upgrade_preflight_result.stdout_lines | select('search', '[[]todo') | map('trim') | join('; ') }}.
+                This play does not convert a host. Only the us3-listen unit and the gfac grant were brought up to date; the gridctl services are started again. Finish the upgrade as root:
+                cd {{ user_home }}/us3/lims/database/utils && php uslims_upgrade.php --apply, then rerun this play.
+            when:
+              - not lims_host_busy | default(false) | bool
+              - not lims_pre_430 | default(false) | bool
+              - uslims_upgrade_preflight_result.rc == 0
+              - (uslims_upgrade_preflight_result.stdout | regex_search('SUMMARY failures=\\d+ pending=(\\d+)', '\\1')
+                 | default(['0'], true) | first | int) > 0
 
           - name: "Refuse to continue when uslims_upgrade.php --check finds the host still not idle"
             ansible.builtin.fail:
