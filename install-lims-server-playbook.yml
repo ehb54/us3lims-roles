@@ -18,14 +18,6 @@
           www_user: "apache"
         when: ansible_os_family == "RedHat"
 
-      - name: disable selinux
-        selinux:
-           state: disabled
-
-      - name: update system
-        yum: name=* state=latest
-        when: ansible_facts['os_family'] == "RedHat"
-
       - name: install EPEL repo for CentOS
         yum: name=epel-release state=present
         when: ansible_facts['distribution'] == "CentOS"
@@ -97,7 +89,7 @@
             'gridctl_branch': gridctl_branch, 'common_branch': common_branch, 'newinst_branch': newinst_branch,
             'webinfo_branch': webinfo_branch, 'utils_branch': utils_branch
           } | dict2items }}"
-        when: item.value != site_release
+        when: site_release is defined and item.value != site_release
 
       ## The existing checkouts against site_release/site_release_version, read-only, before the
       ## preflight below idles the host or replaces its us3-listen unit: a mismatched release must
@@ -183,19 +175,6 @@
       ## deliberately-disabled line stays indistinguishable from one this
       ## task itself commented out.
       - block:
-          - name: "Snapshot /etc/crontab before idling it for uslims_upgrade.php's preflight check"
-            ansible.builtin.copy:
-              src: /etc/crontab
-              dest: /etc/crontab.pre-upgrade-preflight
-              remote_src: yes
-              mode: preserve
-
-          - name: "Comment out any active LIMS cron entry before uslims_upgrade.php's preflight check (restored verbatim in 'always')"
-            ansible.builtin.replace:
-              path: /etc/crontab
-              regexp: '^(?!\s*#)(.*\b(?:gridctl(?:_pro|_dev)?\.php|cluster_status\.php|update_notice\.php|listen\.php|jobmonitor\.php|dispatch_heartbeat_check\.php|uslims_daily_backup\.php|uslims_daily_rsync\.php|save-jobstats\.sh)\b.*)$'
-              replace: '#\1'
-
           - name: "Idle the host for uslims_upgrade.php's preflight check"
             ansible.builtin.include_role:
               name: start-lims-services
@@ -210,6 +189,20 @@
                 Nothing was changed and the gridctl services are left running. Rerun this play
                 once that work has finished.
             when: lims_host_busy | default(false) | bool and not lims_pre_430 | default(false) | bool
+
+          ## Only once the host is known not busy: a refused busy run leaves the crontab as it was.
+          - name: "Snapshot /etc/crontab before uslims_upgrade.php's preflight check"
+            ansible.builtin.copy:
+              src: /etc/crontab
+              dest: /etc/crontab.pre-upgrade-preflight
+              remote_src: yes
+              mode: preserve
+
+          - name: "Comment out any active LIMS cron entry before uslims_upgrade.php's preflight check (restored verbatim in 'always')"
+            ansible.builtin.replace:
+              path: /etc/crontab
+              regexp: '^(?!\s*#)(.*\b(?:gridctl(?:_pro|_dev)?\.php|cluster_status\.php|update_notice\.php|listen\.php|jobmonitor\.php|dispatch_heartbeat_check\.php|uslims_daily_backup\.php|uslims_daily_rsync\.php|save-jobstats\.sh)\b.*)$'
+              replace: '#\1'
 
           - name: "Grant the gfac account its 4.3.0 privileges before the preflight check"
             ansible.builtin.include_role:
@@ -357,6 +350,15 @@
                 LIMS lines are still commented out; the next run restores it before anything else.
             when: lims_preflight_restore is failed
         when: site_release is defined and uslims_upgrade_preflight_script.stat.exists
+
+      ## After every gate and the busy check, so a refused run has changed neither.
+      - name: disable selinux
+        selinux:
+           state: disabled
+
+      - name: update system
+        yum: name=* state=latest
+        when: ansible_facts['os_family'] == "RedHat"
 
   roles:
       # EL8: enable php:7.4 before any role installs php (default stream is the retired 7.2)

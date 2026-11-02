@@ -94,9 +94,10 @@
           {{ release_gate_dest }}'s VERSION file says
           '{{ release_gate_version_file.content | b64decode | trim }}', not
           this site's declared release version '{{ site_release_version }}'
-          ('{{ site_release }}'). Refusing to touch it: either the checkout
-          is stale (a force-push or a rebase landed something else), or
-          site_release_version needs updating to match what is deployed.
+          ('{{ site_release }}'). Refusing to touch it. Usually the host has not
+          been upgraded to that release yet (upgrade it first, or declare the
+          release it runs); otherwise the checkout is stale (a force-push or a
+          rebase landed something else).
       when:
         - release_gate_git_dir.stat.exists
         - release_gate_version_file.content is defined
