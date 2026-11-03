@@ -12,6 +12,7 @@
 #   release_gate_label:  a short name for messages (e.g. "dbutils")
 #   release_gate_branch: the branch/tag the upcoming git: task for this
 #                        checkout will pull (e.g. "{{ utils_branch }}")
+#   release_gate_version_only: true to check only the VERSION file, for a checkout no role pulls
 #
 # The upcoming pull (release_gate_branch) is checked as well as the existing checkout: a
 # site_release matching the old checkout with every *_branch pinned newer otherwise moved the
@@ -94,10 +95,12 @@
           {{ release_gate_dest }}'s VERSION file says
           '{{ release_gate_version_file.content | b64decode | trim }}', not
           this site's declared release version '{{ site_release_version }}'
-          ('{{ site_release }}'). Refusing to touch it. Usually the host has not
-          been upgraded to that release yet (upgrade it first, or declare the
-          release it runs); otherwise the checkout is stale (a force-push or a
-          rebase landed something else).
+          ('{{ site_release }}'). Refusing to touch it.
+          {% set have = release_gate_version_file.content | b64decode | trim | regex_replace('[^0-9.].*$', '') %}
+          {% set want = site_release_version | string | regex_replace('[^0-9.].*$', '') %}
+          {{ 'The checkout is newer than declared: declare the release this host runs.'
+             if have != '' and want != '' and have is version(want, '>')
+             else 'Usually the host has not been upgraded to that release yet (upgrade it first, or declare the release it runs); otherwise the checkout is stale (a force-push or a rebase landed something else).' }}
       when:
         - release_gate_git_dir.stat.exists
         - release_gate_version_file.content is defined
@@ -115,4 +118,5 @@
       when:
         - release_gate_git_dir.stat.exists
         - (release_gate_current_tag.stdout | default(release_gate_current.stdout)) != site_release
+        - not release_gate_version_only | default(false) | bool
   when: site_release is defined

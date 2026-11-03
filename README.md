@@ -62,11 +62,11 @@ Set both in the inventory or host_vars, not in the playbook's `vars:`, which wou
 
 ### Release pinning
 
-`site_release` - the ref (branch or tag) every checkout is pulled from, e.g. `release-2026-Q3` or `v4.2.0`. With it unset, the release checks are off and each `*_branch` variable is used as given.
+`site_release` - the ref (branch or tag) every checkout is pulled from, e.g. `release-2026-Q3` or `v4.2.0`. Set it, and `site_release_version`, in the inventory or host_vars, as above. With it unset, the release checks are off and each `*_branch` variable is used as given.
 
 `site_release_version` - the VERSION file that ref carries, e.g. `4.2.0`. Required when `site_release` is set; each existing checkout's VERSION is compared with it.
 
-Before it changes anything, a run on an existing host refuses when:
+A run on an existing host refuses, before it changes anything, when a checkout is on another ref or VERSION than declared or the host is busy. After stopping the gridctl services for `uslims_upgrade.php --check` (it starts again only what it stopped, and changes nothing else), it refuses when the check finds a problem. In all:
 - a checkout is on another ref or VERSION than declared (a host not yet upgraded to that release, or a stale checkout);
 - the host is busy (Slurm jobs, unfinished LIMS jobs, live job monitors or unsettled dispatch requests, as `uslims_jobs.php --busy` reports them), naming what is running;
 - `uslims_upgrade.php --check` reports failures this run cannot fix, settings only an operator can give, or conversion work not yet done (this playbook does not convert a host; finish the upgrade with `uslims_upgrade.php --apply`). Failures that each concern one instance are named and the run continues.

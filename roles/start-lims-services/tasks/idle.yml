@@ -23,7 +23,8 @@
     command -v squeue > /dev/null || { echo '@not-installed'; exit 0; }
     # without a proxychains LD_PRELOAD from /etc/environment, which would send the connection to
     # the local Slurm controller into the SOCKS tunnel
-    env -u LD_PRELOAD squeue -h -o '%i %u %T %j'
+    # us3's jobs only, as uslims_upgrade.php's idle check counts them
+    env -u LD_PRELOAD squeue -h -u us3 -o '%i %u %T %j'
   register: lims_idle_squeue
   changed_when: false
   failed_when: false
@@ -81,6 +82,8 @@
   when: lims_host_busy | bool
 
 # KillMode=process before the stop: a unit from an older run kills every job monitor in its cgroup.
+# A check that must change nothing (lims_idle_keep_unit) uses a runtime drop-in instead, which
+# resume.yml removes.
 - name: Install the current us3-listen unit before stopping it
   ansible.builtin.template:
     src: "{{ 'us3-listen-4.2.0.service.j2' if lims_pre_430 | default(false) | bool else 'us3-listen.service.j2' }}"
@@ -89,11 +92,43 @@
   when:
     - not lims_host_busy | bool
     - lims_idle_files.results[0].stat.exists
+    - not lims_idle_keep_unit | default(false) | bool
+
+- name: Check whether the installed us3-listen unit stops only its daemons
+  ansible.builtin.command: grep -q '^KillMode=process' /etc/systemd/system/us3-listen.service
+  register: lims_idle_killmode
+  changed_when: false
+  failed_when: false
+  when:
+    - not lims_host_busy | bool
+    - lims_idle_files.results[0].stat.exists
+    - lims_idle_keep_unit | default(false) | bool
+
+- name: Make the runtime drop-in directory
+  ansible.builtin.file:
+    path: /run/systemd/system/us3-listen.service.d
+    state: directory
+    mode: '0755'
+  when:
+    - not lims_host_busy | bool
+    - lims_idle_keep_unit | default(false) | bool
+    - lims_idle_killmode.rc | default(0) != 0
+
+- name: Stop only the daemons for this check, through a runtime drop-in
+  ansible.builtin.copy:
+    dest: /run/systemd/system/us3-listen.service.d/zz-lims-idle.conf
+    content: "[Service]\nKillMode=process\n"
+    mode: '0644'
+  register: lims_idle_dropin
+  when:
+    - not lims_host_busy | bool
+    - lims_idle_keep_unit | default(false) | bool
+    - lims_idle_killmode.rc | default(0) != 0
 
 - name: Reload systemd for the new unit
   ansible.builtin.systemd:
     daemon_reload: yes
-  when: lims_idle_unit is changed
+  when: lims_idle_unit is changed or lims_idle_dropin is changed
 
 - name: Check whether us3-listen is active
   ansible.builtin.command: systemctl is-active us3-listen

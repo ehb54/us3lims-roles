@@ -136,14 +136,22 @@
         dest: /tmp
   when: first_install
 
-- name: Inject gfac-db file into gfac
+# 4.3.0 and later: us3_sql's own gfac schema (cloned by config-lims-us3-user), so a fresh host
+# has the tables an upgraded one has; an older release keeps this role's copy.
+- name: Look for us3_sql's gfac schema
+  ansible.builtin.stat:
+        path: "{{ user_home }}/us3/lims/database/sql/gfac/gfac.sql"
+  register: us3_sql_gfac_schema
+  when: first_install
+
+- name: Inject the gfac schema into gfac
   mysql_db:
         login_unix_socket: /var/lib/mysql/mysql.sock
         login_user: root
         login_password: "{{ root_db_pass }}"
         name: gfac
         state: import
-        target: /tmp/gfac-db.sql
+        target: "{{ us3_sql_gfac_schema.stat.path if us3_sql_gfac_schema.stat.exists and not lims_pre_430 | default(false) | bool else '/tmp/gfac-db.sql' }}"
   when: first_install
 
   # insert default admins for newus3_db

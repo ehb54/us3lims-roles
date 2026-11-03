@@ -91,6 +91,35 @@
           } | dict2items }}"
         when: site_release is defined and item.value != site_release
 
+      ## A snapshot still here means a run died while the host was idled, with the
+      ## LIMS cron lines commented out; restore it before any new snapshot is taken.
+      - name: "Check for a crontab snapshot left by a run that died while the host was idled"
+        ansible.builtin.stat:
+          path: "{{ item }}"
+        loop:
+          - /etc/crontab.pre-upgrade-preflight
+          - /etc/crontab.pre-upgrade-idle
+          - /etc/crontab.pre-upgrade-idle-demo
+        register: lims_leftover_crontab
+
+      - name: "Restore /etc/crontab from the leftover snapshot"
+        ansible.builtin.copy:
+          src: "{{ item.item }}"
+          dest: /etc/crontab
+          remote_src: yes
+          mode: preserve
+        loop: "{{ lims_leftover_crontab.results | selectattr('stat.exists') | list }}"
+        loop_control:
+          label: "{{ item.item }}"
+
+      - name: "Remove the leftover crontab snapshot"
+        ansible.builtin.file:
+          path: "{{ item.item }}"
+          state: absent
+        loop: "{{ lims_leftover_crontab.results | selectattr('stat.exists') | list }}"
+        loop_control:
+          label: "{{ item.item }}"
+
       ## The existing checkouts against site_release/site_release_version, read-only, before the
       ## preflight below idles the host or replaces its us3-listen unit: a mismatched release must
       ## stop before anything changes. The roles repeat the check in front of each pull.
@@ -100,10 +129,17 @@
         vars:
           release_gate_dest: "{{ item.dest }}"
           release_gate_label: "{{ item.label }}"
+          release_gate_version_only: "{{ item.version_only | default(false) }}"
+        ## Every checkout the play later pulls: the web ones' paths come from role defaults, not loaded yet here.
         loop:
           - { dest: "{{ user_home }}/us3/lims/database/sql", label: us3_sql }
           - { dest: "{{ user_home }}/us3/lims/database/utils", label: us3lims_dbutils }
           - { dest: "{{ user_home }}/us3/lims/bin", label: us3lims_gridctl }
+          - { dest: "{{ www_common | default((www_base | default('/srv/www/htdocs')) ~ '/common') }}", label: us3lims_common }
+          - { dest: "{{ www_uslims | default((www_base | default('/srv/www/htdocs')) ~ '/uslims3') }}", label: us3lims_webinfo }
+          - { dest: "{{ www_newlims | default((www_uslims | default((www_base | default('/srv/www/htdocs')) ~ '/uslims3')) ~ '/uslims3_newlims') }}", label: us3lims_newinst }
+          ## dbmigrate clones the Demo on dbinst's default branch and no role moves it, so only its VERSION is checked.
+          - { dest: "{{ (www_uslims | default((www_base | default('/srv/www/htdocs')) ~ '/uslims3')) ~ '/uslims3_Demo' }}", label: us3lims_dbinst, version_only: true }
         when: site_release is defined and not NO_LIMS | default(false) | bool
 
       ## site_release and VERSION (release-gate, above and its own task
@@ -134,35 +170,6 @@
           uslims_upgrade_preflight_script: { stat: { exists: false } }
         when: site_release is defined and NO_LIMS | default(false) | bool
 
-      ## A snapshot still here means a run died while the host was idled, with the
-      ## LIMS cron lines commented out; restore it before any new snapshot is taken.
-      - name: "Check for a crontab snapshot left by a run that died while the host was idled"
-        ansible.builtin.stat:
-          path: "{{ item }}"
-        loop:
-          - /etc/crontab.pre-upgrade-preflight
-          - /etc/crontab.pre-upgrade-idle
-          - /etc/crontab.pre-upgrade-idle-demo
-        register: lims_leftover_crontab
-
-      - name: "Restore /etc/crontab from the leftover snapshot"
-        ansible.builtin.copy:
-          src: "{{ item.item }}"
-          dest: /etc/crontab
-          remote_src: yes
-          mode: preserve
-        loop: "{{ lims_leftover_crontab.results | selectattr('stat.exists') | list }}"
-        loop_control:
-          label: "{{ item.item }}"
-
-      - name: "Remove the leftover crontab snapshot"
-        ansible.builtin.file:
-          path: "{{ item.item }}"
-          state: absent
-        loop: "{{ lims_leftover_crontab.results | selectattr('stat.exists') | list }}"
-        loop_control:
-          label: "{{ item.item }}"
-
       ## uslims_upgrade.php's own idle check (step 1) refuses outright,
       ## unconditionally, for either --check or --apply, whenever anything
       ## LIMS-related is live -- the normal state of an in-service host
@@ -179,6 +186,8 @@
             ansible.builtin.include_role:
               name: start-lims-services
               tasks_from: idle.yml
+            vars:
+              lims_idle_keep_unit: true
 
           ## A busy host keeps its 4.2.0-era behavior on a pre-4.3.0 release; on 4.3.0 nothing may move under running jobs.
           - name: "Refuse to continue on a busy host"
@@ -204,12 +213,6 @@
               regexp: '^(?!\s*#)(.*\b(?:gridctl(?:_pro|_dev)?\.php|cluster_status\.php|update_notice\.php|listen\.php|jobmonitor\.php|dispatch_heartbeat_check\.php|uslims_daily_backup\.php|uslims_daily_rsync\.php|save-jobstats\.sh)\b.*)$'
               replace: '#\1'
 
-          - name: "Grant the gfac account its 4.3.0 privileges before the preflight check"
-            ansible.builtin.include_role:
-              name: config-lims-database
-              tasks_from: gfac-preflight-grant.yml
-            when: not lims_pre_430 | default(false) | bool and not lims_host_busy | default(false) | bool
-
           - name: "Check the currently-deployed release's upgrade state (uslims_upgrade.php --check)"
             ansible.builtin.command:
               chdir: "{{ user_home }}/us3/lims/database/utils"
@@ -233,41 +236,53 @@
               and 'the host is not idle' not in uslims_upgrade_preflight_result.stderr
             when: not lims_host_busy | default(false) | bool
 
-          ## Exit 1: a check failed. The one failure this play could fix later in the run, the gfac
-          ## grant, is granted above; what remains needs the operator.
+          ## The gfac grant FAILs are this play's to fix (create-grants.yml, later in the run); the rest need
+          ## the operator unless each concerns one instance only. What the refusals say was done.
+          - name: "Read uslims_upgrade.php --check's result"
+            ansible.builtin.set_fact:
+              lims_preflight_fails: "{{ uslims_upgrade_preflight_result.stdout_lines | select('search', 'FAIL ]') | reject('search', 'the gfac account cannot') | map('trim') | list }}"
+              lims_preflight_instance_failures: "{{ uslims_upgrade_preflight_result.stdout | regex_search('instance_failures=(\\d+)', '\\1') | default(['0'], true) | first | int }}"
+              lims_preflight_pending: "{{ uslims_upgrade_preflight_result.stdout | regex_search('SUMMARY failures=\\d+ pending=(\\d+)', '\\1') | default(['0'], true) | first | int }}"
+              lims_preflight_done: >-
+                {{ 'The gridctl services were stopped for the check and are started again; nothing else was changed.'
+                   if lims_idle_stopped_listen | default(false) | bool
+                   else 'Nothing was changed; the gridctl services were not running and are left stopped.' }}
+            when: not lims_host_busy | default(false) | bool and uslims_upgrade_preflight_result.rc is defined
+
+          ## Exit 1: a check failed.
           ## Failures that each concern one instance only leave the rest of the host to this run;
           ## the broken instances are named and stay for the operator.
           - name: "Note the instances uslims_upgrade.php --check reports as broken"
             ansible.builtin.debug:
               msg: >-
-                uslims_upgrade.php --check reports these instances broken; the rest of the host is
-                converged by this run and they are left for the operator:
-                {{ uslims_upgrade_preflight_result.stdout_lines | select('search', '[[]FAIL') | map('trim') | join('; ') }}
+                uslims_upgrade.php --check reports these instances broken; they are left for the operator:
+                {{ lims_preflight_fails | join('; ') }}
             when:
               - not lims_host_busy | default(false) | bool
               - uslims_upgrade_preflight_result.rc == 1
-              - (uslims_upgrade_preflight_result.stdout | regex_search('instance_failures=(\\d+)', '\\1') | default(['0'], true) | first | int) > 0
-              - (uslims_upgrade_preflight_result.stdout | regex_search('instance_failures=(\\d+)', '\\1') | default(['0'], true) | first | int) == (uslims_upgrade_preflight_result.stdout | regex_search('SUMMARY failures=(\\d+)', '\\1') | default(['0'], true) | first | int)
+              - lims_preflight_instance_failures | int > 0
+              - lims_preflight_instance_failures | int == lims_preflight_fails | length
 
           - name: "Refuse to continue while uslims_upgrade.php --check reports failures this play cannot fix"
             ansible.builtin.fail:
               msg: >-
                 uslims_upgrade.php --check reports failures that need the operator:
-                {{ uslims_upgrade_preflight_result.stdout_lines | select('search', '[[]FAIL') | map('trim') | join('; ') }}.
-                Only the us3-listen unit and the gfac grant were brought up to date; the gridctl services are started again. Fix these, then rerun this play.
+                {{ lims_preflight_fails | join('; ') }}.
+                {{ lims_preflight_done }} Fix these, then rerun this play.
             when:
               - not lims_host_busy | default(false) | bool
               - uslims_upgrade_preflight_result.rc == 1
               - "'the host is not idle' not in uslims_upgrade_preflight_result.stderr"
-              - (uslims_upgrade_preflight_result.stdout | regex_search('instance_failures=(\\d+)', '\\1') | default(['0'], true) | first | int) != (uslims_upgrade_preflight_result.stdout | regex_search('SUMMARY failures=(\\d+)', '\\1') | default(['0'], true) | first | int) or (uslims_upgrade_preflight_result.stdout | regex_search('instance_failures=(\\d+)', '\\1') | default(['0'], true) | first | int) == 0
+              - lims_preflight_fails | length > 0
+              - lims_preflight_instance_failures | int != lims_preflight_fails | length or lims_preflight_instance_failures | int == 0
 
           ## Exit 3: settings only an operator can give are open; stop before any checkout moves.
           - name: "Refuse to continue while uslims_upgrade.php needs settings only an operator can give"
             ansible.builtin.fail:
               msg: >-
                 uslims_upgrade.php --check reports settings it cannot choose itself:
-                {{ uslims_upgrade_preflight_result.stdout_lines | select('search', '[[]input[]]') | map('trim') | join('; ') }}.
-                Only the us3-listen unit and the gfac grant were brought up to date; the gridctl services are started again. Run, as root, cd {{ user_home }}/us3/lims/database/utils &&
+                {{ uslims_upgrade_preflight_result.stdout_lines | select('search', 'input]') | map('trim') | join('; ') }}.
+                {{ lims_preflight_done }} Run, as root, cd {{ user_home }}/us3/lims/database/utils &&
                 php uslims_upgrade.php --apply with the option each line names, then rerun this play.
             when:
               - not lims_host_busy | default(false) | bool
@@ -281,23 +296,24 @@
               msg: >-
                 The deployed code is on {{ site_release_version }} but uslims_upgrade.php --check reports
                 work not yet done on this host:
-                {{ uslims_upgrade_preflight_result.stdout_lines | select('search', '[[]todo') | map('trim') | join('; ') }}.
-                This play does not convert a host. Only the us3-listen unit and the gfac grant were brought up to date; the gridctl services are started again. Finish the upgrade as root:
+                {{ uslims_upgrade_preflight_result.stdout_lines | select('search', 'todo ]') | map('trim') | join('; ') }}.
+                This play does not convert a host. {{ lims_preflight_done }} Finish the upgrade as root:
                 cd {{ user_home }}/us3/lims/database/utils && php uslims_upgrade.php --apply, then rerun this play.
             when:
               - not lims_host_busy | default(false) | bool
               - not lims_pre_430 | default(false) | bool
-              - uslims_upgrade_preflight_result.rc == 0 or (uslims_upgrade_preflight_result.rc == 1 and (uslims_upgrade_preflight_result.stdout | regex_search('instance_failures=(\\d+)', '\\1') | default(['0'], true) | first | int) == (uslims_upgrade_preflight_result.stdout | regex_search('SUMMARY failures=(\\d+)', '\\1') | default(['0'], true) | first | int))
-              - (uslims_upgrade_preflight_result.stdout | regex_search('SUMMARY failures=\\d+ pending=(\\d+)', '\\1')
-                 | default(['0'], true) | first | int) > 0
+              - uslims_upgrade_preflight_result.rc in [0, 1]
+              - "'the host is not idle' not in uslims_upgrade_preflight_result.stderr"
+              - lims_preflight_fails | length == 0 or lims_preflight_instance_failures | int == lims_preflight_fails | length
+              - lims_preflight_pending | int > 0
 
           - name: "Refuse to continue when uslims_upgrade.php --check finds the host still not idle"
             ansible.builtin.fail:
               msg: >-
                 uslims_upgrade.php --check found the host still not idle after stopping this
                 role's own services:
-                {{ uslims_upgrade_preflight_result.stdout_lines | select('search', '[[]FAIL') | map('trim') | join('; ') }}.
-                The gridctl services are started again. Rerun this play once these are clear.
+                {{ uslims_upgrade_preflight_result.stdout_lines | select('search', 'FAIL ]') | map('trim') | join('; ') }}.
+                {{ lims_preflight_done }} Rerun this play once these are clear.
             when: >-
               not lims_host_busy | default(false) | bool and uslims_upgrade_preflight_result.rc != 0
               and 'the host is not idle' in uslims_upgrade_preflight_result.stderr

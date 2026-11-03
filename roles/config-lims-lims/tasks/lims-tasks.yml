@@ -282,7 +282,7 @@
     - name: Comment out any active LIMS cron entry in /etc/crontab before uslims_upgrade.php (restored verbatim in 'always', regardless of outcome)
       ansible.builtin.replace:
         path: /etc/crontab
-        regexp: '^(?!\s*#)(.*\b(?:gridctl(?:_pro|_dev)?\.php|cluster_status\.php|update_notice\.php|listen\.php|jobmonitor\.php|uslims_daily_backup\.php|uslims_daily_rsync\.php|save-jobstats\.sh)\b.*)$'
+        regexp: '^(?!\s*#)(.*\b(?:gridctl(?:_pro|_dev)?\.php|cluster_status\.php|update_notice\.php|listen\.php|jobmonitor\.php|dispatch_heartbeat_check\.php|uslims_daily_backup\.php|uslims_daily_rsync\.php|save-jobstats\.sh)\b.*)$'
         replace: '#\1'
 
     - name: Idle the host for uslims_upgrade.php

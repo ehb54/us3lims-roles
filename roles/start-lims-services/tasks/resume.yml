@@ -1,6 +1,17 @@
 ---
 # Starts us3-listen again after a uslims_upgrade.php call, when idle.yml stopped it. Called from
 # the caller's always block, so a failed call does not leave the daemons down.
+- name: Remove the runtime drop-in idle.yml added for a check
+  ansible.builtin.file:
+    path: /run/systemd/system/us3-listen.service.d/zz-lims-idle.conf
+    state: absent
+  register: lims_resume_dropin
+
+- name: Reload systemd without the drop-in
+  ansible.builtin.systemd:
+    daemon_reload: yes
+  when: lims_resume_dropin is changed
+
 - name: Start us3-listen again
   ansible.builtin.service:
     name: us3-listen
