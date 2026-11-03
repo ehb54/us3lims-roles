@@ -42,7 +42,7 @@ Modifying the install-lims-server-playbook.yml is a good starting ground.
 
 `limsadmin_db_pass` - database password for limsadmin 
 
-`admin_email` - Email of Admin that will be primarily responsible for the LIMS server 
+`admin_email` - Email of Admin that will be primarily responsible for the LIMS server. A host built from main has the former fixed default (us3-admin@biophysics.uleth.ca) in listen-config.php; upgrading it to 4.3.0, pass `--site-admin-email` with this address to `uslims_upgrade.php`.
 
 `admins_db_pass` - Initial DB password for all admins - Defaults are for Alexey, Borries and Gary
 
