@@ -138,8 +138,30 @@
           - { dest: "{{ www_common | default((www_base | default('/srv/www/htdocs')) ~ '/common') }}", label: us3lims_common }
           - { dest: "{{ www_uslims | default((www_base | default('/srv/www/htdocs')) ~ '/uslims3') }}", label: us3lims_webinfo }
           - { dest: "{{ www_newlims | default((www_uslims | default((www_base | default('/srv/www/htdocs')) ~ '/uslims3')) ~ '/uslims3_newlims') }}", label: us3lims_newinst }
-          ## dbmigrate clones the Demo on dbinst's default branch and no role moves it, so only its VERSION is checked.
-          - { dest: "{{ (www_uslims | default((www_base | default('/srv/www/htdocs')) ~ '/uslims3')) ~ '/uslims3_Demo' }}", label: us3lims_dbinst, version_only: true }
+        when: site_release is defined and not NO_LIMS | default(false) | bool
+
+      ## Instance checkouts (the Demo and every other uslims3_* docroot) are cloned on dbinst's
+      ## default branch, which no role moves; as uslims_upgrade.php step 0, the same release or newer passes.
+      - name: "release-gate: find the instance checkouts"
+        ansible.builtin.find:
+          paths: "{{ www_uslims | default((www_base | default('/srv/www/htdocs')) ~ '/uslims3') }}"
+          patterns: "uslims3_*"
+          excludes: "uslims3_newlims"
+          file_type: directory
+        register: release_gate_instances
+        when: site_release is defined and not NO_LIMS | default(false) | bool
+
+      - name: "release-gate: check every instance checkout before anything changes"
+        ansible.builtin.include_role:
+          name: release-gate
+        vars:
+          release_gate_dest: "{{ item.path }}"
+          release_gate_label: "us3lims_dbinst ({{ item.path | basename }})"
+          release_gate_version_only: true
+          release_gate_at_least: true
+        loop: "{{ release_gate_instances.files | default([]) }}"
+        loop_control:
+          label: "{{ item.path }}"
         when: site_release is defined and not NO_LIMS | default(false) | bool
 
       ## site_release and VERSION (release-gate, above and its own task

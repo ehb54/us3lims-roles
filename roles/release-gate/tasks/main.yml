@@ -13,6 +13,8 @@
 #   release_gate_branch: the branch/tag the upcoming git: task for this
 #                        checkout will pull (e.g. "{{ utils_branch }}")
 #   release_gate_version_only: true to check only the VERSION file, for a checkout no role pulls
+#   release_gate_at_least:     true to accept a VERSION at or above site_release_version, as
+#                              uslims_upgrade.php step 0 does for instance checkouts
 #
 # The upcoming pull (release_gate_branch) is checked as well as the existing checkout: a
 # site_release matching the old checkout with every *_branch pinned newer otherwise moved the
@@ -105,6 +107,20 @@
         - release_gate_git_dir.stat.exists
         - release_gate_version_file.content is defined
         - (release_gate_version_file.content | b64decode | trim) != (site_release_version | string)
+        - not release_gate_at_least | default(false) | bool
+
+    - name: "{{ release_gate_label }}: refuse to continue if the checkout's VERSION is older than site_release_version"
+      ansible.builtin.fail:
+        msg: >-
+          {{ release_gate_dest }}'s VERSION file says
+          '{{ release_gate_version_file.content | b64decode | trim }}', older than this site's
+          declared release version '{{ site_release_version }}' ('{{ site_release }}'). Update this
+          instance checkout first. Refusing to touch the host.
+      when:
+        - release_gate_git_dir.stat.exists
+        - release_gate_version_file.content is defined
+        - release_gate_at_least | default(false) | bool
+        - (release_gate_version_file.content | b64decode | trim | regex_replace('[^0-9.].*$', '')) is version(site_release_version | string | regex_replace('[^0-9.].*$', ''), '<')
 
     - name: "{{ release_gate_label }}: refuse to continue if the host is not on site_release"
       ansible.builtin.fail:
