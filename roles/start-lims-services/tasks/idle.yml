@@ -23,8 +23,14 @@
     command -v squeue > /dev/null || { echo '@not-installed'; exit 0; }
     # without a proxychains LD_PRELOAD from /etc/environment, which would send the connection to
     # the local Slurm controller into the SOCKS tunnel
-    # us3's jobs only, as uslims_upgrade.php's idle check counts them
-    env -u LD_PRELOAD squeue -h -u us3 -o '%i %u %T %j'
+    # every account's jobs unless global_config.php records a shared host, as uslims_upgrade.php's
+    # idle check judges the nodes; otherwise that check refuses after this play has idled the host
+    gc={{ www_common | default((www_base | default('/srv/www/htdocs')) ~ '/common') }}/global_config.php
+    if [ -r "$gc" ] && php -r 'include $argv[1]; exit(isset($single_tenant_deployment) && !$single_tenant_deployment ? 0 : 1);' "$gc" 2>/dev/null; then
+      env -u LD_PRELOAD squeue -h -u us3 -o '%i %u %T %j'
+    else
+      env -u LD_PRELOAD squeue -h -o '%i %u %T %j'
+    fi
   register: lims_idle_squeue
   changed_when: false
   failed_when: false
