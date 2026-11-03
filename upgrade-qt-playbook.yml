@@ -26,6 +26,8 @@
 ## ansible-playbook upgrade-qt-playbook.yml -e "optimization='-march=native'" -e "us3_branch='main'" -e "qt_force_rebuild=1" -e "user_home='/home'" -e "install_commercial=true" -e "run=1"
 ## qwt-only upgrade, keeping the installed qt (add -e "qt_version='X'" if it is not the qt_version below):
 ## ansible-playbook upgrade-qt-playbook.yml -e "optimization='-march=native'" -e "us3_branch='main'" -e "keep_qt=1" -e "user_home='/home'" -e "install_commercial=true" -e "run=1"
+## build a branch that is only in a fork (us3_repo defaults to https://github.com/ehb54/ultrascan3.git):
+## ansible-playbook upgrade-qt-playbook.yml -e "optimization='-march=native'" -e "us3_repo='https://github.com/OWNER/ultrascan3.git'" -e "us3_branch='X'" -e "qt_force_rebuild=1" -e "user_home='/home'" -e "install_commercial=true" -e "run=1"
 
   - name: Usage
     ansible.builtin.debug:
@@ -38,6 +40,7 @@
       -e \"keep_qt=1\"            : keep the installed qt, rebuild qwt, ultrascan & us_mpi_analysis against it (qwt-only upgrade). implies qt_force_rebuild\n\
       _________________________ : add -e \"qt_version='X'\" if the installed qt is not {{ qt_version }}\n\
       -e \"us3_branch='X'\"       : required branch specification. typically 'release-YYYY-Q#', perhaps 'master' on some systems\n\
+      -e \"us3_repo='X'\"         : optional git url to clone ultrascan3 from, e.g. a fork that has us3_branch. default https://github.com/ehb54/ultrascan3.git\n\
       -e \"user_home='X'\"        : required home directory specification. typically '/home', but some client system have alternate home\n\
       -e \"install_commercial=X\" : required true or false, no quotes. If true, will install/update us_comproject icon\n\
       "
