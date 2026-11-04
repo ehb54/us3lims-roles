@@ -219,7 +219,10 @@
                 The host is busy or its job state could not be read:
                 {{ lims_idle_reasons | default([]) | join('; ') }}.
                 Nothing was changed and the gridctl services are left running. Rerun this play
-                once that work has finished.
+                once that work has finished. For a job left in gfac.analysis with no monitor, run
+                php uslims_jobs.php --restart as us3 in {{ user_home }}/us3/lims/database/utils and let it finish.
+                If its row stays, update that checkout to {{ site_release }} and run php uslims_jobs.php --close-job with
+                the row's id, which marks its result failed and tells its submitter.
             when: lims_host_busy | default(false) | bool and not lims_pre_430 | default(false) | bool
 
           ## Only once the host is known not busy: a refused busy run leaves the crontab as it was.
@@ -270,10 +273,18 @@
               lims_preflight_inputs: "{{ uslims_upgrade_preflight_result.stdout_lines | select('search', 'input]') | map('trim') | list }}"
               ## Named without the commands inside the FAIL lines, which the play's output escapes.
               lims_preflight_grant_fails: "{{ uslims_upgrade_preflight_result.stdout_lines | select('search', 'FAIL ]') | select('search', 'the gfac account cannot') | map('regex_replace', '^.*(the gfac account cannot [^;]*);.*$', '\\1') | list }}"
-              lims_preflight_grant_remedy: >-
-                As MariaDB root, give the gfac account what it lacks:
-                mysql -u root -p -e 'GRANT CREATE, ALTER, INDEX ON {{ gbl_db_name }}.* TO {{ gbl_db_user }}@localhost'.
-                Then, as root, cd {{ user_home }}/us3/lims/database/utils && php uslims_upgrade.php --apply, which makes the changes.
+              ## Each command alone on its line, so a copy cannot take a sentence's punctuation with it.
+              ## The gridctl lines stay commented out: uslims_upgrade.php retires them.
+              lims_preflight_steps: |-
+                To clear these, run the following as root on this host, in order, one line at a time.{{ ' Add to the --apply line the option each setting above names.' if lims_preflight_inputs else '' }}
+                systemctl stop us3-listen
+                sed -i -E '/^[^#].*\b(gridctl(_pro|_dev)?\.php|cluster_status\.php|update_notice\.php|listen\.php|jobmonitor\.php|dispatch_heartbeat_check\.php|uslims_daily_backup\.php|uslims_daily_rsync\.php|save-jobstats\.sh)\b/s/^/#lims-upgrade#/' /etc/crontab
+                {% if lims_preflight_grant_fails %}mysql -u root -p -e 'GRANT CREATE, ALTER, INDEX ON {{ gbl_db_name }}.* TO {{ gbl_db_user }}@localhost'
+                {% endif %}cd {{ user_home }}/us3/lims/database/utils
+                php uslims_upgrade.php --apply
+                sed -i -E '/gridctl(_pro|_dev)?\.php/!s/^#lims-upgrade#//' /etc/crontab
+                systemctl start us3-listen
+                Then rerun this play.
               lims_preflight_done: >-
                 {{ 'The gridctl services were stopped for the check and are started again; nothing else was changed.'
                    if lims_idle_stopped_listen | default(false) | bool
@@ -300,7 +311,7 @@
                 uslims_upgrade.php --check reports failures that need the operator:
                 {{ (lims_preflight_fails + lims_preflight_grant_fails) | join('; ') }}.
                 {{ ('Settings it cannot choose itself: ' ~ (lims_preflight_inputs | join('; ')) ~ '.') if lims_preflight_inputs else '' }}
-                {{ lims_preflight_done }} {{ lims_preflight_grant_remedy if lims_preflight_grant_fails else '' }} Fix these, then rerun this play.
+                {{ lims_preflight_done }} Fix what the failures name. {{ lims_preflight_steps if lims_preflight_grant_fails or lims_preflight_inputs else 'Then rerun this play.' }}
             when:
               - not lims_host_busy | default(false) | bool
               - uslims_upgrade_preflight_result.rc == 1
@@ -313,9 +324,8 @@
             ansible.builtin.fail:
               msg: >-
                 uslims_upgrade.php --check reports settings it cannot choose itself:
-                {{ lims_preflight_inputs | join('; ') }}.
-                {{ lims_preflight_done }} Run, as root, cd {{ user_home }}/us3/lims/database/utils &&
-                php uslims_upgrade.php --apply with the option each line names, then rerun this play.
+                {{ (lims_preflight_inputs + lims_preflight_grant_fails) | join('; ') }}.
+                {{ lims_preflight_done }} {{ lims_preflight_steps }}
             ## Decided from SUMMARY's input count, not the exit code: a FAIL (exit 1) must not hide an [input].
             when:
               - not lims_host_busy | default(false) | bool
@@ -333,8 +343,7 @@
                 work not yet done on this host:
                 {{ (uslims_upgrade_preflight_result.stdout_lines | select('search', 'todo ]') | map('trim') | list + lims_preflight_grant_fails) | join('; ') }}.
                 This play does not convert a host. {{ lims_preflight_done }}
-                {{ lims_preflight_grant_remedy if lims_preflight_grant_fails else ('Finish the upgrade as root: cd ' ~ user_home ~ '/us3/lims/database/utils && php uslims_upgrade.php --apply.') }}
-                Then rerun this play.
+                {{ lims_preflight_steps }}
             when:
               - not lims_host_busy | default(false) | bool
               - not lims_pre_430 | default(false) | bool
@@ -521,11 +530,9 @@
         qt_version:        "5.15.19"
         qwt_version:       "6.3.0"
         cores_for_parallel_compile: "{{ ansible_processor_vcpus }}"
-        ## release-gate (and the pre_tasks check above) is off unless
-        ## site_release is set. The eight pins below derive from it by
-        ## default, so the gate is active out of the box; a site that wants
-        ## one repo pinned differently can override that one *_branch var.
-        ## site_release and site_release_version default in roles/site-release-defaults.
+        ## The eight pins below derive from site_release, which defaults in
+        ## roles/site-release-defaults, so the release gate is always active. A
+        ## pin is a play var: to change one for a site, use -e.
         us3_branch:        "{{ site_release }}"
         sql_branch:        "{{ site_release }}"
         dbinst_branch:     "{{ site_release }}"

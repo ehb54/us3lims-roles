@@ -314,7 +314,7 @@
 
     - name: Note that uslims_upgrade.php refused because the host is genuinely busy (outside this play's control)
       ansible.builtin.debug:
-        msg: "uslims_upgrade.php found the host still not idle after stopping this role's own services -- something else is using it; rerun once it is clear."
+        msg: "uslims_upgrade.php found the host still not idle after stopping this role's own services; rerun once it is clear. {{ uslims_upgrade_result.stdout_lines | select('search', 'FAIL ]') | map('trim') | join('; ') }}"
       when: not lims_host_busy | default(false) | bool and uslims_upgrade_result.rc != 0 and 'the host is not idle' in uslims_upgrade_result.stderr
   ## The crontab first and us3-listen second, each attempted whatever the other does; the
   ## snapshot is kept unless it was restored, for the next run's leftover check.

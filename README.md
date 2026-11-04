@@ -62,7 +62,7 @@ Set both in the inventory or host_vars, not in the playbook's `vars:`, which wou
 
 ### Release pinning
 
-`site_release` - the ref (branch or tag) every checkout is pulled from, e.g. `release-2026-Q3` or `v4.2.0`. Set it, and `site_release_version`, in the inventory or host_vars, as above. With it unset, the release checks are off and each `*_branch` variable is used as given.
+`site_release` - the ref (branch or tag) every checkout is pulled from, e.g. `release-2026-Q3` or `v4.2.0`. Set it, and `site_release_version`, in the inventory or host_vars, as above. With neither set, a host is built from `release-2026-Q2` (4.1.0), the default in `roles/site-release-defaults`. Each `*_branch` variable follows it; as a play var, one can be changed only with `-e`.
 
 `site_release_version` - the VERSION file that ref carries, e.g. `4.2.0`. Required when `site_release` is set; each existing checkout's VERSION is compared with it.
 
