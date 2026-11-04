@@ -1,0 +1,5 @@
+---
+# defaults file for build-us3
+
+# git url ultrascan3 is cloned from, override with -e "us3_repo=..." to build us3_branch from a fork
+us3_repo: "https://github.com/ehb54/ultrascan3.git"

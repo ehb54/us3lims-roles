@@ -1,0 +1,96 @@
+---
+# httpd checks the new file together with the installed configuration before it replaces the
+# old one, so a file httpd rejects is never installed.
+- name: Write the Apache settings
+  ansible.builtin.template:
+    src: security.conf.j2
+    dest: "{{ web_hardening_apache_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+    validate: /usr/sbin/httpd -t -c 'Include %s'
+  register: web_hardening_apache_written
+  when: web_hardening_has_httpd | bool
+
+- name: Write the php settings
+  when: web_hardening_has_php | bool
+  block:
+    - name: Write the php settings file
+      ansible.builtin.template:
+        src: security.ini.j2
+        dest: "{{ web_hardening_php_file }}"
+        owner: root
+        group: root
+        mode: "0644"
+      register: web_hardening_php_written
+
+    - name: Check the php-fpm configuration
+      ansible.builtin.command: php-fpm -t
+      changed_when: false
+      when: web_hardening_has_fpm | bool
+
+  rescue:
+    - name: Remove the php settings php-fpm rejected
+      ansible.builtin.file:
+        path: "{{ web_hardening_php_file }}"
+        state: absent
+
+    - name: Stop on the php-fpm configuration error
+      ansible.builtin.fail:
+        msg: "php-fpm -t failed with {{ web_hardening_php_file }}; it was removed again. See the output above."
+
+# Only running services are reloaded or restarted; a stopped one reads these files when it
+# starts. php-fpm's reload is graceful and safe; httpd is restarted, first with SIGHUP, then
+# if it does not answer with a stop and start (see restart-httpd.yml).
+- name: Reload php-fpm
+  ansible.builtin.service:
+    name: php-fpm
+    state: reloaded
+  when:
+    - web_hardening_php_written is changed
+    - web_hardening_fpm_running | bool
+
+- name: Restart httpd and wait for it to answer
+  ansible.builtin.include_tasks: restart-httpd.yml
+  vars:
+    web_hardening_restart_how: hup
+  when:
+    - web_hardening_apache_written is changed
+    - web_hardening_httpd_running | bool
+
+- name: Stop and start httpd when it does not answer
+  ansible.builtin.include_tasks: restart-httpd.yml
+  vars:
+    web_hardening_restart_how: full
+  when:
+    - web_hardening_apache_written is changed
+    - web_hardening_httpd_running | bool
+    - not (web_hardening_httpd_answers | default(true) | bool)
+
+# decided once here: the block's condition is evaluated again for each task in it
+- name: Decide whether to take the Apache settings out again
+  ansible.builtin.set_fact:
+    web_hardening_take_out: >-
+      {{ web_hardening_apache_written is changed and web_hardening_httpd_running | bool
+         and not (web_hardening_httpd_answers | default(true) | bool) }}
+
+- name: Take the Apache settings out again, as httpd still does not answer
+  when: web_hardening_take_out | bool
+  block:
+    - name: Remove the Apache settings
+      ansible.builtin.file:
+        path: "{{ web_hardening_apache_file }}"
+        state: absent
+
+    - name: Restart httpd without them
+      ansible.builtin.include_tasks: restart-httpd.yml
+      vars:
+        web_hardening_restart_how: full
+
+    - name: Stop after taking the Apache settings out
+      ansible.builtin.fail:
+        msg: >-
+          httpd did not answer {{ web_hardening_answering_urls[0] }} after a restart and a stop and start with
+          {{ web_hardening_apache_file }}, so the file was removed again; httpd
+          {{ 'answers without it' if web_hardening_httpd_answers | bool else 'does not answer without it either' }}.
+          See the httpd error_log and "systemctl status httpd".

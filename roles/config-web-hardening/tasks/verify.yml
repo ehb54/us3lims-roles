@@ -1,0 +1,73 @@
+---
+- name: Read the php settings again
+  ansible.builtin.import_tasks: read-php.yml
+
+- name: Check the php settings
+  ansible.builtin.assert:
+    that:
+      - (web_hardening_php['expose_php'] | default('') in web_hardening_on) == (web_hardening_expose_php | bool)
+      - (web_hardening_php['session.cookie_httponly'] | default('') in web_hardening_on) == (web_hardening_cookie_httponly | bool)
+      - (web_hardening_php['session.cookie_secure'] | default('') in web_hardening_on) == (web_hardening_cookie_secure | bool)
+      - (web_hardening_php['session.use_strict_mode'] | default('') in web_hardening_on) == (web_hardening_cookie_strict_mode | bool)
+      # php before 7.3 has no session.cookie_samesite
+      - >-
+        web_hardening_cookie_samesite | length == 0
+        or web_hardening_php['session.cookie_samesite'] | default('') == '(none in this php)'
+        or web_hardening_php['session.cookie_samesite'] | default('') == web_hardening_cookie_samesite
+      - web_hardening_php_read.stderr is not search('PHP Startup')
+      - web_hardening_fpm_overrides.stdout_lines | default([]) | length == 0
+    fail_msg:
+      - "php settings: {{ web_hardening_php_summary }}"
+      - "php stderr: {{ web_hardening_php_read.stderr }}"
+      - >-
+        php-fpm pool settings that override {{ web_hardening_php_file }}:
+        {{ web_hardening_fpm_overrides.stdout_lines | default([]) | join(' | ') or 'none' }}.
+        For php-fpm they win over that file; remove them from the pool configuration.
+  vars:
+    web_hardening_on: ['1', 'On', 'on']
+  when: web_hardening_has_php | bool
+
+- name: Request the check pages again
+  ansible.builtin.include_tasks: request.yml
+  when: web_hardening_httpd_running | bool
+
+- name: Report the response headers
+  ansible.builtin.include_tasks: report-headers.yml
+  when: web_hardening_httpd_running | bool
+
+- name: Check that a check page answered
+  ansible.builtin.assert:
+    that: web_hardening_pages.results | map(attribute='status', default=-1) | map('int') | select('gt', 0) | list | length > 0
+    fail_msg: "httpd is running, but none of {{ web_hardening_check_urls | join(', ') }} answered; set web_hardening_check_urls"
+    quiet: true
+  when: web_hardening_httpd_running | bool
+
+- name: Check the response headers
+  ansible.builtin.assert:
+    that:
+      - item.server | default('') is not search('/')
+      - item.x_powered_by is not defined
+      - not (web_hardening_nosniff | bool) or item.x_content_type_options | default('') == 'nosniff'
+      - web_hardening_frame_options | length == 0 or item.x_frame_options | default('') == web_hardening_frame_options
+      - >-
+        web_hardening_frame_ancestors | length == 0
+        or item.content_security_policy | default('') is search('frame-ancestors')
+      - web_hardening_referrer_policy | length == 0 or item.referrer_policy | default('') == web_hardening_referrer_policy
+      - >-
+        web_hardening_hsts_max_age | int == 0 or not item.item.startswith('https:')
+        or item.strict_transport_security | default('') is search('max-age=')
+    fail_msg: "{{ item.item }}: the headers are not as set (see the report above); another Apache setting may override them"
+    quiet: true
+  loop: "{{ web_hardening_pages.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when:
+    - web_hardening_httpd_running | bool
+    - item.status | default(-1) | int > 0
+
+- name: Note that the headers were not checked
+  ansible.builtin.debug:
+    msg: "httpd is stopped, so the response headers were not checked; the Apache settings apply when it starts"
+  when:
+    - web_hardening_has_httpd | bool
+    - not (web_hardening_httpd_running | bool)

@@ -1,0 +1,117 @@
+---
+- name: Check the mode
+  ansible.builtin.assert:
+    that: web_hardening_mode in ['report', 'apply', 'remove']
+    fail_msg: "web_hardening_mode is '{{ web_hardening_mode }}'; use report, apply or remove"
+    quiet: true
+
+- name: Read the service states
+  ansible.builtin.service_facts:
+
+- name: Look for httpd, php and php-fpm
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - /usr/sbin/httpd
+    - /usr/bin/php
+    - /usr/sbin/php-fpm
+    - /etc/httpd/sites-enabled
+  register: web_hardening_bins
+
+- name: Note what is installed and running
+  ansible.builtin.set_fact:
+    web_hardening_has_httpd: "{{ web_hardening_bins.results[0].stat.exists }}"
+    web_hardening_has_php: "{{ web_hardening_bins.results[1].stat.exists }}"
+    web_hardening_has_fpm: "{{ web_hardening_bins.results[2].stat.exists }}"
+    web_hardening_has_sites_enabled: "{{ web_hardening_bins.results[3].stat.exists }}"
+    web_hardening_httpd_running: >-
+      {{ (ansible_facts.services['httpd.service'] | default({})).state | default('') == 'running' }}
+    web_hardening_fpm_running: >-
+      {{ (ansible_facts.services['php-fpm.service'] | default({})).state | default('') == 'running' }}
+
+- name: Read the php settings
+  ansible.builtin.import_tasks: read-php.yml
+
+# The same directives or headers set in another file. Server-wide ones decide by load order;
+# a virtual host that sets one of the headers overrides this role's value for that host.
+- name: Find other Apache settings for these directives and headers
+  ansible.builtin.command:
+    argv: >-
+      {{ ['grep', '-r', '-n', '-s', '-i', '-E', web_hardening_apache_pattern, '--include=*.conf',
+          '--exclude=' ~ (web_hardening_apache_file | basename), '/etc/httpd/conf', '/etc/httpd/conf.d']
+         + (['/etc/httpd/sites-enabled'] if web_hardening_has_sites_enabled | bool else []) }}
+  vars:
+    web_hardening_apache_pattern: >-
+      ^[[:space:]]*(ServerTokens|ServerSignature|TraceEnable)[[:space:]]|^[[:space:]]*Header[[:space:]].*(X-Powered-By|X-Content-Type-Options|X-Frame-Options|Content-Security-Policy|Referrer-Policy|Strict-Transport-Security)
+  register: web_hardening_apache_others
+  changed_when: false
+  failed_when: web_hardening_apache_others.rc > 1
+  check_mode: false
+  when: web_hardening_has_httpd | bool
+
+# compared by checksum, so a report shows no changes; -e run=1 --check --diff shows the diff
+- name: Read the checksums of the two files
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    checksum_algorithm: sha1
+  loop:
+    - "{{ web_hardening_apache_file }}"
+    - "{{ web_hardening_php_file }}"
+  register: web_hardening_files
+
+- name: Compare the two files with what apply writes
+  ansible.builtin.set_fact:
+    web_hardening_apache_current: >-
+      {{ web_hardening_files.results[0].stat.checksum | default('') == lookup('ansible.builtin.template', 'security.conf.j2') | hash('sha1') }}
+    web_hardening_php_current: >-
+      {{ web_hardening_files.results[1].stat.checksum | default('') == lookup('ansible.builtin.template', 'security.ini.j2') | hash('sha1') }}
+
+- name: Report the web server state
+  ansible.builtin.debug:
+    msg:
+      - >-
+        httpd {{ ('running' if web_hardening_httpd_running | bool else 'stopped') if web_hardening_has_httpd | bool else 'not installed' }},
+        php-fpm {{ ('running' if web_hardening_fpm_running | bool else 'stopped') if web_hardening_has_fpm | bool else 'not installed' }},
+        php {{ web_hardening_php.version | default('not installed') }}
+      - "php settings: {{ web_hardening_php_summary | default('php not installed') }}"
+      - "php-fpm pool settings that override them: {{ web_hardening_fpm_overrides.stdout_lines | default([]) | join(' | ') or 'none' }}"
+      - "other Apache settings for these: {{ web_hardening_apache_others.stdout_lines | default([]) | join(' | ') or 'none' }}"
+      - >-
+        {{ web_hardening_apache_file }}:
+        {{ ('as apply writes it' if web_hardening_apache_current | bool
+            else ('differs from what apply writes' if web_hardening_files.results[0].stat.exists else 'not there'))
+           if web_hardening_has_httpd | bool else 'not used (no httpd)' }}
+      - >-
+        {{ web_hardening_php_file }}:
+        {{ ('as apply writes it' if web_hardening_php_current | bool
+            else ('differs from what apply writes' if web_hardening_files.results[1].stat.exists else 'not there'))
+           if web_hardening_has_php | bool else 'not used (no php)' }}
+      - "{{ 'response headers: next task' if web_hardening_httpd_running | bool else 'response headers: not read, httpd is stopped' }}"
+
+- name: Read the response headers
+  ansible.builtin.include_tasks: request.yml
+  when: web_hardening_httpd_running | bool
+
+- name: Report the response headers
+  ansible.builtin.include_tasks: report-headers.yml
+  when: web_hardening_httpd_running | bool
+
+- name: Note which check pages answer
+  ansible.builtin.set_fact:
+    web_hardening_answering_urls: >-
+      {{ (web_hardening_pages.results | selectattr('status', 'defined') | selectattr('status', 'gt', 0)
+          | map(attribute='item') | list) if web_hardening_httpd_running | bool else [] }}
+
+# After a restart the role waits for a check page that answered before the change; without
+# one it could not tell whether httpd answers afterwards.
+- name: Stop before any change when httpd runs but no check page answers
+  ansible.builtin.assert:
+    that: web_hardening_answering_urls | length > 0
+    fail_msg: >-
+      httpd is running, but none of {{ web_hardening_check_urls | join(', ') }} answers, so the role
+      could not tell whether httpd still answers after the change. Nothing was changed. Set
+      web_hardening_check_urls to pages this host serves.
+    quiet: true
+  when:
+    - web_hardening_mode == 'apply'
+    - web_hardening_httpd_running | bool

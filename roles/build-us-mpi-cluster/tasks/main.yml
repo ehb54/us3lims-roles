@@ -10,7 +10,7 @@
   block:
     - name: Git clone ultrascan3 repository
       git:
-       repo: https://github.com/ehb54/ultrascan3.git
+       repo: "{{ us3_repo }}"
        version: "{{ us3_branch }}"
        dest: "{{ us3_nodb_path }}"
 

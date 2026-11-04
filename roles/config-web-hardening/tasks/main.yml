@@ -1,0 +1,18 @@
+---
+- name: Read the web server state
+  ansible.builtin.import_tasks: read.yml
+
+- name: Write the settings
+  ansible.builtin.include_tasks: apply.yml
+  when: web_hardening_mode == 'apply'
+
+- name: Remove the settings
+  ansible.builtin.include_tasks: remove.yml
+  when: web_hardening_mode == 'remove'
+
+# --check writes nothing, so there is nothing to verify
+- name: Verify the settings
+  ansible.builtin.include_tasks: verify.yml
+  when:
+    - web_hardening_mode == 'apply'
+    - not ansible_check_mode

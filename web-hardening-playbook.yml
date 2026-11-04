@@ -1,0 +1,35 @@
+---
+# Hide the Apache and php version banners, send browser security headers and set the php
+# session cookie flags on EL8/EL9 hosts running Apache with php-fpm. ultrascan-tickets#1193;
+# see roles/config-web-hardening.
+#
+# report only: ansible-playbook web-hardening-playbook.yml -l <host>
+# apply:       ansible-playbook web-hardening-playbook.yml -l <host> -e "run=1"
+# remove:      ansible-playbook web-hardening-playbook.yml -l <host> -e "remove=1"
+#
+# Add --check --diff to an apply run to see the files it would write without writing them.
+# Per-host settings go in the inventory, e.g. web_hardening_hsts_max_age on a host with a
+# CA-signed certificate, or web_hardening_cookie_secure: false on a host that serves php
+# sessions over plain http (see roles/config-web-hardening/defaults/main.yml).
+# php-fpm is reloaded and httpd restarted with SIGHUP (never a graceful reload:
+# ultrascan-tickets#1197) only if they are running; a stopped one stays stopped. The role then
+# waits for httpd to answer, stops and starts it if needed, and takes the Apache settings out
+# again if it still does not answer.
+
+- name: Apache and php security settings
+  hosts: all
+  gather_facts: true
+  remote_user: usadmin
+  become: true
+
+  pre_tasks:
+    - name: Require a host limit
+      ansible.builtin.assert:
+        that: ansible_limit is defined
+        fail_msg: "limit the hosts with -l <host>"
+        quiet: true
+
+  roles:
+    - role: config-web-hardening
+      vars:
+        web_hardening_mode: "{{ 'remove' if remove is defined else ('apply' if run is defined else 'report') }}"
