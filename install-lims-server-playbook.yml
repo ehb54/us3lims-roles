@@ -268,7 +268,12 @@
               lims_preflight_pending: "{{ uslims_upgrade_preflight_result.stdout | regex_search('SUMMARY failures=\\d+ pending=(\\d+)', '\\1') | default(['0'], true) | first | int }}"
               lims_preflight_input: "{{ uslims_upgrade_preflight_result.stdout | regex_search('SUMMARY .* input=(\\d+)', '\\1') | default(['0'], true) | first | int }}"
               lims_preflight_inputs: "{{ uslims_upgrade_preflight_result.stdout_lines | select('search', 'input]') | map('trim') | list }}"
-              lims_preflight_grant_fails: "{{ uslims_upgrade_preflight_result.stdout_lines | select('search', 'FAIL ]') | select('search', 'the gfac account cannot') | map('trim') | list }}"
+              ## Named without the commands inside the FAIL lines, which the play's output escapes.
+              lims_preflight_grant_fails: "{{ uslims_upgrade_preflight_result.stdout_lines | select('search', 'FAIL ]') | select('search', 'the gfac account cannot') | map('regex_replace', '^.*(the gfac account cannot [^;]*);.*$', '\\1') | list }}"
+              lims_preflight_grant_remedy: >-
+                As MariaDB root, give the gfac account what it lacks:
+                mysql -u root -p -e 'GRANT CREATE, ALTER, INDEX ON {{ gbl_db_name }}.* TO {{ gbl_db_user }}@localhost'.
+                Then, as root, cd {{ user_home }}/us3/lims/database/utils && php uslims_upgrade.php --apply, which makes the changes.
               lims_preflight_done: >-
                 {{ 'The gridctl services were stopped for the check and are started again; nothing else was changed.'
                    if lims_idle_stopped_listen | default(false) | bool
@@ -293,9 +298,9 @@
             ansible.builtin.fail:
               msg: >-
                 uslims_upgrade.php --check reports failures that need the operator:
-                {{ lims_preflight_fails | join('; ') }}.
+                {{ (lims_preflight_fails + lims_preflight_grant_fails) | join('; ') }}.
                 {{ ('Settings it cannot choose itself: ' ~ (lims_preflight_inputs | join('; ')) ~ '.') if lims_preflight_inputs else '' }}
-                {{ lims_preflight_done }} Fix these, then rerun this play.
+                {{ lims_preflight_done }} {{ lims_preflight_grant_remedy if lims_preflight_grant_fails else '' }} Fix these, then rerun this play.
             when:
               - not lims_host_busy | default(false) | bool
               - uslims_upgrade_preflight_result.rc == 1
@@ -327,8 +332,9 @@
                 The deployed code is on {{ site_release_version }} but uslims_upgrade.php --check reports
                 work not yet done on this host:
                 {{ (uslims_upgrade_preflight_result.stdout_lines | select('search', 'todo ]') | map('trim') | list + lims_preflight_grant_fails) | join('; ') }}.
-                This play does not convert a host. {{ lims_preflight_done }} Finish the upgrade as root:
-                cd {{ user_home }}/us3/lims/database/utils && php uslims_upgrade.php --apply, then rerun this play.
+                This play does not convert a host. {{ lims_preflight_done }}
+                {{ lims_preflight_grant_remedy if lims_preflight_grant_fails else ('Finish the upgrade as root: cd ' ~ user_home ~ '/us3/lims/database/utils && php uslims_upgrade.php --apply.') }}
+                Then rerun this play.
             when:
               - not lims_host_busy | default(false) | bool
               - not lims_pre_430 | default(false) | bool
@@ -408,6 +414,7 @@
         when: ansible_facts['os_family'] == "RedHat"
 
   roles:
+      - site-release-defaults
       # EL8: enable php:7.4 before any role installs php (default stream is the retired 7.2)
       - config-lims-php-stream
       - config-lims-gui
@@ -514,9 +521,7 @@
         ## site_release is set. The eight pins below derive from it by
         ## default, so the gate is active out of the box; a site that wants
         ## one repo pinned differently can override that one *_branch var.
-        site_release:      "release-2026-Q2"
-        ## The VERSION file site_release carries; release-gate compares each checkout with it.
-        site_release_version: "4.1.0"
+        ## site_release and site_release_version default in roles/site-release-defaults.
         us3_branch:        "{{ site_release }}"
         sql_branch:        "{{ site_release }}"
         dbinst_branch:     "{{ site_release }}"
