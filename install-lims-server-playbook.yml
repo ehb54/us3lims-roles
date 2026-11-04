@@ -222,7 +222,8 @@
                 once that work has finished. For a job left in gfac.analysis with no monitor, run
                 php uslims_jobs.php --restart as us3 in {{ user_home }}/us3/lims/database/utils and let it finish.
                 If its row stays, update that checkout to {{ site_release }} and run php uslims_jobs.php --close-job with
-                the row's id, which marks its result failed and tells its submitter.
+                the row's id, which marks its result failed and tells its submitter. A submission held as
+                uncertain settles only by Resolve or Close on the dispatch dashboard, with the services running.
             when: lims_host_busy | default(false) | bool and not lims_pre_430 | default(false) | bool
 
           ## Only once the host is known not busy: a refused busy run leaves the crontab as it was.
@@ -273,23 +274,37 @@
               lims_preflight_inputs: "{{ uslims_upgrade_preflight_result.stdout_lines | select('search', 'input]') | map('trim') | list }}"
               ## Named without the commands inside the FAIL lines, which the play's output escapes.
               lims_preflight_grant_fails: "{{ uslims_upgrade_preflight_result.stdout_lines | select('search', 'FAIL ]') | select('search', 'the gfac account cannot') | map('regex_replace', '^.*(the gfac account cannot [^;]*);.*$', '\\1') | list }}"
-              ## Each command alone on its line, so a copy cannot take a sentence's punctuation with it.
-              ## The gridctl lines stay commented out: uslims_upgrade.php retires them.
-              lims_preflight_steps: |-
-                To clear these, run the following as root on this host, in order, one line at a time.{{ ' Add to the --apply line the option each setting above names.' if lims_preflight_inputs else '' }}
-                systemctl stop us3-listen
-                sed -i -E '/^[^#].*\b(gridctl(_pro|_dev)?\.php|cluster_status\.php|update_notice\.php|listen\.php|jobmonitor\.php|dispatch_heartbeat_check\.php|uslims_daily_backup\.php|uslims_daily_rsync\.php|save-jobstats\.sh)\b/s/^/#lims-upgrade#/' /etc/crontab
-                {% if lims_preflight_grant_fails %}mysql -u root -p -e 'GRANT CREATE, ALTER, INDEX ON {{ gbl_db_name }}.* TO {{ gbl_db_user }}@localhost'
-                {% endif %}cd {{ user_home }}/us3/lims/database/utils
-                php uslims_upgrade.php --apply
-                sed -i -E '/gridctl(_pro|_dev)?\.php/!s/^#lims-upgrade#//' /etc/crontab
-                systemctl start us3-listen
-                Then rerun this play.
               lims_preflight_done: >-
                 {{ 'The gridctl services were stopped for the check and are started again; nothing else was changed.'
                    if lims_idle_stopped_listen | default(false) | bool
                    else 'Nothing was changed; the gridctl services were not running and are left stopped.' }}
             when: not lims_host_busy | default(false) | bool and uslims_upgrade_preflight_result.rc is defined
+
+          ## In a later task, since it reads the facts above. Printed as a list, one command to a line, with
+          ## no backslash in any command: the play's output would escape a backslash and spoil a copy.
+          ## The gridctl lines stay commented out: uslims_upgrade.php retires them.
+          - name: "Compose how to clear what uslims_upgrade.php --check reports"
+            ansible.builtin.set_fact:
+              lims_preflight_steps:
+                - "Run the following as root on this host, in order, one line at a time.{{ ' Add to the --apply line the option each setting names.' if lims_preflight_inputs else '' }} Comment out any other LIMS line a refusal names in another crontab, and restore it afterwards."
+                - "systemctl stop us3-listen"
+                - "sed -i -E '/^[^#].*(gridctl(_pro|_dev)?[.]php|cluster_status[.]php|update_notice[.]php|listen[.]php|jobmonitor[.]php|dispatch_heartbeat_check[.]php|uslims_daily_backup[.]php|uslims_daily_rsync[.]php|save-jobstats[.]sh)/s/^/#lims-upgrade#/' /etc/crontab"
+                - "{{ 'mysql -u root -p -e ' ~ (\"GRANT CREATE, ALTER, INDEX ON \" ~ gbl_db_name ~ \".* TO \" ~ gbl_db_user ~ \"@localhost\") | quote if lims_preflight_grant_fails else '' }}"
+                - "cd {{ user_home }}/us3/lims/database/utils"
+                - "php uslims_upgrade.php --apply --www {{ www_base | default('/srv/www/htdocs') }}"
+                - "sed -i -E '/gridctl(_pro|_dev)?[.]php/!s/^#lims-upgrade#//' /etc/crontab"
+                - "systemctl start us3-listen"
+                - "Then rerun this play."
+            when: not lims_host_busy | default(false) | bool and uslims_upgrade_preflight_result.rc is defined
+
+          - name: "Show how to clear what uslims_upgrade.php --check reports, if it refuses below"
+            ansible.builtin.debug:
+              msg: "{{ lims_preflight_steps | reject('equalto', '') | list }}"
+            when:
+              - not lims_host_busy | default(false) | bool
+              - uslims_upgrade_preflight_result.rc is defined
+              - "'the host is not idle' not in uslims_upgrade_preflight_result.stderr"
+              - lims_preflight_grant_fails | length > 0 or lims_preflight_input | int > 0 or lims_preflight_pending | int > 0
 
           ## Exit 1: a check failed.
           ## Failures that each concern one instance only leave the rest of the host to this run;
@@ -311,7 +326,7 @@
                 uslims_upgrade.php --check reports failures that need the operator:
                 {{ (lims_preflight_fails + lims_preflight_grant_fails) | join('; ') }}.
                 {{ ('Settings it cannot choose itself: ' ~ (lims_preflight_inputs | join('; ')) ~ '.') if lims_preflight_inputs else '' }}
-                {{ lims_preflight_done }} Fix what the failures name. {{ lims_preflight_steps if lims_preflight_grant_fails or lims_preflight_inputs else 'Then rerun this play.' }}
+                {{ lims_preflight_done }} Fix what the failures name{{ ', following the steps the previous task printed' if lims_preflight_grant_fails or lims_preflight_inputs else '' }}, then rerun this play.
             when:
               - not lims_host_busy | default(false) | bool
               - uslims_upgrade_preflight_result.rc == 1
@@ -325,7 +340,7 @@
               msg: >-
                 uslims_upgrade.php --check reports settings it cannot choose itself:
                 {{ (lims_preflight_inputs + lims_preflight_grant_fails) | join('; ') }}.
-                {{ lims_preflight_done }} {{ lims_preflight_steps }}
+                {{ lims_preflight_done }} Follow the steps the previous task printed.
             ## Decided from SUMMARY's input count, not the exit code: a FAIL (exit 1) must not hide an [input].
             when:
               - not lims_host_busy | default(false) | bool
@@ -343,7 +358,7 @@
                 work not yet done on this host:
                 {{ (uslims_upgrade_preflight_result.stdout_lines | select('search', 'todo ]') | map('trim') | list + lims_preflight_grant_fails) | join('; ') }}.
                 This play does not convert a host. {{ lims_preflight_done }}
-                {{ lims_preflight_steps }}
+                Follow the steps the previous task printed.
             when:
               - not lims_host_busy | default(false) | bool
               - not lims_pre_430 | default(false) | bool
