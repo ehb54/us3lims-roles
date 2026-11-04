@@ -29,8 +29,6 @@
 
 - name: Request the check pages again
   ansible.builtin.include_tasks: request.yml
-  vars:
-    web_hardening_request_retries: 5
   when: web_hardening_httpd_running | bool
 
 - name: Report the response headers

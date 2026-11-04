@@ -11,14 +11,6 @@
     state: absent
   register: web_hardening_php_removed
 
-- name: Reload httpd
-  ansible.builtin.service:
-    name: httpd
-    state: reloaded
-  when:
-    - web_hardening_apache_removed is changed
-    - web_hardening_httpd_running | bool
-
 - name: Reload php-fpm
   ansible.builtin.service:
     name: php-fpm
@@ -27,9 +19,33 @@
     - web_hardening_php_removed is changed
     - web_hardening_fpm_running | bool
 
+- name: Restart httpd and wait for it to answer
+  ansible.builtin.include_tasks: restart-httpd.yml
+  vars:
+    web_hardening_restart_how: hup
+  when:
+    - web_hardening_apache_removed is changed
+    - web_hardening_httpd_running | bool
+
+- name: Stop and start httpd when it does not answer
+  ansible.builtin.include_tasks: restart-httpd.yml
+  vars:
+    web_hardening_restart_how: full
+  when:
+    - web_hardening_apache_removed is changed
+    - web_hardening_httpd_running | bool
+    - not (web_hardening_httpd_answers | default(true) | bool)
+
+- name: Stop when httpd does not answer
+  ansible.builtin.fail:
+    msg: >-
+      httpd did not answer {{ web_hardening_answering_urls[0] }} after a restart and a stop and start; the settings are removed.
+      See the httpd error_log and "systemctl status httpd".
+  when: not (web_hardening_httpd_answers | default(true) | bool)
+
 - name: Report the removal
   ansible.builtin.debug:
     msg:
       - "{{ web_hardening_apache_file }}: {{ 'removed' if web_hardening_apache_removed is changed else 'was not there' }}"
       - "{{ web_hardening_php_file }}: {{ 'removed' if web_hardening_php_removed is changed else 'was not there' }}"
-      - "httpd and php-fpm were reloaded if they were running; run the report to see the headers now"
+      - "php-fpm was reloaded and httpd restarted if they were running; run the report to see the headers now"
