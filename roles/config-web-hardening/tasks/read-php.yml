@@ -1,0 +1,56 @@
+---
+# php CLI and php-fpm read the same /etc/php.ini and /etc/php.d on EL8/EL9; only a php-fpm
+# pool's php_value / php_admin_value can differ, so those are looked for separately.
+# name=value lines rather than json: on EL8, php 7.4's json extension is a separate package.
+# ini_get gives "1" for On and "" or "0" for Off; a setting this php does not have
+# (session.cookie_samesite before php 7.3) is printed as "(none in this php)".
+- name: Read the php settings as php sees them
+  ansible.builtin.command:
+    argv:
+      - php
+      - -d
+      - display_errors=stderr
+      - -d
+      - display_startup_errors=1
+      - -r
+      - >-
+        echo "version=", PHP_VERSION, "\n";
+        foreach (["expose_php", "session.cookie_httponly", "session.cookie_secure",
+        "session.cookie_samesite", "session.use_strict_mode"] as $n) {
+        $v = ini_get($n); echo $n, "=", $v === false ? "(none in this php)" : $v, "\n"; }
+  register: web_hardening_php_read
+  changed_when: false
+  check_mode: false
+  when: web_hardening_has_php | bool
+
+- name: Note the php settings
+  ansible.builtin.set_fact:
+    web_hardening_php: "{{ dict(web_hardening_php_read.stdout | regex_findall('(?m)^([^=\\n]+)=(.*)$')) }}"
+  when: web_hardening_has_php | bool
+
+- name: Summarize the php settings
+  ansible.builtin.set_fact:
+    web_hardening_php_summary: >-
+      {% for n in ['expose_php', 'session.cookie_httponly', 'session.cookie_secure', 'session.use_strict_mode'] -%}
+      {{ n }} {{ 'On' if web_hardening_php[n] | default('') in ['1', 'On', 'on'] else 'Off' }},
+      {% endfor -%}
+      session.cookie_samesite {{ web_hardening_php['session.cookie_samesite'] | default('', true) or 'none' }};
+      startup warnings: {{ web_hardening_php_read.stderr_lines | select('search', 'PHP Startup') | list | length }}
+  when: web_hardening_has_php | bool
+
+- name: Find php-fpm pool settings that override these
+  ansible.builtin.command:
+    argv:
+      - grep
+      - -r
+      - -n
+      - -s
+      - -E
+      - '^[[:space:]]*php_(admin_)?(value|flag)\[(expose_php|session\.cookie_(httponly|secure|samesite)|session\.use_strict_mode)\]'
+      - /etc/php-fpm.conf
+      - /etc/php-fpm.d
+  register: web_hardening_fpm_overrides
+  changed_when: false
+  failed_when: web_hardening_fpm_overrides.rc > 1
+  check_mode: false
+  when: web_hardening_has_fpm | bool

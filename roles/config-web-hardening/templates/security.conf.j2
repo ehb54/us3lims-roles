@@ -1,0 +1,38 @@
+# {{ ansible_managed }}
+# config-web-hardening, ultrascan-tickets#1193: hide the Apache and php versions and send
+# browser security headers. Server-wide, so every virtual host gets them; a virtual host that
+# sets one of these headers itself overrides it.
+
+# "Server: Apache", without version, OS or modules
+ServerTokens Prod
+# no version line on the pages Apache itself generates (error pages, listings)
+ServerSignature Off
+TraceEnable Off
+
+# php adds X-Powered-By while expose_php is on; drop it from normal and error responses alike
+Header onsuccess unset X-Powered-By
+Header always unset X-Powered-By
+
+# Each header below is first removed from the normal response, so one the application also
+# sends is not sent twice.
+{% if web_hardening_nosniff | bool %}
+Header onsuccess unset X-Content-Type-Options
+Header always set X-Content-Type-Options "nosniff"
+{% endif %}
+{% if web_hardening_frame_options | length > 0 %}
+Header onsuccess unset X-Frame-Options
+Header always set X-Frame-Options "{{ web_hardening_frame_options }}"
+{% endif %}
+{% if web_hardening_frame_ancestors | length > 0 %}
+# only frame-ancestors; a Content-Security-Policy the application sends is kept and also applies
+Header always set Content-Security-Policy "frame-ancestors {{ web_hardening_frame_ancestors }}"
+{% endif %}
+{% if web_hardening_referrer_policy | length > 0 %}
+Header onsuccess unset Referrer-Policy
+Header always set Referrer-Policy "{{ web_hardening_referrer_policy }}"
+{% endif %}
+{% if web_hardening_hsts_max_age | int > 0 %}
+# https responses only
+Header onsuccess unset Strict-Transport-Security
+Header always set Strict-Transport-Security "max-age={{ web_hardening_hsts_max_age | int }}{{ '; includeSubDomains' if web_hardening_hsts_include_subdomains | bool else '' }}" "expr=%{HTTPS} == 'on'"
+{% endif %}

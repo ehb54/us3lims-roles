@@ -1,0 +1,57 @@
+---
+# httpd checks the new file together with the installed configuration before it replaces the
+# old one, so a file httpd rejects is never installed.
+- name: Write the Apache settings
+  ansible.builtin.template:
+    src: security.conf.j2
+    dest: "{{ web_hardening_apache_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+    validate: /usr/sbin/httpd -t -c 'Include %s'
+  register: web_hardening_apache_written
+  when: web_hardening_has_httpd | bool
+
+- name: Write the php settings
+  when: web_hardening_has_php | bool
+  block:
+    - name: Write the php settings file
+      ansible.builtin.template:
+        src: security.ini.j2
+        dest: "{{ web_hardening_php_file }}"
+        owner: root
+        group: root
+        mode: "0644"
+      register: web_hardening_php_written
+
+    - name: Check the php-fpm configuration
+      ansible.builtin.command: php-fpm -t
+      changed_when: false
+      when: web_hardening_has_fpm | bool
+
+  rescue:
+    - name: Remove the php settings php-fpm rejected
+      ansible.builtin.file:
+        path: "{{ web_hardening_php_file }}"
+        state: absent
+
+    - name: Stop on the php-fpm configuration error
+      ansible.builtin.fail:
+        msg: "php-fpm -t failed with {{ web_hardening_php_file }}; it was removed again. See the output above."
+
+# a reload never starts a stopped service; it reads these files when it starts
+- name: Reload httpd
+  ansible.builtin.service:
+    name: httpd
+    state: reloaded
+  when:
+    - web_hardening_apache_written is changed
+    - web_hardening_httpd_running | bool
+
+- name: Reload php-fpm
+  ansible.builtin.service:
+    name: php-fpm
+    state: reloaded
+  when:
+    - web_hardening_php_written is changed
+    - web_hardening_fpm_running | bool

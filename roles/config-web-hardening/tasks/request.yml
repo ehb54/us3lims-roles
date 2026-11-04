@@ -1,0 +1,26 @@
+---
+# The host requests web_hardening_check_urls from itself. LD_PRELOAD is cleared because a host
+# that sends its traffic through proxychains (LD_PRELOAD in /etc/environment, which sudo
+# applies) would also send these requests to localhost through the tunnel.
+# After a reload, httpd's old workers can still answer for a moment, so with retries the
+# request is repeated until the Server header no longer carries a version.
+- name: Request the check pages
+  ansible.builtin.uri:
+    url: "{{ item }}"
+    method: GET
+    follow_redirects: none
+    validate_certs: false
+    timeout: 10
+    status_code: [200, 204, 301, 302, 303, 307, 308, 400, 401, 403, 404, 405, 500, 502, 503]
+  environment:
+    LD_PRELOAD: ""
+  loop: "{{ web_hardening_check_urls }}"
+  register: web_hardening_pages
+  failed_when: false
+  check_mode: false
+  until: >-
+    web_hardening_request_retries | int == 0
+    or web_hardening_pages.status | default(-1) | int < 0
+    or web_hardening_pages.server | default('') is not search('/')
+  retries: "{{ [web_hardening_request_retries | int, 1] | max }}"
+  delay: 2

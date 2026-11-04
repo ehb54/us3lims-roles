@@ -1,0 +1,16 @@
+---
+- name: Report the response headers
+  ansible.builtin.debug:
+    msg: >-
+      {{ item.item }}:
+      {{ ('HTTP ' ~ item.status) if item.status | default(-1) | int > 0 else ('no answer: ' ~ item.msg | default('')) }};
+      Server: {{ item.server | default('none') }};
+      X-Powered-By: {{ item.x_powered_by | default('none') }};
+      X-Content-Type-Options: {{ item.x_content_type_options | default('none') }};
+      X-Frame-Options: {{ item.x_frame_options | default('none') }};
+      Content-Security-Policy: {{ item.content_security_policy | default('none') }};
+      Referrer-Policy: {{ item.referrer_policy | default('none') }};
+      Strict-Transport-Security: {{ item.strict_transport_security | default('none') }}
+  loop: "{{ web_hardening_pages.results }}"
+  loop_control:
+    label: "{{ item.item }}"

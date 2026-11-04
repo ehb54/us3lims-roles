@@ -1,0 +1,10 @@
+; {{ ansible_managed }}
+; config-web-hardening, ultrascan-tickets#1193. Read after /etc/php.ini by the php CLI and
+; php-fpm; a php-fpm pool's php_value / php_admin_value would still override these.
+expose_php = {{ 'On' if web_hardening_expose_php | bool else 'Off' }}
+session.cookie_httponly = {{ 1 if web_hardening_cookie_httponly | bool else 0 }}
+session.cookie_secure = {{ 1 if web_hardening_cookie_secure | bool else 0 }}
+{% if web_hardening_cookie_samesite | length > 0 %}
+session.cookie_samesite = {{ web_hardening_cookie_samesite }}
+{% endif %}
+session.use_strict_mode = {{ 1 if web_hardening_cookie_strict_mode | bool else 0 }}
