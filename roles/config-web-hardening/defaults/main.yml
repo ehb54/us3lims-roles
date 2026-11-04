@@ -1,0 +1,60 @@
+---
+# Apache and php security settings for EL8/EL9 hosts running Apache with php-fpm
+# (ultrascan-tickets#1193)
+
+# report: show the version banners, security headers and php session settings; change nothing
+# apply:  write the two files below, reload httpd and php-fpm if they are running, verify
+# remove: remove the two files, reload httpd and php-fpm if they are running
+web_hardening_mode: report
+
+# Apache. The file sets ServerTokens Prod, ServerSignature Off and TraceEnable Off, drops
+# X-Powered-By, and sends the headers below on every response of every virtual host. A virtual
+# host that sets one of these headers itself still overrides it.
+web_hardening_apache_file: /etc/httpd/conf.d/zz-us3lims-security.conf
+
+# X-Content-Type-Options: nosniff (browsers do not guess a response's type)
+web_hardening_nosniff: true
+
+# X-Frame-Options; "" sends none. With SAMEORIGIN only pages of the same origin (scheme, host
+# name and port) may frame these pages; another host name, a subdomain too, is another origin.
+web_hardening_frame_options: SAMEORIGIN
+
+# Content-Security-Policy frame-ancestors, the current form of X-Frame-Options; "" sends none.
+# Only frame-ancestors is set, so scripts, styles and images are not restricted.
+web_hardening_frame_ancestors: "'self'"
+
+# Referrer-Policy; "" sends none. This value is also the browsers' default.
+web_hardening_referrer_policy: strict-origin-when-cross-origin
+
+# Strict-Transport-Security max-age in seconds, sent on https responses only; 0 sends none.
+# A browser that has seen it refuses plain http and any certificate error on that host name for
+# that long, so set it only where the certificate is CA-signed and renews (31536000 = one year).
+web_hardening_hsts_max_age: 0
+web_hardening_hsts_include_subdomains: false
+
+# php (CLI and php-fpm), in a file read after /etc/php.ini, which config-lims-php owns.
+# A php-fpm pool's php_value / php_admin_value would still override these; apply fails if
+# a pool sets one of them.
+web_hardening_php_file: /etc/php.d/zz-us3lims-security.ini
+
+# expose_php: false drops the X-Powered-By: PHP/<version> header at its source
+web_hardening_expose_php: false
+
+# session.cookie_httponly: page scripts cannot read the session cookie
+web_hardening_cookie_httponly: true
+
+# session.cookie_secure: the browser sends the session cookie over https only. Set false on a
+# host that serves php sessions over plain http; LIMS hosts redirect http to https.
+web_hardening_cookie_secure: true
+
+# session.cookie_samesite (php 7.3 and later): Lax, Strict, None, or "" for php's default (none)
+web_hardening_cookie_samesite: Lax
+
+# session.use_strict_mode: php refuses session ids it did not create (session fixation)
+web_hardening_cookie_strict_mode: true
+
+# Pages the host requests from itself to report and check the response headers. A URL that
+# does not answer (e.g. nothing listens on 443) is reported and skipped.
+web_hardening_check_urls:
+  - http://localhost/
+  - https://localhost/

@@ -72,6 +72,10 @@
       - config-lims-database
       - config-lims-apache
       - config-lims-php
+      # version banners, security headers, php session cookie flags (ultrascan-tickets#1193)
+      - role: config-web-hardening
+        vars:
+          web_hardening_mode: apply
       - config-lims-lims
       - config-lims-slurm
       - build-qt

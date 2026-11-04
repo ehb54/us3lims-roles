@@ -1,0 +1,35 @@
+---
+- name: Remove the Apache settings
+  ansible.builtin.file:
+    path: "{{ web_hardening_apache_file }}"
+    state: absent
+  register: web_hardening_apache_removed
+
+- name: Remove the php settings
+  ansible.builtin.file:
+    path: "{{ web_hardening_php_file }}"
+    state: absent
+  register: web_hardening_php_removed
+
+- name: Reload httpd
+  ansible.builtin.service:
+    name: httpd
+    state: reloaded
+  when:
+    - web_hardening_apache_removed is changed
+    - web_hardening_httpd_running | bool
+
+- name: Reload php-fpm
+  ansible.builtin.service:
+    name: php-fpm
+    state: reloaded
+  when:
+    - web_hardening_php_removed is changed
+    - web_hardening_fpm_running | bool
+
+- name: Report the removal
+  ansible.builtin.debug:
+    msg:
+      - "{{ web_hardening_apache_file }}: {{ 'removed' if web_hardening_apache_removed is changed else 'was not there' }}"
+      - "{{ web_hardening_php_file }}: {{ 'removed' if web_hardening_php_removed is changed else 'was not there' }}"
+      - "httpd and php-fpm were reloaded if they were running; run the report to see the headers now"
