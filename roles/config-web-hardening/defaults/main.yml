@@ -54,7 +54,16 @@ web_hardening_cookie_samesite: Lax
 web_hardening_cookie_strict_mode: true
 
 # Pages the host requests from itself to report and check the response headers. A URL that
-# does not answer (e.g. nothing listens on 443) is reported and skipped.
+# does not answer (e.g. nothing listens on 443) is reported and skipped; apply stops before any
+# change if httpd runs and none answers.
 web_hardening_check_urls:
   - http://localhost/
   - https://localhost/
+
+# seconds one check request may take
+web_hardening_request_timeout: 5
+
+# After httpd's restart (SIGHUP), the first check page that answered before is requested up to
+# this many times, 2 s apart, until it answers (15: up to about 1.5 minutes). If it does not,
+# httpd is stopped and started; if it still does not, apply removes the Apache settings again.
+web_hardening_wait_retries: 15

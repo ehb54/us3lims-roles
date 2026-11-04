@@ -1,0 +1,56 @@
+---
+# Never a graceful reload. A graceful reload starts new processes while the old ones finish their
+# requests; on a host with no spare process slots (ServerLimit x ThreadsPerChild =
+# MaxRequestWorkers) the new ones cannot start, and httpd stops answering until the old ones exit
+# ("AH03490: scoreboard is full"). ultrascan-tickets#1197
+#
+# web_hardening_restart_how:
+#   hup:  Apache's restart signal (SIGHUP to the main process): the workers are stopped at once,
+#         requests in progress are cut off, the configuration is read again and new workers start.
+#         The listening sockets stay open, so new connections wait about a second instead of
+#         being refused.
+#   full: systemctl restart. On EL8/EL9 the stop is Apache's graceful stop, which waits for
+#         requests in progress (up to GracefulShutdownTimeout, or systemd's stop timeout of 90 s,
+#         after which systemd kills httpd); the listening sockets are closed meanwhile.
+
+# the service module cannot send a signal; systemctl kill only signals the running main process
+- name: Restart httpd with SIGHUP  # noqa: command-instead-of-module
+  ansible.builtin.command: systemctl kill --kill-who=main --signal=HUP httpd
+  changed_when: true
+  when: web_hardening_restart_how == 'hup'
+
+- name: Stop and start httpd
+  ansible.builtin.service:
+    name: httpd
+    state: restarted
+  when: web_hardening_restart_how == 'full'
+
+- name: Expect httpd to answer
+  ansible.builtin.set_fact:
+    web_hardening_httpd_answers: true
+
+# the first check page that answered before the change, requested until it answers again
+- name: Wait for httpd to answer
+  when: web_hardening_answering_urls | length > 0
+  block:
+    - name: Request the first check page until it answers
+      ansible.builtin.uri:
+        url: "{{ web_hardening_answering_urls[0] }}"
+        method: GET
+        follow_redirects: none
+        validate_certs: false
+        timeout: "{{ web_hardening_request_timeout | int }}"
+        status_code: [200, 204, 301, 302, 303, 307, 308, 400, 401, 403, 404, 405, 500, 502, 503]
+      environment:
+        LD_PRELOAD: ""
+      register: web_hardening_wait
+      failed_when: web_hardening_wait.status | default(-1) | int < 0
+      until: web_hardening_wait.status | default(-1) | int > 0
+      retries: "{{ web_hardening_wait_retries | int }}"
+      delay: 2
+      check_mode: false
+
+  rescue:
+    - name: Note that httpd does not answer
+      ansible.builtin.set_fact:
+        web_hardening_httpd_answers: false

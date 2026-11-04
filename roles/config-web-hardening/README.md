@@ -23,11 +23,11 @@ Modes are set by `web_hardening_mode`; the playbook maps `-e run=1` to `apply` a
 - `apply`:
   1. Writes `/etc/httpd/conf.d/zz-us3lims-security.conf`: `ServerTokens Prod`, `ServerSignature Off`, `TraceEnable Off`, removes `X-Powered-By` and sets the headers on every response of every virtual host. httpd checks the new file with the installed configuration (`httpd -t`) before it replaces the old one, so a file httpd rejects is never installed.
   2. Writes `/etc/php.d/zz-us3lims-security.ini` (`expose_php = Off` and the session settings), read after `/etc/php.ini`, which `config-lims-php` owns, by the php CLI and php-fpm. Runs `php-fpm -t`; if it fails, the file is removed again.
-  3. Reloads httpd and php-fpm if a file changed and the service is running. A stopped service stays stopped and reads the files when it starts. A reload of php-fpm replaces its workers.
+  3. If a file changed and the service is running, reloads php-fpm (graceful; it replaces its workers) and restarts httpd. A stopped service stays stopped and reads the files when it starts. httpd is never gracefully reloaded, because that can hang (see Notes). It gets Apache's restart signal (SIGHUP): workers stop at once, requests in progress are cut off, and new workers start within about a second while the listening sockets stay open. Then the role waits for the first check page that answered before the change, up to about 1.5 minutes (`web_hardening_wait_retries`). If it does not answer, httpd is stopped and started (`systemctl restart`, which can take up to 90 s while requests in progress finish). If it still does not answer, the Apache file is removed again, httpd stopped and started, and the run fails, saying whether httpd answers without the file (ultrascan-tickets#1197). Before changing anything, apply stops if httpd runs but none of the check pages answers.
   4. Verifies: php reports the settings without startup warnings, no php-fpm pool overrides them, and each check URL that answers has no version in `Server`, no `X-Powered-By`, and the headers as set (HSTS on https URLs only).
 
   Running it again changes nothing.
-- `remove`: removes both files and reloads httpd and php-fpm if they are running.
+- `remove`: removes both files, reloads php-fpm and restarts httpd if they are running, and waits for httpd to answer as in `apply` (stopping and starting it if needed).
 
 `--check --diff` with `-e run=1` shows what `apply` would write.
 
@@ -53,6 +53,8 @@ See `defaults/main.yml`. Per-host values go in the inventory.
 
 `web_hardening_check_urls` - pages the host requests from itself, default `http://localhost/` and `https://localhost/`
 
+`web_hardening_request_timeout` - seconds per check request, default `5`; `web_hardening_wait_retries` - requests (2 s apart) while waiting for httpd after a restart, default `15`
+
 `web_hardening_apache_file`, `web_hardening_php_file` - the two files
 
 ## Notes
@@ -60,3 +62,4 @@ See `defaults/main.yml`. Per-host values go in the inventory.
 - A virtual host that sets one of these headers itself overrides this role's value for that host; `report` lists such settings and `apply` then fails its header check.
 - A php-fpm pool's `php_value` / `php_admin_value` overrides `/etc/php.d`; `apply` fails if a pool sets one of these settings.
 - The role does not change TLS settings; mod_ssl follows the system crypto policy on EL8/EL9.
+- A graceful reload (`systemctl reload httpd`, `apachectl graceful`, and certbot's renewals) starts new httpd processes while the old ones finish their requests. With the event MPM, on a host whose `ServerLimit` × `ThreadsPerChild` equals `MaxRequestWorkers`, no process slot is free for the new ones. httpd then accepts connections but answers none, and `error_log` repeats `AH03490: scoreboard is full, not at MaxRequestWorkers.Increase ServerLimit.` until the old processes exit. That is why the role restarts httpd instead. Headroom in `ServerLimit` would also keep other graceful reloads from hanging, but changing MPM limits on a busy production host needs its own testing; the role leaves them alone. ultrascan-tickets#1197

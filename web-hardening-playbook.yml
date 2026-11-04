@@ -11,7 +11,10 @@
 # Per-host settings go in the inventory, e.g. web_hardening_hsts_max_age on a host with a
 # CA-signed certificate, or web_hardening_cookie_secure: false on a host that serves php
 # sessions over plain http (see roles/config-web-hardening/defaults/main.yml).
-# httpd and php-fpm are reloaded only if they are running; a stopped one stays stopped.
+# php-fpm is reloaded and httpd restarted with SIGHUP (never a graceful reload:
+# ultrascan-tickets#1197) only if they are running; a stopped one stays stopped. The role then
+# waits for httpd to answer, stops and starts it if needed, and takes the Apache settings out
+# again if it still does not answer.
 
 - name: Apache and php security settings
   hosts: all

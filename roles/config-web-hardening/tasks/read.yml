@@ -90,10 +90,28 @@
 
 - name: Read the response headers
   ansible.builtin.include_tasks: request.yml
-  vars:
-    web_hardening_request_retries: 0
   when: web_hardening_httpd_running | bool
 
 - name: Report the response headers
   ansible.builtin.include_tasks: report-headers.yml
   when: web_hardening_httpd_running | bool
+
+- name: Note which check pages answer
+  ansible.builtin.set_fact:
+    web_hardening_answering_urls: >-
+      {{ (web_hardening_pages.results | selectattr('status', 'defined') | selectattr('status', 'gt', 0)
+          | map(attribute='item') | list) if web_hardening_httpd_running | bool else [] }}
+
+# After a restart the role waits for a check page that answered before the change; without
+# one it could not tell whether httpd answers afterwards.
+- name: Stop before any change when httpd runs but no check page answers
+  ansible.builtin.assert:
+    that: web_hardening_answering_urls | length > 0
+    fail_msg: >-
+      httpd is running, but none of {{ web_hardening_check_urls | join(', ') }} answers, so the role
+      could not tell whether httpd still answers after the change. Nothing was changed. Set
+      web_hardening_check_urls to pages this host serves.
+    quiet: true
+  when:
+    - web_hardening_mode == 'apply'
+    - web_hardening_httpd_running | bool
