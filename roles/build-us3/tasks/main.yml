@@ -352,13 +352,19 @@
     dest: "/opt/ultrascan3/somo/doc"
     state: link
 
-- name: Copy us3.sh to /etc/profile.d
+- name: Copy zz-us3.sh to /etc/profile.d
   copy:
-    src: us3.sh
-    dest: /etc/profile.d/us3.sh
+    src: zz-us3.sh
+    dest: /etc/profile.d/zz-us3.sh
     owner: root
     group: root
-    mode: u=rwx,o=rx
+    mode: '0644'
+
+# replaced by zz-us3.sh, which runs after Lmod default-module scripts (ultrascan-tickets#1199)
+- name: Remove the old /etc/profile.d/us3.sh
+  file:
+    path: /etc/profile.d/us3.sh
+    state: absent
 
 - name: Check if rasmol already installed, using /opt/ultrascan3/bin/rasmol
   stat: 
