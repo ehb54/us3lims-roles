@@ -8,6 +8,24 @@
 #        ansible.builtin.debug:
 #          var: ansible_facts
 
+      # ansible_fqdn comes from reverse DNS. On some cloud VMs (e.g. OpenStack) it is the
+      # provider's internal name, not the name clients use, and the roles put hostname into
+      # the Apache vhosts, certbot, postfix and the LIMS configs
+      - name: check that hostname is the host's own name
+        ansible.builtin.assert:
+          that: >-
+            hostname_check_skip | default(false) | bool
+            or hostname != ansible_fqdn
+            or ansible_nodename == ansible_fqdn
+            or '.' not in ansible_nodename
+          fail_msg: >-
+            hostname is {{ hostname }} (ansible_fqdn, from reverse DNS), but this host calls
+            itself {{ ansible_nodename }}. Set hostname in this playbook's vars to the name
+            clients use, e.g. hostname: "{{ ansible_nodename }}", or set
+            hostname_check_skip: true if {{ hostname }} is right.
+          quiet: true
+        tags: [always, hostname-check]
+
       - name: set www_user for Debian
         set_fact:
           www_user: "www-data"
@@ -579,7 +597,11 @@
 
         # set this to a specific value (could be numeric ip) instead of {{ ansible_fqdn }} if you with, e.g. if the host is private
         # N.B. you can only configure one host per ansible-playbook run if you do not use {{ ansible_fqdn }}
+        # N.B. ansible_fqdn comes from reverse DNS; on a cloud VM it can be the provider's internal name.
+        #      The first pre_task stops the run when it differs from the host's own name (ansible_nodename):
+        #      then set hostname to the name clients use, or uncomment hostname_check_skip if ansible_fqdn is right.
         hostname: "{{ ansible_fqdn }}"
+        # hostname_check_skip: true
         postfix_hostname: "{{ hostname }}"
         # N.B. if your host name is pure ip (e.g. 1.2.3.4 etc), you need to configure a text string prefix as commented below
         # postfix_hostname: "us-{{ hostname }}"

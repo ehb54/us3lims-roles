@@ -1,6 +1,6 @@
 # Ansible role: Apache and php security settings
 
-Hides the Apache and php version banners, sends browser security headers and sets the php session cookie flags on EL8/EL9 hosts (RHEL, Oracle Linux, Alma, Rocky) running Apache with php-fpm: LIMS hosts and other web hosts. Run it through `web-hardening-playbook.yml`; `example-playbook.yml` applies it to new LIMS hosts. ultrascan-tickets#1193.
+Hides the Apache and php version banners, sends browser security headers and sets the php session cookie flags on EL8/EL9 hosts (RHEL, Oracle Linux, Alma, Rocky) running Apache with php-fpm: LIMS hosts and other web hosts. Run it through `web-hardening-playbook.yml`; `install-lims-server-playbook.yml` applies it to new LIMS hosts. ultrascan-tickets#1193.
 
 ## Why
 
