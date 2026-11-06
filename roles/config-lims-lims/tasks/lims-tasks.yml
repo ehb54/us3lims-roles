@@ -294,6 +294,8 @@
       ansible.builtin.command:
         chdir: "{{ user_home }}/us3/lims/database/utils"
         cmd: "php uslims_upgrade.php --apply --yes --www {{ www_base }}"
+      environment:
+        LIMS_CRON_JOBS_ELSEWHERE_OK: "1"
       register: uslims_upgrade_result
       ## From the SUMMARY line: a converged host prints changes=0.
       changed_when: (uslims_upgrade_result.stdout | regex_search('changes=(\\d+)', '\\1') | default(['0'], true) | first | int) > 0

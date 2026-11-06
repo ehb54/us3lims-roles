@@ -160,6 +160,8 @@
       ansible.builtin.command:
         chdir: "{{ user_home }}/us3/lims/database/utils"
         cmd: "php uslims_upgrade.php --apply --yes --www {{ www_base }}"
+      environment:
+        LIMS_CRON_JOBS_ELSEWHERE_OK: "1"
       register: demo_uslims_upgrade_result
       ## As config-lims-lims's converge: changes from the SUMMARY line, and failures that each
       ## concern one instance only do not fail the run.

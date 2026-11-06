@@ -31,16 +31,17 @@ All three kinds are one-time, all are idempotent (safe to rerun, a done step rep
 
 This is manual and operator-driven, not an ansible convergence step:
 
-1. Stop services (`php services.php stop` while the host is still on old code — post-upgrade, `systemctl stop us3-listen` instead, since the new code refuses a pre-upgrade config). Let queues drain. Comment out LIMS cron entries.
-2. Pull code in two passes: `uslims_git_info.php --update-pull util` (dbutils itself), then `--update-pull lims` (common, gridctl, webinfo, dbinst base, **and every existing instance's own dbinst checkout**). Both passes are required — pulling `util` alone leaves the host in the exact stale-mix state step 0 is built to refuse.
-3. Run `uslims_upgrade.php --check`, review, then `--apply`.
-4. Restart services, test.
+1. Let any dispatch request settle, then stop the web server and services (`php services.php stop` while the host is still on old code; post-upgrade, `systemctl stop us3-listen` instead, since the new code refuses a pre-upgrade config). Comment out LIMS cron entries.
+2. Move dbutils only. Finish every job with `uslims_jobs.php --busy`, since this release's monitors don't run until `--apply` has converted `listen-config.php`.
+3. Take a full sql dump, then move the rest: common, gridctl, webinfo, newinst, us3_sql, **and every existing instance's own dbinst checkout** (`uslims_git_info.php --update-pull lims` on a checkout already on its release branch).
+4. Run `uslims_upgrade.php --check`, review, then `--apply`.
+5. Restore the cron entries, restart services, test.
 
 Rollback is backup-based, not code-based: every file the script touches is copied to a timestamped directory first; restoring means copying those back with services stopped, not running some inverse migration. There is no `down()` method anywhere in this design, deliberately — see the dbutils README's "Undoing it" section.
 
 ## The bug this model exposes
 
-Step 0 needs to decide, per instance, "is this one of the pre-existing instances that needs a UTC boundary recorded, or is it a newinst-created instance where every row is already UTC by construction?" The code answers this by reading the instance's own VERSION file and treating "already at 4.3.0" as proof of "created fresh by newinst, under 4.3.0 code." That reasoning is actually correct for a newinst-created instance — VERSION really does prove freshness there, since newinst can only ever create an instance at whatever version its own dbinst checkout is. It's wrong for the *other* kind of instance in case 2: step 2 of the procedure above pulls **every existing instance's own dbinst checkout** to 4.3.0 too, as part of the mandated upgrade sequence — so a genuinely pre-existing 4.2.0 instance also reads VERSION 4.3.0 by the time step 0 runs, identically to a newinst-created one, even though nothing about its data has changed.
+Step 0 needs to decide, per instance, "is this one of the pre-existing instances that needs a UTC boundary recorded, or is it a newinst-created instance where every row is already UTC by construction?" The code answers this by reading the instance's own VERSION file and treating "already at 4.3.0" as proof of "created fresh by newinst, under 4.3.0 code." That reasoning is actually correct for a newinst-created instance — VERSION really does prove freshness there, since newinst can only ever create an instance at whatever version its own dbinst checkout is. It's wrong for the *other* kind of instance in case 2: step 3 of the procedure above pulls **every existing instance's own dbinst checkout** to 4.3.0 too, as part of the mandated upgrade sequence — so a genuinely pre-existing 4.2.0 instance also reads VERSION 4.3.0 by the time step 0 runs, identically to a newinst-created one, even though nothing about its data has changed.
 
 The general lesson, not just the specific fix: **don't infer "was this here before the transition" from a signal the transition procedure itself overwrites for every instance, new and old alike.** The boundary table already exists for exactly this reason (an explicit, persistent, per-instance record) — step 0 needs to decide newness from something that survives the pull, such as whether the instance already has any `people_audit` rows at all, not from VERSION.
 

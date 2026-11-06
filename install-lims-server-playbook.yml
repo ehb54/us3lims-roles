@@ -259,6 +259,8 @@
             ansible.builtin.command:
               chdir: "{{ user_home }}/us3/lims/database/utils"
               cmd: "php uslims_upgrade.php --check --www {{ www_base | default('/srv/www/htdocs') }}"
+            environment:
+              LIMS_CRON_JOBS_ELSEWHERE_OK: "1"
             register: uslims_upgrade_preflight_result
             changed_when: false
             ## Same tolerance as config-lims-lims's own --apply call: a
@@ -457,15 +459,16 @@
     - name: "Find LIMS cron lines left commented out"
       ansible.builtin.shell:
         cmd: >-
-          grep -E '^#.*((cluster_status|update_notice|dispatch_heartbeat_check|uslims_daily_backup|uslims_daily_rsync)[.]php|save-jobstats[.]sh)'
-          /etc/crontab
+          re='^[[:space:]]*#.*((cluster_status|update_notice|dispatch_heartbeat_check|uslims_daily_backup|uslims_daily_rsync)[.]php|save-jobstats[.]sh)';
+          grep -HE "$re" /etc/crontab /etc/cron.d/* 2>/dev/null;
+          crontab -l -u us3 2>/dev/null | grep -E "$re" | sed 's/^/us3 crontab:/'
       register: lims_commented_cron
       changed_when: false
       failed_when: false
 
     - name: "Name the LIMS cron lines left commented out"
       ansible.builtin.debug:
-        msg: "These LIMS cron lines are off. Uncomment any you commented out for an upgrade: {{ lims_commented_cron.stdout_lines }}"
+        msg: "These LIMS cron lines are off, each after the crontab it is in. Uncomment any you commented out for an upgrade: {{ lims_commented_cron.stdout_lines }}"
       when: lims_commented_cron.stdout_lines | default([]) | length > 0
 
   roles:

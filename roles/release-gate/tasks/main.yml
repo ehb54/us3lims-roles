@@ -47,7 +47,10 @@
         argv: [ git, -C, "{{ release_gate_dest }}", rev-parse, --abbrev-ref, HEAD ]
       register: release_gate_current
       changed_when: false
-      when: release_gate_git_dir.stat.exists
+      ## An instance checkout may not be in root's safe.directory, and its ref isn't compared.
+      when:
+        - release_gate_git_dir.stat.exists
+        - not release_gate_version_only | default(false) | bool
 
     ## A detached HEAD (checked out to a tag, not a branch) reads back
     ## literally as "HEAD" from rev-parse --abbrev-ref -- fall back to an
@@ -60,6 +63,7 @@
       failed_when: false
       when:
         - release_gate_git_dir.stat.exists
+        - not release_gate_version_only | default(false) | bool
         - release_gate_current.stdout == "HEAD"
 
     ## The branch/tag check above only proves the checkout's ref is named
@@ -133,6 +137,6 @@
           existing checkout without this matching first.
       when:
         - release_gate_git_dir.stat.exists
-        - (release_gate_current_tag.stdout | default(release_gate_current.stdout)) != site_release
         - not release_gate_version_only | default(false) | bool
+        - (release_gate_current_tag.stdout | default(release_gate_current.stdout)) != site_release
   when: site_release is defined
