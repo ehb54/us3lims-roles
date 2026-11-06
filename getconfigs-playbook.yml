@@ -65,14 +65,20 @@
 
   roles:
 
+  ## vars: on a play takes a mapping, not a sequence -- every entry here
+  ## was written as "- key: value", a list of one-key mappings, which
+  ## made ansible-playbook --syntax-check refuse this whole file. Written
+  ## as a plain mapping instead; same keys, same values (the two nested
+  ## lists below a key are unaffected -- only the list-of-vars itself was
+  ## wrong).
   vars:
-    - config_dir    : "/home/usadmin/configs/{{ inventory_hostname }}"
-    - pass_from     : "ansible/vault"
-    - tmp_pass_file : "/home/usadmin/.config_pass"
-    - config_files_full_path :
+    config_dir    : "/home/usadmin/configs/{{ inventory_hostname }}"
+    pass_from     : "ansible/vault"
+    tmp_pass_file : "/home/usadmin/.config_pass"
+    config_files_full_path :
         - /home/us3/lims/bin/listen-config.php
         - /home/us3/lims/database/utils/db_config.php
-    - config_files :
+    config_files :
         - listen-config.php
         - db_config.php
     

@@ -5,6 +5,13 @@
       name: "{{ packages }}"
       update_cache: yes
 
+## dbinst's show_image.php calls mb_strlen()
+- name: Install php-mbstring
+  dnf:
+      name: php-mbstring
+      state: present
+  when: not lims_pre_430 | default(false) | bool
+
 # an imagick.so built for another php version exists but does not load
 - name: Check if magik loads
   command: >-
@@ -17,6 +24,29 @@
 - name: Install magik
   shell: umask 022 && echo '' | /usr/bin/pecl install -f imagick-{{ lims_php_imagick_version }}
   when: imagick_module.rc != 0
+
+## Default KillMode ("control-group") sends the stop signal to every
+## process in php-fpm.service's cgroup, not just the workers systemd
+## itself tracks -- a job a web request launched (submit_slurm's
+## launch_monitor path) stays in that same cgroup even once it has
+## detached from its parent worker, so a routine php-fpm restart (e.g.
+## from the config changes below) took every job it had launched down
+## with it. KillMode=process limits the signal to the tracked processes
+## php-fpm's own master already manages directly.
+- name: Create folder for the php-fpm systemd drop-in
+  ansible.builtin.file:
+    path: /etc/systemd/system/php-fpm.service.d/
+    state: directory
+  when: not lims_pre_430 | default(false) | bool
+
+- name: Install the php-fpm KillMode override
+  ansible.builtin.template:
+    src: killmode-process.conf.j2
+    dest: /etc/systemd/system/php-fpm.service.d/killmode-process.conf
+  notify:
+    - reload daemon
+    - restart php-fpm
+  when: not lims_pre_430 | default(false) | bool
 
 - name: Configure php.ini
   copy:
@@ -39,3 +69,31 @@
         dest: /etc/php-fpm.d/www.conf
         backup: yes
   notify: restart php-fpm
+
+## www.conf's pool runs as user=us3, group=apache, but the log directory and
+## its pre-existing log files (created root:root by the php-fpm package) are
+## not writable by either -- the pool's own php_admin_value[error_log] and
+## slowlog then fail to open silently, and nothing from that pool's PHP
+## errors or slow-request log ever reaches disk.
+- name: Ensure the php-fpm log directory is writable by the pool
+  ansible.builtin.file:
+    path: /var/log/php-fpm
+    state: directory
+    owner: root
+    group: apache
+    mode: '0775'
+  when: not lims_pre_430 | default(false) | bool
+
+- name: Ensure the pool's own error and slow logs are writable by the pool
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: touch
+    owner: us3
+    group: apache
+    mode: '0664'
+    access_time: preserve
+    modification_time: preserve
+  loop:
+    - /var/log/php-fpm/www-error.log
+    - /var/log/php-fpm/www-slow.log
+  when: not lims_pre_430 | default(false) | bool

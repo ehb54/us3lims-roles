@@ -45,48 +45,52 @@
 #      - install-reverse-tunnel-service
       - install-fail2ban
      
+  ## vars: on a play takes a mapping, not a sequence -- every entry here
+  ## was written as "- key: value", a list of one-key mappings, which
+  ## made ansible-playbook --syntax-check refuse this whole file. Written
+  ## as a plain mapping instead; same keys, same values.
   vars:
-        - install_workstation: false
-        - install_commercial: true
-        - comp_opt: "-march=native"
+        install_workstation: false
+        install_commercial: true
+        comp_opt: "-march=native"
 
-        - qt_major_version: "5.14"
-        - qt_version: "5.14.2"
-        - qwt_version: "6.1.5"
-        - cores_for_parallel_compile: 4
-        - us3_branch: "master"
-        - gridctl_branch: "master"
-        - common_branch: "master"
-        - newinst_branch: "master"
-        - webinfo_branch: "master"
-        - utils_branch: "main"
+        qt_major_version: "5.14"
+        qt_version: "5.14.2"
+        qwt_version: "6.1.5"
+        cores_for_parallel_compile: 4
+        us3_branch: "master"
+        gridctl_branch: "master"
+        common_branch: "master"
+        newinst_branch: "master"
+        webinfo_branch: "master"
+        utils_branch: "main"
 
-        - slurm_ver: 20.02.7 # Change to appropriate version 
-        - slurm_md5: e47e68692354f03db2999ec84fe3f735
+        slurm_ver: 20.02.7 # Change to appropriate version
+        slurm_md5: e47e68692354f03db2999ec84fe3f735
 
 #        # N.B. slurm_cores can not exceed available cores, if it does, the node will be stuck "draining" (waiting for available resources)
 #        #      if you want to develop (not production!) on a smaller system
 #        #         add "#SBATCH -O" to your sbatch submission scripts to allow overcommitting
-#        #         set - slurm_sbatch_extras : "#SBATCH -O\n" for slurm testing scripts via ansible
-#        - slurm_cores : 4
-#        - slurm_sbatch_extras : ""
-#        # - slurm_sbatch_extras : "#SBATCH -O\n"
+#        #         set slurm_sbatch_extras : "#SBATCH -O\n" for slurm testing scripts via ansible
+#        slurm_cores : 4
+#        slurm_sbatch_extras : ""
+#        # slurm_sbatch_extras : "#SBATCH -O\n"
 
 #        # required if install-reverse-tunnel role run
 #        # you will manually need to install usadmin's public key on the rtunnel_user @ rtunnel_ip's authorized keys
-#        - rtunnel_user: "ultrascan"
-#        - rtunnel_ip: "142.66.17.9"
+#        rtunnel_user: "ultrascan"
+#        rtunnel_ip: "142.66.17.9"
 #        # assign unique port
-#        - rtunnel_port: "22254"
-#        - rtunnel_service_port: "22254"
+#        rtunnel_port: "22254"
+#        rtunnel_service_port: "22254"
 
         # required for role install-reverse-tunnel-service
         # you will manually need to install usadmin's public key on the rtunnel_user @ rtunnel_ip's authorized keys
-        - rtunnel_user: "ultrascan"
-        - rtunnel_ip: "142.66.17.9"
+        rtunnel_user: "ultrascan"
+        rtunnel_ip: "142.66.17.9"
         # assign unique port (if both rtunnel & rtunnel service installed, use different ports!
-        - rtunnel_service_port: "22012"
+        rtunnel_service_port: "22012"
         ## "no" or "yes"
-        - rtunnel_service_enabled: "no"
-        ## "started" or "stopped" 
-        - rtunnel_service_state: "stopped"
+        rtunnel_service_enabled: "no"
+        ## "started" or "stopped"
+        rtunnel_service_state: "stopped"

@@ -3,29 +3,97 @@
     user_home: "/home"
   when: user_home is undefined
 
-- name: Add users
+## Admin accounts
+## are set up only at install; re-runs must not add or remove them. These
+## two tasks used to run unconditionally on every single run, with
+## state: present -- so an admin account an operator deliberately removed
+## (userdel) came right back on the very next run, key and all. A plain
+## "does the account already exist" check cannot tell "never created" from
+## "created, then deliberately removed" apart (both read as absent) -- a
+## marker file that, once created, is never removed by this role again is
+## the same pattern cluster_config.php's own "first install only" check
+## already established elsewhere in this playbook, here scoped to "has
+## this role ever provisioned admin accounts on this host."
+- name: Check whether admin accounts have already been provisioned once
+  ansible.builtin.stat:
+    path: /etc/lims-admin-accounts-provisioned
+  register: lims_admin_accounts_provisioned
+
+## This role runs before config-lims-lims, which is the one that
+## registers global_config_existed_already -- too late for this task to
+## read it, so it checks the same file itself. An existing host upgrading
+## to this marker for the very first time has no marker yet, but it also
+## already ran these same tasks unconditionally on every prior run before
+## the marker existed, so its current accounts are the operator's actual,
+## possibly-pruned set: an admin removed on an old build must stay removed
+## on its first run under the marker, not come back because the marker
+## itself is new. Only a host with no global_config.php yet -- genuinely
+## never provisioned by anything -- is a fresh install here.
+- name: Check whether global_config.php exists yet (fresh install vs. an existing host)
+  ansible.builtin.stat:
+    path: "{{ www_common }}/global_config.php"
+  register: lims_admin_global_config_existed_already
+
+# a fresh install that failed before install-vncserver finished is still fresh
+- name: Check whether a fresh install's admin provisioning is still pending
+  ansible.builtin.stat:
+    path: /etc/lims-admin-accounts-pending
+  register: lims_admin_accounts_pending
+
+- name: Note whether this run provisions the admin accounts
+  ansible.builtin.set_fact:
+    lims_admin_fresh: >-
+      {{ not lims_admin_accounts_provisioned.stat.exists
+         and (lims_admin_accounts_pending.stat.exists or not lims_admin_global_config_existed_already.stat.exists) }}
+
+## append: yes -- without it, ansible's user module replaces an account's
+## whole group list with exactly what's given here. install-vncserver
+## runs after this role and adds each of these same accounts to vncusers;
+## an operator who later deletes the marker to re-run this task (e.g. to
+## add a new admin to the list below) would reset every existing admin
+## back to wheel alone, silently dropping their vncusers membership too.
+- name: Add users (fresh install only -- see the checks above; removing one later is a deliberate, lasting choice)
   user:
     name: '{{ item }}'
     groups: wheel
+    append: yes
     state: present
     home: '{{ user_home }}/{{ item }}'
   with_items:
-    - gegorbet
     - demeler
     - alexey
     - ehb
     - saeed
+  when: lims_admin_fresh | bool
 
-- name: Add authorized keys
+- name: Add authorized keys (fresh install only -- see the checks above)
   authorized_key:
     user: '{{ item }}'
     key: "{{ lookup( 'file', '../files/{{ item }}') }}"
   with_items:
-    - gegorbet
     - alexey
     - demeler
     - ehb
     - saeed
+  when: lims_admin_fresh | bool
+
+- name: Record that a fresh install's admin provisioning is pending until install-vncserver finishes
+  ansible.builtin.copy:
+    content: ""
+    dest: /etc/lims-admin-accounts-pending
+    owner: root
+    group: root
+    mode: '0644'
+  when: lims_admin_fresh | bool
+
+## The marker is written by install-vncserver instead, not here: this role
+## runs before install-vncserver in the install playbook, so touching the
+## marker as soon as the OS accounts/keys were added made it exist by the
+## time install-vncserver ran its own identical check later in the SAME
+## play -- a fresh install's accounts never got registered for VNC at all,
+## since that check saw "already provisioned" before it ever ran once.
+## One owner writes the marker, after the last task that needs to read it
+## as "not yet provisioned".
 
 - name: "Install emacs-nox via yum"
   yum:
@@ -39,6 +107,19 @@
     state: present
   when: ansible_facts['os_family'] == "Debian"
 
+## ~ehb only expands if the account exists; an operator who removed ehb
+## (a deliberate, lasting choice honored above) made every one of these
+## dotfile tasks fail outright on every later run, since ansible can't
+## resolve a tilde for a user that isn't there. Guarded the same way as
+## any other optional, account-dependent step: getent first, then run only
+## when the lookup actually found the account.
+- name: Check whether the ehb account still exists
+  ansible.builtin.getent:
+    database: passwd
+    key: ehb
+    fail_key: no
+  register: lims_admin_ehb_account
+
 - name: "Copy .emacs to ~/ehb"
   copy:
     src: files/dot_emacs
@@ -46,11 +127,13 @@
     owner: ehb
     group: ehb
     mode: u=rw,g=r,o=r
+  when: "getent_passwd.ehb is defined and getent_passwd.ehb is not none"
 
 - name: Creates directory
   file:
     path: ~ehb/bin
     state: directory
+  when: "getent_passwd.ehb is defined and getent_passwd.ehb is not none"
 
 - name: "Copy items to ~ehb/bin"
   copy:
@@ -64,3 +147,4 @@
     - s
     - lth
     - epath
+  when: "getent_passwd.ehb is defined and getent_passwd.ehb is not none"
