@@ -236,11 +236,8 @@
               msg: >-
                 The host is busy or its job state could not be read:
                 {{ lims_idle_reasons | default([]) | join('; ') }}.
-                Nothing was changed and the gridctl services are left running. Rerun this play
-                once that work has finished. For a job left in gfac.analysis with no monitor, run
-                php uslims_jobs.php --restart as us3 in {{ user_home }}/us3/lims/database/utils and let it finish.
-                If its row stays, update that checkout to {{ site_release }} and run php uslims_jobs.php --close-job with
-                the row's id, which marks its result failed and tells its submitter. A submission held as
+                Nothing was changed. As us3 in {{ user_home }}/us3/lims/database/utils, php uslims_jobs.php --busy
+                lists each job and what to do. Rerun this play once it says idle. A submission held as
                 uncertain settles only by Resolve or Close on the dispatch dashboard, with the services running.
             when: lims_host_busy | default(false) | bool and not lims_pre_430 | default(false) | bool
 
@@ -454,6 +451,22 @@
       - name: update system
         yum: name=* state=latest
         when: ansible_facts['os_family'] == "RedHat"
+
+  post_tasks:
+    ## The roles leave a commented line off as deliberate, so one commented out for an upgrade would stay off unnoticed.
+    - name: "Find LIMS cron lines left commented out"
+      ansible.builtin.shell:
+        cmd: >-
+          grep -E '^#.*((cluster_status|update_notice|dispatch_heartbeat_check|uslims_daily_backup|uslims_daily_rsync)[.]php|save-jobstats[.]sh)'
+          /etc/crontab
+      register: lims_commented_cron
+      changed_when: false
+      failed_when: false
+
+    - name: "Name the LIMS cron lines left commented out"
+      ansible.builtin.debug:
+        msg: "These LIMS cron lines are off. Uncomment any you commented out for an upgrade: {{ lims_commented_cron.stdout_lines }}"
+      when: lims_commented_cron.stdout_lines | default([]) | length > 0
 
   roles:
       - site-release-defaults
