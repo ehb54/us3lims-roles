@@ -177,7 +177,7 @@
 ## already set, on every single run from then on. create-database.yml's
 ## imports used to gate on this same rc, so a re-run against an already-
 ## provisioned host with a root ~/.my.cnf re-ran every DROP TABLE IF
-## EXISTS ... CREATE TABLE ... import in this role, including gfac-db.sql
+## EXISTS ... CREATE TABLE ... import in this role, including gfac's
 ## and newus3's people/metadata tables, silently emptying live data.
 ## Whether newus3.people already exists is checked directly instead, and
 ## is what every import task below is actually gated on.
