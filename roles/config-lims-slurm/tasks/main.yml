@@ -18,6 +18,8 @@
                 - rpm-build
                 - make
                 - gcc
+                - autoconf
+                - automake
                 - mariadb-devel
                 - python3
         state: present

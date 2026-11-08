@@ -1,0 +1,56 @@
+---
+# The Slurm every cluster is brought to (keep it equal to slurm_ver in example-playbook.yml)
+slurm_ver: 26.05.5
+slurm_md5: 3c96d51b61c05d5df3b96d7da6aad04d
+# The oldest release whose saved state slurm_ver reads (26.05 reads 24.11, 25.05
+# and 25.11).  An older cluster starts with fresh state; its job numbers go on
+# from where they were.
+slurm_state_min_version: "24.11"
+
+# Upgrade a cluster that is not on slurm_ver (false: only set the memory limits)
+slurm_upgrade: true
+# Where the package files of the installed version are, for a rollback
+slurm_old_rpm_dir: /root/rpmbuild/RPMS/x86_64
+# Upgrade although they are not there (no way back to the old packages)
+slurm_upgrade_without_rpm_backup: false
+# Where slurm_ver is built (on the controller), and what the build needs besides
+# the packages config-lims-slurm installed for the first build
+slurm_build_root: /root/slurm-build
+slurm_build_packages:
+  - autoconf
+  - automake
+# Where the Ansible controller keeps the built packages to copy to the other nodes
+slurm_rpm_cache: "{{ lookup('env', 'HOME') }}/slurm-rpms-{{ slurm_ver }}"
+
+# Job memory limits, as in config-lims-slurm (see README.md)
+slurm_mem_enforce: false
+slurm_def_mem_per_cpu_mb: 0
+# Per host, optional: slurm_real_memory_mb (this node's RealMemory; needed when
+# its NodeName line has none), slurm_node_name (its NodeName, default its short
+# host name), slurm_controller (true on the host running slurmctld)
+
+# slurm.conf lines that may differ between the nodes of a cluster
+slurm_conf_may_differ: '^\s*(ControlMachine|ControlAddr|SlurmctldHost)\s*='
+
+# Settings slurm_ver rejects; active ones are commented out on an upgrade
+slurm_conf_defunct:
+  - AccountingStorageUser
+  - CoreSpecPlugin
+  - ExtSensorsFreq
+  - ExtSensorsType
+  - GetEnvTimeout
+  - JobCredentialPrivateKey
+  - JobCredentialPublicCertificate
+  - PowerParameters
+  - PowerPlugin
+cgroup_conf_defunct:
+  - CgroupAutomount
+  - CgroupReleaseAgentDir
+
+# One directory per run, on every node: the configuration, state and packages before it
+slurm_backup_root: /root/slurm-upgrade-backups
+# Put a backup back instead of upgrading: the name of its directory under slurm_backup_root
+slurm_rollback_from: ""
+
+# Seconds to wait for daemons, nodes and probe jobs
+slurm_wait_seconds: 180
