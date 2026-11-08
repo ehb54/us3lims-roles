@@ -205,6 +205,29 @@
         register: uslims_upgrade_preflight_script
         when: site_release is defined
 
+      ## A fresh install that failed partway has uslims_upgrade.php but nothing to check yet: no preflight until a run finishes.
+      - name: "Check whether global_config.php exists yet (fresh install vs. an existing host)"
+        ansible.builtin.stat:
+          path: "{{ www_base | default('/srv/www/htdocs') }}/common/global_config.php"
+        register: lims_preflight_global_config
+        when: site_release is defined
+
+      - name: "Mark a fresh install as unfinished until a run of this play completes"
+        ansible.builtin.copy:
+          dest: /etc/lims-fresh-install-pending
+          content: ""
+          mode: "0644"
+        when:
+          - site_release is defined
+          - not uslims_upgrade_preflight_script.stat.exists
+          - not lims_preflight_global_config.stat.exists
+
+      - name: "Check whether a fresh install is still unfinished"
+        ansible.builtin.stat:
+          path: /etc/lims-fresh-install-pending
+        register: lims_fresh_install_pending
+        when: site_release is defined
+
       ## NO_LIMS installs no LIMS, so there is no upgrade state to check.
       - name: "Skip uslims_upgrade.php's preflight check under NO_LIMS"
         ansible.builtin.set_fact:
@@ -291,8 +314,30 @@
               lims_preflight_inputs: "{{ uslims_upgrade_preflight_result.stdout_lines | select('search', 'input]') | map('trim') | list }}"
               ## Named without the commands inside the FAIL lines, which the play's output escapes.
               lims_preflight_grant_fails: "{{ uslims_upgrade_preflight_result.stdout_lines | select('search', 'FAIL ]') | select('search', 'the gfac account cannot') | map('regex_replace', '^.*(the gfac account cannot [^;]*);.*$', '\\1') | list }}"
+            when: not lims_host_busy | default(false) | bool and uslims_upgrade_preflight_result.rc is defined
+
+          ## Before any refusal below, so its text says whether the services are running again.
+          - name: "Start us3-listen again if the idle step stopped it"
+            ansible.builtin.include_role:
+              name: start-lims-services
+              tasks_from: resume.yml
+              apply:
+                ignore_errors: true
+            when: not lims_host_busy | default(false) | bool and uslims_upgrade_preflight_result.rc is defined
+
+          - name: "Read whether us3-listen is running again"
+            ansible.builtin.command: systemctl is-active us3-listen
+            register: lims_preflight_listen_state
+            changed_when: false
+            failed_when: false
+            when: not lims_host_busy | default(false) | bool and uslims_upgrade_preflight_result.rc is defined
+
+          - name: "Say what the check left running"
+            ansible.builtin.set_fact:
               lims_preflight_done: >-
-                {{ 'The gridctl services were stopped for the check and are started again; nothing else was changed.'
+                {{ ('The gridctl services were stopped for the check and are started again; nothing else was changed.'
+                    if lims_preflight_listen_state.stdout | default('') == 'active'
+                    else 'The gridctl services were stopped for the check and could not be started again (see the failed start above); nothing else was changed. Start them with systemctl start us3-listen once the cause is fixed.')
                    if lims_idle_stopped_listen | default(false) | bool
                    else 'Nothing was changed; the gridctl services were not running and are left stopped.' }}
             when: not lims_host_busy | default(false) | bool and uslims_upgrade_preflight_result.rc is defined
@@ -443,7 +488,7 @@
                 /etc/crontab could not be restored from /etc/crontab.pre-upgrade-preflight, so its
                 LIMS lines are still commented out; the next run restores it before anything else.
             when: lims_preflight_restore is failed
-        when: site_release is defined and uslims_upgrade_preflight_script.stat.exists
+        when: site_release is defined and uslims_upgrade_preflight_script.stat.exists and not lims_fresh_install_pending.stat.exists
 
       ## After every gate and the busy check, so a refused run has changed neither.
       - name: disable selinux
@@ -455,6 +500,11 @@
         when: ansible_facts['os_family'] == "RedHat"
 
   post_tasks:
+    - name: "A finished run ends a fresh install"
+      ansible.builtin.file:
+        path: /etc/lims-fresh-install-pending
+        state: absent
+
     ## The roles leave a commented line off as deliberate, so one commented out for an upgrade would stay off unnoticed.
     - name: "Find LIMS cron lines left commented out"
       ansible.builtin.shell:
