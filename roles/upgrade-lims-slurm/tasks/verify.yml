@@ -71,11 +71,32 @@
   ansible.builtin.copy:
     dest: "{{ slurm_backup_dir }}/probe.sh"
     mode: '0755'
+    # The limit is the tightest one on the path of the job's memory cgroup:
+    # Slurm sets it on the job and step cgroups, and the task cgroup the
+    # job's processes are in (newer Slurm) shows none of its own.
     content: |
       #!/bin/bash
       m=$(awk -F: '$2 ~ /(^|,)memory(,|$)/ {print $3}' /proc/self/cgroup)
+      if [ -n "$m" ]; then
+        root=/sys/fs/cgroup/memory; file=memory.limit_in_bytes
+      else
+        m=$(awk -F: '$1 == "0" && $2 == "" {print $3}' /proc/self/cgroup)
+        root=/sys/fs/cgroup; file=memory.max
+      fi
       echo "node=$SLURMD_NODENAME mem_per_cpu=${SLURM_MEM_PER_CPU:-} memcg=$m"
-      echo "limit=$(cat /sys/fs/cgroup/memory$m/memory.limit_in_bytes 2>/dev/null || cat /sys/fs/cgroup$m/memory.max 2>/dev/null)"
+      limit=; levels=; p=$m
+      while [ -n "$p" ]; do
+        v=$(cat "$root$p/$file" 2>/dev/null)
+        levels="$levels $p=${v:-none}"
+        case "$v" in
+          ''|max) ;;
+          *) if [ -z "$limit" ] || [ "$v" -lt "$limit" ]; then limit=$v; fi ;;
+        esac
+        [ "$p" = / ] && break
+        p=$(dirname "$p")
+      done
+      echo "limit=$limit"
+      echo "levels:$levels"
 
 - name: run the probe job on every node
   ansible.builtin.command:
