@@ -3,3 +3,8 @@ control_machine: localhost
 cores: "{{ slurm_cores }}"
 slurm_md5: 'none'
 slurm_sha1: 'none'
+# Job memory limits (see README.md).  Off by default: slurm.conf is as before.
+# When true, slurm_real_memory_mb and slurm_def_mem_per_cpu_mb must be set.
+slurm_mem_enforce: false
+slurm_real_memory_mb: 0
+slurm_def_mem_per_cpu_mb: 0

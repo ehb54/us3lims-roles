@@ -221,6 +221,10 @@
         #         add "#SBATCH -O" to your sbatch submission scripts to allow overcommitting
         #         set - slurm_sbatch_extras : "#SBATCH -O\n" for slurm testing scripts via ansible
         - slurm_cores : "{{ ansible_processor_vcpus }}"
+        # Slurm job memory limits: off unless set, see roles/config-lims-slurm/README.md
+        # - slurm_mem_enforce : true
+        # - slurm_real_memory_mb : <MB Slurm may give to jobs>
+        # - slurm_def_mem_per_cpu_mb : <MB per CPU for a job that requests none>
         - slurm_sbatch_extras : ""
         # - slurm_sbatch_extras : "#SBATCH -O\n"
 
