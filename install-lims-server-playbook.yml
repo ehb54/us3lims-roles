@@ -208,7 +208,7 @@
       ## A fresh install that failed partway has uslims_upgrade.php but nothing to check yet: no preflight until a run finishes.
       - name: "Check whether global_config.php exists yet (fresh install vs. an existing host)"
         ansible.builtin.stat:
-          path: "{{ www_base | default('/srv/www/htdocs') }}/common/global_config.php"
+          path: "{{ www_common | default((www_base | default('/srv/www/htdocs')) ~ '/common') }}/global_config.php"
         register: lims_preflight_global_config
         when: site_release is defined
 
