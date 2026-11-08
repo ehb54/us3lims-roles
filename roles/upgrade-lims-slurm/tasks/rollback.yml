@@ -1,0 +1,145 @@
+---
+# Put back the backup slurm_rollback_from (a directory under slurm_backup_root)
+# on every node: its packages, /etc/slurm, and the controller's state.
+
+- name: name the backup
+  ansible.builtin.set_fact:
+    slurm_backup_dir: "{{ slurm_backup_root }}/{{ slurm_rollback_from }}"
+
+- name: look for the backup
+  ansible.builtin.stat:
+    path: "{{ slurm_backup_dir }}/{{ item }}"
+  loop:
+    - etc-slurm.tgz
+    - version.txt
+    - rpms
+  register: slurm_backup_parts
+
+- name: require the backup on this node
+  ansible.builtin.assert:
+    that:
+      - slurm_backup_parts.results[0].stat.exists
+      - slurm_backup_parts.results[1].stat.exists
+    fail_msg: no backup {{ slurm_backup_dir }} on {{ inventory_hostname }}
+    quiet: true
+
+- name: read the backed-up version and the installed one
+  ansible.builtin.shell:
+    cmd: cat {{ slurm_backup_dir }}/version.txt; rpm -q --qf '%{VERSION}\n' slurm
+  register: slurm_rb_versions
+  changed_when: false
+
+- name: note them
+  ansible.builtin.set_fact:
+    slurm_rb_old: "{{ slurm_rb_versions.stdout_lines[0] }}"
+    slurm_installed_ver: "{{ slurm_rb_versions.stdout_lines[1] }}"
+
+- name: require the old packages if the version changed
+  ansible.builtin.assert:
+    that:
+      - slurm_rb_old == slurm_installed_ver or slurm_backup_parts.results[2].stat.exists
+    fail_msg: "Slurm {{ slurm_installed_ver }} is installed, the backup is of {{ slurm_rb_old }}, and it has no packages to go back to"
+    quiet: true
+
+- name: stop slurmd
+  ansible.builtin.service:
+    name: slurmd
+    state: stopped
+
+- name: stop slurmctld
+  ansible.builtin.service:
+    name: slurmctld
+    state: stopped
+  when: slurm_is_ctl
+
+- name: put the old packages back
+  ansible.builtin.shell:
+    cmd: rpm -Uvh --oldpackage --replacepkgs {{ slurm_backup_dir }}/rpms/*.rpm  # noqa: command-instead-of-module
+  changed_when: true
+  when: slurm_rb_old != slurm_installed_ver
+
+- name: put /etc/slurm back (the replaced one goes into the backup directory)
+  ansible.builtin.shell:
+    cmd: >-
+      rm -rf {{ slurm_backup_dir }}/etc-slurm-replaced &&
+      mv /etc/slurm {{ slurm_backup_dir }}/etc-slurm-replaced &&
+      tar --selinux --xattrs --acls -xzf {{ slurm_backup_dir }}/etc-slurm.tgz -C /etc &&
+      (restorecon -R /etc/slurm 2>/dev/null || true)
+  changed_when: true
+
+- name: read the restored slurm.conf
+  ansible.builtin.command:
+    argv: "{{ slurm_tool + ['facts', '/etc/slurm/slurm.conf', slurm_conf_may_differ] }}"
+  register: slurm_rb_facts
+  changed_when: false
+
+- name: note it
+  ansible.builtin.set_fact:
+    slurm_ctl_conf: "{{ hostvars[slurm_ctl].slurm_rb_facts.stdout | from_json }}"
+
+- name: put the controller's state back
+  ansible.builtin.shell:
+    cmd: >-
+      if [ -f {{ slurm_backup_dir }}/state.tgz ]; then
+      find {{ slurm_ctl_conf.statesavelocation }} -mindepth 1 -delete &&
+      tar --selinux --xattrs --acls -xzf {{ slurm_backup_dir }}/state.tgz -C /; fi
+  changed_when: true
+  when: slurm_is_ctl
+
+- name: put slurmd's spool back
+  ansible.builtin.shell:
+    cmd: >-
+      if [ -f {{ slurm_backup_dir }}/spool.tgz ]; then
+      find {{ slurm_ctl_conf.slurmdspooldir }} -mindepth 1 -delete 2>/dev/null;
+      tar --selinux --xattrs --acls -xzf {{ slurm_backup_dir }}/spool.tgz -C /; fi
+  changed_when: true
+
+- name: reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when: ansible_service_mgr == 'systemd'
+
+- name: start munge
+  ansible.builtin.service:
+    name: munge
+    state: started
+
+- name: start slurmctld
+  ansible.builtin.service:
+    name: slurmctld
+    state: started
+  when: slurm_is_ctl
+
+- name: wait for slurmctld
+  ansible.builtin.command: scontrol ping
+  register: slurm_ping
+  until: slurm_ping.stdout is search('UP')
+  retries: "{{ (slurm_wait_seconds | int / 3) | int }}"
+  delay: 3
+  changed_when: false
+  when: slurm_is_ctl
+
+- name: start slurmd
+  ansible.builtin.service:
+    name: slurmd
+    state: started
+
+- name: wait for every node to be idle on the old version
+  ansible.builtin.shell:
+    cmd: >-
+      set -o pipefail; sinfo -h -N -o '%N %t'; echo ---;
+      scontrol -o show node | sed -E 's/^NodeName=([^ ]+).* Version=([^ ]+).*$/\1 \2/'
+    executable: /bin/bash
+  register: slurm_rb_nodes
+  until: >-
+    slurm_rb_nodes.stdout_lines[:slurm_rb_nodes.stdout_lines.index('---')] | map('split') | map('last') | reject('equalto', 'idle') | list | length == 0
+    and slurm_rb_nodes.stdout_lines[slurm_rb_nodes.stdout_lines.index('---') + 1:] | map('split') | map('last') | unique | list == [slurm_rb_old]
+  retries: "{{ (slurm_wait_seconds | int / 5) | int }}"
+  delay: 5
+  changed_when: false
+  when: slurm_is_ctl
+
+- name: report
+  ansible.builtin.debug:
+    msg: "rolled back to Slurm {{ slurm_rb_old }} from {{ slurm_backup_dir }}: {{ hostvars[slurm_ctl].slurm_rb_nodes.stdout_lines | join('; ') }}"
+  run_once: true

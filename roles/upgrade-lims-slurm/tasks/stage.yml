@@ -1,0 +1,107 @@
+---
+# Write the new slurm.conf and cgroup.conf beside the backups, show the
+# differences, and check that every node ends up with the same files.  Also
+# runs with --check.
+
+- name: make the staging directory
+  ansible.builtin.file:
+    path: "{{ slurm_backup_root }}/staged"
+    state: directory
+    mode: '0700'
+  check_mode: false
+
+- name: look for cgroup.conf
+  ansible.builtin.stat:
+    path: /etc/slurm/cgroup.conf
+  register: slurm_cgroup_conf
+
+- name: copy slurm.conf to stage
+  ansible.builtin.copy:
+    src: /etc/slurm/slurm.conf
+    dest: "{{ slurm_backup_root }}/staged/slurm.conf"
+    remote_src: true
+    mode: '0644'
+  check_mode: false
+
+- name: copy cgroup.conf to stage
+  ansible.builtin.copy:
+    src: /etc/slurm/cgroup.conf
+    dest: "{{ slurm_backup_root }}/staged/cgroup.conf"
+    remote_src: true
+    mode: '0644'
+  check_mode: false
+  when: slurm_cgroup_conf.stat.exists
+
+- name: start an empty cgroup.conf
+  ansible.builtin.copy:
+    content: ""
+    dest: "{{ slurm_backup_root }}/staged/cgroup.conf"
+    mode: '0644'
+  check_mode: false
+  when: not slurm_cgroup_conf.stat.exists
+
+- name: write the edits
+  ansible.builtin.copy:
+    content: "{{ item.edits | to_json }}"
+    dest: "{{ slurm_backup_root }}/staged/{{ item.name }}.json"
+    mode: '0600'
+  check_mode: false
+  loop:
+    - name: slurm.conf
+      edits:
+        comment: "{{ slurm_conf_defunct if slurm_needs_upgrade | bool else [] }}"
+        set: >-
+          {{ {'ProctrackType': 'proctrack/cgroup', 'TaskPlugin': slurm_new_taskplugin, 'SelectTypeParameters': slurm_new_select,
+              'DefMemPerCPU': slurm_def_mem_per_cpu_mb | int} if slurm_mem_enforce | bool else {} }}
+        after:
+          TaskPlugin: ProctrackType
+          DefMemPerCPU: SelectTypeParameters
+        node_realmemory: "{{ slurm_node_realmem if slurm_mem_enforce | bool else {} }}"
+    - name: cgroup.conf
+      edits:
+        comment: "{{ cgroup_conf_defunct if slurm_needs_upgrade | bool else [] }}"
+        set: "{{ {'ConstrainRAMSpace': 'yes', 'ConstrainSwapSpace': 'yes', 'AllowedSwapSpace': '0'} if slurm_mem_enforce | bool else {} }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: edit the staged files
+  ansible.builtin.command:
+    argv: >-
+      {{ slurm_tool + ['edit', slurm_backup_root ~ '/staged/' ~ item, slurm_backup_root ~ '/staged/' ~ item,
+         slurm_backup_root ~ '/staged/' ~ item ~ '.json'] }}
+  register: slurm_staged_diff
+  changed_when: false
+  check_mode: false
+  loop:
+    - slurm.conf
+    - cgroup.conf
+
+- name: show the changes
+  ansible.builtin.debug:
+    msg: "{{ slurm_staged_diff.results | map(attribute='stdout_lines') | flatten }}"
+
+- name: read the staged slurm.conf
+  ansible.builtin.command:
+    argv: "{{ slurm_tool + ['facts', slurm_backup_root ~ '/staged/slurm.conf', slurm_conf_may_differ] }}"
+  register: slurm_staged_facts
+  changed_when: false
+  check_mode: false
+
+- name: checksum the staged cgroup.conf
+  ansible.builtin.stat:
+    path: "{{ slurm_backup_root }}/staged/cgroup.conf"
+    checksum_algorithm: sha1
+  register: slurm_staged_cgroup
+
+- name: note the staged files
+  ansible.builtin.set_fact:
+    slurm_staged_digest: "{{ (slurm_staged_facts.stdout | from_json).digest }}"
+    slurm_staged_cgroup_sum: "{{ slurm_staged_cgroup.stat.checksum }}"
+
+- name: require the same staged files on every node
+  ansible.builtin.assert:
+    that:
+      - ansible_play_hosts_all | map('extract', hostvars, 'slurm_staged_digest') | unique | list | length == 1
+      - ansible_play_hosts_all | map('extract', hostvars, 'slurm_staged_cgroup_sum') | unique | list | length == 1
+    fail_msg: the new slurm.conf or cgroup.conf would differ between the nodes; make their current files the same first
+    quiet: true

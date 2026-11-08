@@ -1,0 +1,54 @@
+---
+# Bring one Slurm cluster (every node in the play) to slurm_ver and, if asked,
+# turn on job memory limits, changing only what that needs.  See README.md.
+
+- name: find the controller and this host's node
+  ansible.builtin.include_tasks: cluster.yml
+
+- name: check the cluster
+  ansible.builtin.include_tasks: preflight.yml
+  when: slurm_rollback_from | length == 0
+
+- name: upgrade and set the memory limits
+  when:
+    - slurm_rollback_from | length == 0
+    - slurm_needs_upgrade | bool or slurm_mem_enforce | bool
+  block:
+    - name: build slurm_ver
+      ansible.builtin.include_tasks: build.yml
+      when:
+        - slurm_needs_upgrade | bool
+        - not ansible_check_mode
+
+    - name: stage the new configuration
+      ansible.builtin.include_tasks: stage.yml
+
+    - name: switch over
+      when: not ansible_check_mode
+      block:
+        - name: back up, stop, install and start
+          ansible.builtin.include_tasks: switch.yml
+
+        - name: verify
+          ansible.builtin.include_tasks: verify.yml
+      rescue:
+        - name: stop with the way back
+          ansible.builtin.fail:
+            msg: >-
+              The switch over failed on {{ inventory_hostname }}
+              ({{ ansible_failed_task.name | default('') }}: {{ ansible_failed_result.msg | default('see above') }}).
+              Slurm may be stopped or half upgraded.  The state before is in
+              {{ slurm_backup_dir | default('(no backup made yet)') }} on every node; to put it back run
+              the playbook again with -e slurm_rollback_from={{ slurm_stamp | default('<that directory name>') }}
+
+- name: nothing to do
+  ansible.builtin.debug:
+    msg: "Slurm {{ slurm_installed_ver }} is slurm_ver and slurm_mem_enforce is off: nothing to do"
+  when:
+    - slurm_rollback_from | length == 0
+    - not slurm_needs_upgrade | bool
+    - not slurm_mem_enforce | bool
+
+- name: put a backup back
+  ansible.builtin.include_tasks: rollback.yml
+  when: slurm_rollback_from | length > 0

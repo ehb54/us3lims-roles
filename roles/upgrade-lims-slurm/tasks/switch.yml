@@ -1,0 +1,173 @@
+---
+# The downtime: back up, stop, install, put the staged files in place, start.
+
+- name: name this run
+  ansible.builtin.set_fact:
+    slurm_stamp: "{{ lookup('pipe', 'date +%Y%m%d-%H%M%S') }}"
+  run_once: true
+
+- name: name this run's backup directory
+  ansible.builtin.set_fact:
+    slurm_backup_dir: "{{ slurm_backup_root }}/{{ hostvars[slurm_ctl].slurm_stamp }}"
+    slurm_stamp: "{{ hostvars[slurm_ctl].slurm_stamp }}"
+
+- name: look at the queue a last time, and read the next job number
+  ansible.builtin.shell:
+    cmd: set -o pipefail; squeue -h -o %i | wc -l; scontrol show config | sed -n 's/^NEXT_JOB_ID *= *//p'
+    executable: /bin/bash
+  register: slurm_last_look
+  changed_when: false
+  when: slurm_is_ctl
+
+- name: note the next job number
+  ansible.builtin.set_fact:
+    slurm_next_job_id: "{{ hostvars[slurm_ctl].slurm_last_look.stdout_lines[1] | int }}"
+
+- name: require the queue still empty
+  ansible.builtin.assert:
+    that:
+      - hostvars[slurm_ctl].slurm_last_look.stdout_lines[0] | int == 0
+      - slurm_next_job_id | int > 0
+    fail_msg: jobs were queued since the check, or the next job number is unknown; nothing has been changed
+    quiet: true
+
+- name: keep the job numbers going after fresh state
+  when: slurm_fresh_state | bool
+  block:
+    - name: write the FirstJobId edit
+      ansible.builtin.copy:
+        content: "{{ {'set': {'FirstJobId': slurm_next_job_id | int}, 'after': {'FirstJobId': 'SlurmdPidFile'}} | to_json }}"
+        dest: "{{ slurm_backup_root }}/staged/firstjobid.json"
+        mode: '0600'
+
+    - name: set FirstJobId in the staged slurm.conf
+      ansible.builtin.command:
+        argv: >-
+          {{ slurm_tool + ['edit', slurm_backup_root ~ '/staged/slurm.conf', slurm_backup_root ~ '/staged/slurm.conf',
+             slurm_backup_root ~ '/staged/firstjobid.json'] }}
+      changed_when: true
+
+- name: make the backup directory
+  ansible.builtin.file:
+    path: "{{ slurm_backup_dir }}"
+    state: directory
+    mode: '0700'
+
+- name: back up /etc/slurm and the package list  # noqa: command-instead-of-module
+  ansible.builtin.shell:
+    cmd: >-
+      tar --selinux --xattrs --acls -czf {{ slurm_backup_dir }}/etc-slurm.tgz -C /etc slurm &&
+      rpm -qa --qf '%{NAME} %{VERSION} %{RELEASE} %{ARCH}\n' 'slurm*' > {{ slurm_backup_dir }}/packages.txt &&
+      echo {{ slurm_installed_ver }} > {{ slurm_backup_dir }}/version.txt
+  changed_when: true
+
+- name: keep the installed packages' files
+  ansible.builtin.shell:
+    cmd: >-
+      mkdir -p {{ slurm_backup_dir }}/rpms &&
+      cp -p {% for p in slurm_pkgs %}{{ slurm_old_rpm_dir }}/{{ p[0] }}-{{ p[1] }}-{{ p[2] }}.{{ p[3] }}.rpm {% endfor %}{{ slurm_backup_dir }}/rpms/
+  changed_when: true
+  when:
+    - slurm_needs_upgrade | bool
+    - not slurm_upgrade_without_rpm_backup | bool
+
+- name: stop slurmd
+  ansible.builtin.service:
+    name: slurmd
+    state: stopped
+
+- name: stop slurmctld
+  ansible.builtin.service:
+    name: slurmctld
+    state: stopped
+  when: slurm_is_ctl
+
+- name: back up the controller's state  # noqa: command-instead-of-module
+  ansible.builtin.command:
+    cmd: tar --selinux --xattrs --acls -czf {{ slurm_backup_dir }}/state.tgz -C / {{ slurm_ctl_conf.statesavelocation | regex_replace('^/', '') }}
+  changed_when: true
+  when: slurm_is_ctl
+
+- name: back up slurmd's spool
+  ansible.builtin.shell:
+    cmd: >-
+      if [ -d {{ slurm_ctl_conf.slurmdspooldir }} ]; then
+      tar --selinux --xattrs --acls -czf {{ slurm_backup_dir }}/spool.tgz -C / {{ slurm_ctl_conf.slurmdspooldir | regex_replace('^/', '') }}; fi
+  changed_when: true
+
+- name: install slurm_ver
+  ansible.builtin.command:
+    cmd: dnf -y --disableexcludes=all install {{ slurm_new_rpms | map('regex_replace', '^', slurm_new_rpm_dir ~ '/') | join(' ') }}
+  changed_when: true
+  when: slurm_needs_upgrade | bool
+
+- name: start with fresh state
+  when: slurm_fresh_state | bool
+  block:
+    - name: empty the controller's state directory
+      ansible.builtin.command:
+        cmd: find {{ slurm_ctl_conf.statesavelocation }} -mindepth 1 -delete
+      changed_when: true
+      when: slurm_is_ctl
+
+    - name: empty slurmd's spool
+      ansible.builtin.shell:
+        cmd: if [ -d {{ slurm_ctl_conf.slurmdspooldir }} ]; then find {{ slurm_ctl_conf.slurmdspooldir }} -mindepth 1 -delete; fi
+      changed_when: true
+
+- name: put the new slurm.conf in place
+  ansible.builtin.copy:
+    src: "{{ slurm_backup_root }}/staged/slurm.conf"
+    dest: /etc/slurm/slurm.conf
+    remote_src: true
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: put the new cgroup.conf in place
+  ansible.builtin.copy:
+    src: "{{ slurm_backup_root }}/staged/cgroup.conf"
+    dest: /etc/slurm/cgroup.conf
+    remote_src: true
+    owner: root
+    group: root
+    mode: '0644'
+  when: slurm_cgroup_conf.stat.exists or slurm_mem_enforce | bool
+
+- name: reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when: ansible_service_mgr == 'systemd'
+
+- name: start munge
+  ansible.builtin.service:
+    name: munge
+    state: started
+
+- name: start slurmctld
+  ansible.builtin.service:
+    name: slurmctld
+    state: started
+  when: slurm_is_ctl
+
+- name: wait for slurmctld
+  ansible.builtin.command: scontrol ping
+  register: slurm_ping
+  until: slurm_ping.stdout is search('UP')
+  retries: "{{ (slurm_wait_seconds | int / 3) | int }}"
+  delay: 3
+  changed_when: false
+  failed_when: false
+  when: slurm_is_ctl
+
+- name: require slurmctld up
+  ansible.builtin.assert:
+    that:
+      - hostvars[slurm_ctl].slurm_ping.stdout is search('UP')
+    fail_msg: "slurmctld did not come up: {{ hostvars[slurm_ctl].slurm_ping.stdout | default('') }} {{ hostvars[slurm_ctl].slurm_ping.stderr | default('') }}"
+    quiet: true
+
+- name: start slurmd
+  ansible.builtin.service:
+    name: slurmd
+    state: started

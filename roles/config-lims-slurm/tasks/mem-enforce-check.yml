@@ -1,0 +1,44 @@
+---
+# Checks before Slurm job memory limits are turned on (slurm_mem_enforce).
+# Tested with cgroup v1 (EL 8).  A cgroup v2 host (EL 10) needs Slurm's cgroup v2
+# plugin, which Slurm 22.05 and later build only with "--with cgroupv2" (and
+# dbus-devel); this role's build does not do that yet.
+
+- name: check the memory settings
+  ansible.builtin.assert:
+    that:
+      - slurm_real_memory_mb | int > 0
+      - slurm_def_mem_per_cpu_mb | int > 0
+      - slurm_real_memory_mb | int <= ansible_memtotal_mb | int
+      - slurm_def_mem_per_cpu_mb | int <= slurm_real_memory_mb | int
+    fail_msg: >-
+      slurm_mem_enforce needs slurm_real_memory_mb (MB Slurm may give to jobs, at most
+      this host's {{ ansible_memtotal_mb }} MB) and slurm_def_mem_per_cpu_mb (MB per CPU
+      for a job that requests no memory, at most slurm_real_memory_mb); they are
+      {{ slurm_real_memory_mb }} and {{ slurm_def_mem_per_cpu_mb }}
+    quiet: true
+
+- name: get the type of /sys/fs/cgroup
+  ansible.builtin.command: stat -fc %T /sys/fs/cgroup
+  register: slurm_cgroup_fs
+  changed_when: false
+  check_mode: false
+
+- name: look for what Slurm's cgroup plugins need
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  register: slurm_cgroup_needs
+  loop: "{{ ['/sys/fs/cgroup/memory', '/sys/fs/cgroup/freezer'] if slurm_cgroup_fs.stdout == 'tmpfs' else ['/usr/lib64/slurm/cgroup_v2.so'] }}"
+
+- name: require cgroup v1 with its memory and freezer controllers, or Slurm's cgroup v2 plugin
+  ansible.builtin.assert:
+    that:
+      - slurm_cgroup_fs.stdout in ['tmpfs', 'cgroup2fs']
+      - slurm_cgroup_needs.results | rejectattr('stat.exists') | list | length == 0
+    fail_msg: >-
+      /sys/fs/cgroup is {{ slurm_cgroup_fs.stdout }} and
+      {{ slurm_cgroup_needs.results | rejectattr('stat.exists') | map(attribute='item') | join(', ') }}
+      is missing.  cgroup v1 needs the memory and freezer controllers; cgroup v2 needs a Slurm
+      (22.05 or later) built with cgroup v2 support ("rpmbuild --with cgroupv2", dbus-devel),
+      which this role does not build
+    quiet: true

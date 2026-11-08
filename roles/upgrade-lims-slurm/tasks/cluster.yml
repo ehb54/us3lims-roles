@@ -1,0 +1,36 @@
+---
+- name: note whether this host runs slurmctld
+  ansible.builtin.set_fact:
+    slurm_ctl_flag: "{{ slurm_controller | default(false) | bool }}"
+
+- name: find the controller
+  ansible.builtin.set_fact:
+    slurm_ctl_list: "{{ ansible_play_hosts_all | map('extract', hostvars) | selectattr('slurm_ctl_flag') | map(attribute='inventory_hostname') | list }}"
+
+- name: require one controller
+  ansible.builtin.assert:
+    that:
+      - slurm_ctl_list | length == 1 or (slurm_ctl_list | length == 0 and ansible_play_hosts_all | length == 1)
+    fail_msg: set slurm_controller=true on the one host of the cluster that runs slurmctld
+    quiet: true
+
+- name: make the role's directory
+  ansible.builtin.file:
+    path: "{{ slurm_backup_root }}"
+    state: directory
+    mode: '0700'
+  check_mode: false
+
+- name: install the slurm.conf helper
+  ansible.builtin.copy:
+    src: slurm_conf_tool.py
+    dest: "{{ slurm_backup_root }}/slurm_conf_tool.py"
+    mode: '0700'
+  check_mode: false
+
+- name: name the controller and this host's node
+  ansible.builtin.set_fact:
+    slurm_tool: ["{{ ansible_python.executable }}", "{{ slurm_backup_root }}/slurm_conf_tool.py"]
+    slurm_ctl: "{{ (slurm_ctl_list + ansible_play_hosts_all)[0] }}"
+    slurm_is_ctl: "{{ inventory_hostname == (slurm_ctl_list + ansible_play_hosts_all)[0] }}"
+    slurm_node: "{{ slurm_node_name | default(ansible_hostname) }}"

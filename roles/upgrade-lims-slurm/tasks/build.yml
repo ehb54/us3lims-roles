@@ -1,0 +1,85 @@
+---
+# Build slurm_ver on the controller, the way config-lims-slurm does, and copy the
+# packages to the other nodes.  Nothing is stopped yet.
+
+- name: build on the controller
+  when: slurm_is_ctl
+  block:
+    - name: make the build directory
+      ansible.builtin.file:
+        path: "{{ slurm_build_root }}"
+        state: directory
+        mode: '0755'
+
+    - name: install what the build needs beyond config-lims-slurm's packages
+      ansible.builtin.dnf:
+        name: "{{ slurm_build_packages }}"
+        state: present
+
+    - name: get the Slurm source
+      ansible.builtin.get_url:
+        url: "https://download.schedmd.com/slurm/slurm-{{ slurm_ver }}.tar.bz2"
+        dest: "{{ slurm_build_root }}/slurm-{{ slurm_ver }}.tar.bz2"
+        checksum: "{{ ('md5:' ~ slurm_md5) if slurm_md5 | default('none') != 'none' else omit }}"
+        mode: '0644'
+
+    - name: build the packages
+      ansible.builtin.shell:
+        cmd: >-
+          umask 022 &&
+          rpmbuild -ta --define "_topdir {{ slurm_build_root }}/rpmbuild-{{ slurm_ver }}"
+          {{ slurm_build_root }}/slurm-{{ slurm_ver }}.tar.bz2 > {{ slurm_build_root }}/rpmbuild-{{ slurm_ver }}.log 2>&1 &&
+          touch {{ slurm_build_root }}/rpmbuild-{{ slurm_ver }}/BUILT ||
+          { tail -25 {{ slurm_build_root }}/rpmbuild-{{ slurm_ver }}.log; exit 1; }
+        creates: "{{ slurm_build_root }}/rpmbuild-{{ slurm_ver }}/BUILT"
+
+    - name: list the built packages
+      ansible.builtin.find:
+        paths: "{{ slurm_build_root }}/rpmbuild-{{ slurm_ver }}/RPMS"
+        patterns: "*.rpm"
+        recurse: true
+      register: slurm_built
+
+- name: note the built packages
+  ansible.builtin.set_fact:
+    slurm_new_rpm_dir: "{{ slurm_build_root }}/rpmbuild-{{ slurm_ver }}/RPMS/{{ ansible_architecture }}"
+    slurm_new_rpms: >-
+      {%- set out = [] -%}{%- for p in slurm_pkgs -%}
+      {%- for f in hostvars[slurm_ctl].slurm_built.files | map(attribute='path') | map('basename') -%}
+      {%- if f.startswith(p[0] ~ '-' ~ slurm_ver ~ '-') -%}{%- set _ = out.append(f) -%}{%- endif -%}
+      {%- endfor -%}{%- endfor -%}{{ out }}
+
+- name: require a new package for every installed one
+  ansible.builtin.assert:
+    that:
+      - slurm_new_rpms | length == slurm_pkgs | length
+    fail_msg: >-
+      installed {{ slurm_pkgs | map('first') | join(', ') }}, built
+      {{ hostvars[slurm_ctl].slurm_built.files | map(attribute='path') | map('basename') | join(', ') }}
+    quiet: true
+
+- name: copy the packages to the other nodes
+  when: ansible_play_hosts_all | length > 1
+  block:
+    - name: fetch them from the controller
+      ansible.builtin.fetch:
+        src: "{{ slurm_new_rpm_dir }}/{{ item }}"
+        dest: "{{ slurm_rpm_cache }}/"
+        flat: true
+      loop: "{{ hostvars[slurm_ctl].slurm_built.files | map(attribute='path') | map('basename') | list }}"
+      when: slurm_is_ctl
+
+    - name: make the package directory
+      ansible.builtin.file:
+        path: "{{ slurm_new_rpm_dir }}"
+        state: directory
+        mode: '0755'
+      when: not slurm_is_ctl
+
+    - name: copy them
+      ansible.builtin.copy:
+        src: "{{ slurm_rpm_cache }}/{{ item }}"
+        dest: "{{ slurm_new_rpm_dir }}/{{ item }}"
+        mode: '0644'
+      loop: "{{ slurm_new_rpms }}"
+      when: not slurm_is_ctl
