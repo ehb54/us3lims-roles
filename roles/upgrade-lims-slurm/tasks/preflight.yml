@@ -1,0 +1,151 @@
+---
+# Read every node and refuse what this role does not handle, before any change.
+
+- name: list the installed Slurm packages
+  ansible.builtin.command: rpm -qa --qf '%{NAME} %{VERSION} %{RELEASE} %{ARCH}\n' slurm*  # noqa: command-instead-of-module
+  register: slurm_rpm_qa
+  changed_when: false
+  check_mode: false
+
+- name: note the installed packages
+  ansible.builtin.set_fact:
+    slurm_pkgs: "{{ slurm_rpm_qa.stdout_lines | map('split') | list }}"
+
+- name: require the slurm package
+  ansible.builtin.assert:
+    that:
+      - slurm_pkgs | selectattr('0', 'equalto', 'slurm') | list | length == 1
+    fail_msg: the slurm package is not installed on {{ inventory_hostname }}
+    quiet: true
+
+- name: note the installed version
+  ansible.builtin.set_fact:
+    slurm_installed_ver: "{{ (slurm_pkgs | selectattr('0', 'equalto', 'slurm') | first)[1] }}"
+
+- name: read slurm.conf
+  ansible.builtin.command:
+    argv: "{{ slurm_tool + ['facts', '/etc/slurm/slurm.conf', slurm_conf_may_differ] }}"
+  register: slurm_conf_facts
+  changed_when: false
+  check_mode: false
+
+- name: note what slurm.conf says
+  ansible.builtin.set_fact:
+    slurm_conf: "{{ slurm_conf_facts.stdout | from_json }}"
+
+- name: list the jobs in the queue
+  ansible.builtin.command: squeue -h -o %i
+  register: slurm_queue
+  changed_when: false
+  check_mode: false
+  when: slurm_is_ctl
+
+- name: gather the cluster
+  ansible.builtin.set_fact:
+    slurm_ctl_conf: "{{ hostvars[slurm_ctl].slurm_conf }}"
+    slurm_play_nodes: "{{ ansible_play_hosts_all | map('extract', hostvars, 'slurm_node') | list }}"
+    slurm_versions: "{{ ansible_play_hosts_all | map('extract', hostvars, 'slurm_installed_ver') | unique | list }}"
+    slurm_digests: "{{ ansible_play_hosts_all | map('extract', hostvars, ['slurm_conf', 'digest']) | unique | list }}"
+    slurm_needs_upgrade: "{{ slurm_upgrade | bool and slurm_installed_ver != slurm_ver }}"
+    slurm_fresh_state: "{{ slurm_upgrade | bool and slurm_installed_ver != slurm_ver and slurm_installed_ver is version(slurm_state_min_version, '<') }}"
+
+- name: require an empty queue
+  ansible.builtin.assert:
+    that:
+      - hostvars[slurm_ctl].slurm_queue.stdout_lines | length == 0
+    fail_msg: "{{ hostvars[slurm_ctl].slurm_queue.stdout_lines | length }} jobs are in the queue; run this with no jobs queued or running, and the LIMS idle"
+    quiet: true
+
+- name: require one Slurm version on every node
+  ansible.builtin.assert:
+    that:
+      - slurm_versions | length == 1
+      - slurm_installed_ver is version(slurm_ver, '<=')
+    fail_msg: "the nodes run Slurm {{ slurm_versions | join(', ') }}; this needs one version, at most {{ slurm_ver }}"
+    quiet: true
+
+- name: require the same slurm.conf on every node
+  ansible.builtin.assert:
+    that:
+      - slurm_digests | length == 1
+    fail_msg: >-
+      slurm.conf differs between the nodes in more than lines matching slurm_conf_may_differ
+      ({{ slurm_conf_may_differ }}); make them the same first
+    quiet: true
+
+- name: require every node of slurm.conf in the play, and no other host
+  ansible.builtin.assert:
+    that:
+      - slurm_ctl_conf.node_ranges | length == 0
+      - slurm_ctl_conf.nodes.keys() | list | sort == slurm_play_nodes | sort
+    fail_msg: >-
+      slurm.conf has the nodes {{ slurm_ctl_conf.nodes.keys() | list | sort | join(', ') }}, the play
+      {{ slurm_play_nodes | sort | join(', ') }} (set slurm_node_name for a host whose NodeName is not its
+      short host name; node ranges like node[1-4] are not handled)
+    quiet: true
+
+- name: refuse slurmdbd accounting
+  ansible.builtin.assert:
+    that:
+      - slurm_ctl_conf.accountingstoragetype is not search('slurmdbd')
+    fail_msg: >-
+      this cluster uses slurmdbd accounting; its database must be upgraded one supported
+      release step at a time, which this role does not do
+    quiet: true
+
+- name: look for the installed packages' files, for a rollback
+  ansible.builtin.stat:
+    path: "{{ slurm_old_rpm_dir }}/{{ item[0] }}-{{ item[1] }}-{{ item[2] }}.{{ item[3] }}.rpm"
+  loop: "{{ slurm_pkgs }}"
+  register: slurm_old_rpms
+  when: slurm_needs_upgrade | bool
+
+- name: require them, unless told to upgrade without them
+  ansible.builtin.assert:
+    that:
+      - slurm_upgrade_without_rpm_backup | bool or slurm_old_rpms.results | rejectattr('stat.exists') | list | length == 0
+    fail_msg: >-
+      no copy in {{ slurm_old_rpm_dir }} on {{ inventory_hostname }} of
+      {% for r in slurm_old_rpms.results | rejectattr('stat.exists') %}{{ r.stat.path | default(r.invocation.module_args.path) | basename }} {% endfor %};
+      point slurm_old_rpm_dir at them, or set slurm_upgrade_without_rpm_backup=true to upgrade
+      with no way back to the old packages
+    quiet: true
+  when: slurm_needs_upgrade | bool
+
+- name: work out the memory settings
+  when: slurm_mem_enforce | bool
+  block:
+    - name: work out each node's RealMemory and the new SelectTypeParameters and TaskPlugin
+      ansible.builtin.set_fact:
+        slurm_node_realmem: >-
+          {%- set d = {} -%}{%- for h in ansible_play_hosts_all -%}{%- set n = hostvars[h].slurm_node -%}
+          {%- set _ = d.update({n: ((hostvars[h].slurm_real_memory_mb | default(0) | int) or (slurm_ctl_conf.nodes[n].realmemory | int))}) -%}
+          {%- endfor -%}{{ d }}
+        slurm_new_select: >-
+          {{ slurm_ctl_conf.selecttypeparameters if slurm_ctl_conf.selecttypeparameters is search('_Memory$')
+             else slurm_ctl_conf.selecttypeparameters ~ '_Memory' }}
+        slurm_new_taskplugin: >-
+          {{ slurm_ctl_conf.taskplugin if 'task/cgroup' in slurm_ctl_conf.taskplugin.split(',')
+             else (slurm_ctl_conf.taskplugin ~ ',' if slurm_ctl_conf.taskplugin | length > 0 else '') ~ 'task/cgroup' }}
+
+    - name: require a SelectTypeParameters this role can add memory to
+      ansible.builtin.assert:
+        that:
+          - slurm_ctl_conf.selecttypeparameters is match('^CR_(Core|CPU|Socket)(_Memory)?$')
+        fail_msg: "SelectTypeParameters={{ slurm_ctl_conf.selecttypeparameters }}: set CR_Core, CR_CPU or CR_Socket (with or without _Memory) first"
+        quiet: true
+
+    - name: check this node's memory and cgroup support
+      ansible.builtin.include_role:
+        name: config-lims-slurm
+        tasks_from: mem-enforce-check.yml
+      vars:
+        slurm_real_memory_mb: "{{ slurm_node_realmem[slurm_node] }}"
+
+- name: report the plan
+  ansible.builtin.debug:
+    msg: >-
+      {{ slurm_ctl_conf.nodes.keys() | list | sort | join(', ') }}: Slurm {{ slurm_installed_ver }}
+      {{ ('-> ' ~ slurm_ver ~ (' with fresh state' if slurm_fresh_state | bool else '')) if slurm_needs_upgrade | bool else '(stays)' }};
+      memory limits {{ ('on, DefMemPerCPU=' ~ slurm_def_mem_per_cpu_mb ~ ', RealMemory ' ~ slurm_node_realmem) if slurm_mem_enforce | bool else 'not changed' }}
+  run_once: true

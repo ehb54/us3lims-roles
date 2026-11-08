@@ -18,6 +18,8 @@
                 - rpm-build
                 - make
                 - gcc
+                - autoconf
+                - automake
                 - mariadb-devel
                 - python3
         state: present
@@ -102,11 +104,28 @@
         group: slurm
         state: directory
 
+- name: check the host for Slurm memory enforcement
+  ansible.builtin.include_tasks: mem-enforce-check.yml
+  when: slurm_mem_enforce | bool
+
 - name: config slurm.conf
   template:
         src: slurm.conf.j2
         dest: /etc/slurm/slurm.conf
         backup: yes
+  notify:
+        - restart slurmd
+        - restart slurmctld
+
+- name: config cgroup.conf for Slurm memory enforcement
+  ansible.builtin.template:
+        src: cgroup.conf.j2
+        dest: /etc/slurm/cgroup.conf
+        owner: root
+        group: root
+        mode: '0644'
+        backup: true
+  when: slurm_mem_enforce | bool
   notify:
         - restart slurmd
         - restart slurmctld

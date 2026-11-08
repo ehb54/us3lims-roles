@@ -29,7 +29,7 @@ SwitchType=switch/none
 MpiDefault=none
 SlurmctldPidFile=/var/run/slurmctld.pid
 SlurmdPidFile=/var/run/slurmd.pid
-ProctrackType=proctrack/pgid
+ProctrackType={{ 'proctrack/cgroup' if slurm_mem_enforce | bool else 'proctrack/pgid' }}
 #PluginDir=
 #FirstJobId=
 ReturnToService=0
@@ -44,7 +44,7 @@ ReturnToService=0
 #SrunEpilog=
 #TaskProlog=
 #TaskEpilog=
-#TaskPlugin=
+{{ 'TaskPlugin=task/cgroup' if slurm_mem_enforce | bool else '#TaskPlugin=' }}
 #TrackWCKey=no
 #TreeWidth=50
 #TmpFS=
@@ -62,7 +62,10 @@ Waittime=0
 SchedulerType=sched/backfill
 #SchedulerAuth=
 SelectType=select/cons_tres
-SelectTypeParameters=CR_Core
+SelectTypeParameters={{ 'CR_Core_Memory' if slurm_mem_enforce | bool else 'CR_Core' }}
+{% if slurm_mem_enforce | bool %}
+DefMemPerCPU={{ slurm_def_mem_per_cpu_mb | int }}
+{% endif %}
 #PriorityType=priority/multifactor
 #PriorityDecayHalfLife=14-0
 #PriorityUsageResetPeriod=14-0
@@ -91,5 +94,5 @@ JobCompType=jobcomp/none
 #AccountingStorageUser=
 #
 # COMPUTE NODES
-NodeName=localhost Procs={{ cores }} State=UNKNOWN
+NodeName=localhost Procs={{ cores }}{{ (' RealMemory=' ~ (slurm_real_memory_mb | int)) if slurm_mem_enforce | bool else '' }} State=UNKNOWN
 PartitionName=batch Nodes=ALL Default=YES MaxTime=INFINITE State=UP

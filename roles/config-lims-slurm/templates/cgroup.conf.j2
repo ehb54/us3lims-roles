@@ -1,0 +1,9 @@
+#
+# {{ ansible_managed }}
+#
+# Slurm job memory limits (slurm_mem_enforce): the cgroup of each job holds it
+# to the memory Slurm gave it, and swap does not add to that.
+#
+ConstrainRAMSpace=yes
+ConstrainSwapSpace=yes
+AllowedSwapSpace=0

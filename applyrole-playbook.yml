@@ -65,8 +65,8 @@
         webinfo_branch: "master"
         utils_branch: "main"
 
-        slurm_ver: 20.02.7 # Change to appropriate version
-        slurm_md5: e47e68692354f03db2999ec84fe3f735
+        slurm_ver: 26.05.5 # Change to appropriate version (as in install-lims-server-playbook.yml)
+        slurm_md5: 3c96d51b61c05d5df3b96d7da6aad04d
 
 #        # N.B. slurm_cores can not exceed available cores, if it does, the node will be stuck "draining" (waiting for available resources)
 #        #      if you want to develop (not production!) on a smaller system

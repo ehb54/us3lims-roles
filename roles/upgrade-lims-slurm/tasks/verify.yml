@@ -1,0 +1,159 @@
+---
+# Every node idle on the expected version, the configuration as staged, and a
+# probe job on every node (with its memory limit when slurm_mem_enforce is on).
+
+- name: note what to expect
+  ansible.builtin.set_fact:
+    slurm_expect_ver: "{{ slurm_ver if slurm_needs_upgrade | bool else slurm_installed_ver }}"
+
+- name: wait for every node to be idle
+  ansible.builtin.command: sinfo -h -N -o '%N %t'
+  register: slurm_sinfo
+  until: slurm_sinfo.stdout_lines | length > 0 and slurm_sinfo.stdout_lines | map('split') | map('last') | reject('equalto', 'idle') | list | length == 0
+  retries: "{{ (slurm_wait_seconds | int / 5) | int }}"
+  delay: 5
+  changed_when: false
+  failed_when: false
+  when: slurm_is_ctl
+
+- name: read the nodes and the configuration
+  ansible.builtin.shell:
+    cmd: >-
+      set -o pipefail; scontrol -o show node | sed -E 's/^NodeName=([^ ]+).* Version=([^ ]+).*$/\1 \2/';
+      echo ---; scontrol show config | grep -E '^(SelectTypeParameters|TaskPlugin|ProctrackType|DefMemPerCPU|NEXT_JOB_ID|SLURM_VERSION) '
+    executable: /bin/bash
+  register: slurm_after
+  changed_when: false
+  when: slurm_is_ctl
+
+- name: note them
+  ansible.builtin.set_fact:
+    slurm_after_lines: "{{ hostvars[slurm_ctl].slurm_after.stdout_lines }}"
+
+- name: split them
+  ansible.builtin.set_fact:
+    slurm_after_versions: "{{ slurm_after_lines[: slurm_after_lines.index('---')] | map('split') | map('last') | unique | list }}"
+    slurm_after_config: >-
+      {%- set d = {} -%}{%- for l in slurm_after_lines[slurm_after_lines.index('---') + 1 :] -%}
+      {%- set kv = l.split('=', 1) -%}{%- set _ = d.update({kv[0] | trim: kv[1] | default('') | trim}) -%}
+      {%- endfor -%}{{ d }}
+
+- name: require every node idle on the expected version
+  ansible.builtin.assert:
+    that:
+      - hostvars[slurm_ctl].slurm_sinfo.stdout_lines | map('split') | map('last') | reject('equalto', 'idle') | list | length == 0
+      - slurm_after_versions == [slurm_expect_ver]
+    fail_msg: >-
+      nodes: {{ hostvars[slurm_ctl].slurm_sinfo.stdout_lines | join('; ') }};
+      versions {{ slurm_after_versions | join(', ') }}, expected {{ slurm_expect_ver }}
+    quiet: true
+
+- name: require the memory settings
+  ansible.builtin.assert:
+    that:
+      - slurm_after_config.SelectTypeParameters | default('') is search('_MEMORY')
+      - "'task/cgroup' in slurm_after_config.TaskPlugin | default('')"
+      - slurm_after_config.ProctrackType | default('') == 'proctrack/cgroup'
+      - slurm_after_config.DefMemPerCPU | default(0) | int == slurm_def_mem_per_cpu_mb | int
+    fail_msg: "{{ slurm_after_config | to_json }}"
+    quiet: true
+  when: slurm_mem_enforce | bool
+
+- name: require the job numbers to go on
+  ansible.builtin.assert:
+    that:
+      - slurm_after_config.NEXT_JOB_ID | default(0) | int >= slurm_next_job_id | int
+    fail_msg: "NEXT_JOB_ID {{ slurm_after_config.NEXT_JOB_ID | default('?') }}; it was {{ slurm_next_job_id }} before"
+    quiet: true
+  when: slurm_fresh_state | bool
+
+- name: write the probe job
+  ansible.builtin.copy:
+    dest: "{{ slurm_backup_dir }}/probe.sh"
+    mode: '0755'
+    # The limit is the tightest one on the path of the job's memory cgroup:
+    # Slurm sets it on the job and step cgroups, and the task cgroup the
+    # job's processes are in (newer Slurm) shows none of its own.
+    content: |
+      #!/bin/bash
+      m=$(awk -F: '$2 ~ /(^|,)memory(,|$)/ {print $3}' /proc/self/cgroup)
+      if [ -n "$m" ]; then
+        root=/sys/fs/cgroup/memory; file=memory.limit_in_bytes
+      else
+        m=$(awk -F: '$1 == "0" && $2 == "" {print $3}' /proc/self/cgroup)
+        root=/sys/fs/cgroup; file=memory.max
+      fi
+      echo "node=$SLURMD_NODENAME mem_per_cpu=${SLURM_MEM_PER_CPU:-} memcg=$m"
+      limit=; levels=; p=$m
+      while [ -n "$p" ]; do
+        v=$(cat "$root$p/$file" 2>/dev/null)
+        levels="$levels $p=${v:-none}"
+        case "$v" in
+          ''|max) ;;
+          *) if [ -z "$limit" ] || [ "$v" -lt "$limit" ]; then limit=$v; fi ;;
+        esac
+        [ "$p" = / ] && break
+        p=$(dirname "$p")
+      done
+      echo "limit=$limit"
+      echo "levels:$levels"
+
+- name: run the probe job on every node
+  ansible.builtin.command:
+    cmd: >-
+      sbatch --parsable -w {{ item }} -N 1 -n 1 -J upgrade-probe
+      -o {{ slurm_backup_dir }}/probe-{{ item }}.out {{ slurm_backup_dir }}/probe.sh
+  loop: "{{ slurm_ctl_conf.nodes.keys() | list | sort }}"
+  register: slurm_probes
+  changed_when: true
+  when: slurm_is_ctl
+
+- name: wait for the probe jobs
+  ansible.builtin.shell:
+    cmd: >-
+      set -o pipefail; for j in {{ slurm_probes.results | map(attribute='stdout') | join(' ') }}; do
+      scontrol -o show job $j | grep -o 'JobState=[A-Z_]*'; done
+    executable: /bin/bash
+  register: slurm_probe_states
+  until: >-
+    slurm_probe_states.stdout_lines | reject('equalto', 'JobState=COMPLETED')
+    | select('search', 'PENDING|RUNNING|CONFIGURING|COMPLETING') | list | length == 0
+  retries: "{{ (slurm_wait_seconds | int / 5) | int }}"
+  delay: 5
+  changed_when: false
+  when: slurm_is_ctl
+
+- name: require the probe jobs completed
+  ansible.builtin.assert:
+    that:
+      - hostvars[slurm_ctl].slurm_probe_states.stdout_lines | reject('equalto', 'JobState=COMPLETED') | list | length == 0
+    fail_msg: "probe jobs: {{ hostvars[slurm_ctl].slurm_probe_states.stdout_lines | join(', ') }}"
+    quiet: true
+
+- name: read this node's probe
+  ansible.builtin.slurp:
+    src: "{{ slurm_backup_dir }}/probe-{{ slurm_node }}.out"
+  register: slurm_probe_out
+
+- name: note it
+  ansible.builtin.set_fact:
+    slurm_probe: "{{ slurm_probe_out.content | b64decode }}"
+    slurm_probe_limit: "{{ slurm_probe_out.content | b64decode | regex_search('limit=([0-9]+)', '\\1') | default(['0'], true) | first | int }}"
+    slurm_probe_mpc: "{{ slurm_probe_out.content | b64decode | regex_search('mem_per_cpu=([0-9]+)', '\\1') | default(['0'], true) | first | int }}"
+
+# A one-task job gets DefMemPerCPU for each CPU of the core it is given
+- name: require the job's memory limit on this node
+  ansible.builtin.assert:
+    that:
+      - "'slurm' in (slurm_probe | regex_search('memcg=[^ ]*') | default('', true))"
+      - slurm_probe_mpc | int == slurm_def_mem_per_cpu_mb | int
+      - slurm_probe_limit | int > 0
+      - slurm_probe_limit | int % (slurm_def_mem_per_cpu_mb | int * 1048576) == 0
+      - slurm_probe_limit | int <= slurm_node_realmem[slurm_node] | int * 1048576
+    fail_msg: "probe on {{ slurm_node }}: {{ slurm_probe }} (expected a Slurm cgroup limited to a multiple of {{ slurm_def_mem_per_cpu_mb }} MB)"
+    quiet: true
+  when: slurm_mem_enforce | bool
+
+- name: report
+  ansible.builtin.debug:
+    msg: "{{ slurm_node }}: Slurm {{ slurm_expect_ver }}, {{ slurm_probe | trim | replace('\n', '; ') }}; backup {{ slurm_backup_dir }}"

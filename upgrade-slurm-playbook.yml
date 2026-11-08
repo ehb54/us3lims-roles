@@ -1,0 +1,15 @@
+---
+# Bring one Slurm cluster to the pinned Slurm, and optionally turn on job memory
+# limits, in place.  Run it against every node of the cluster, with no jobs and
+# the LIMS idle.  See roles/upgrade-lims-slurm/README.md.
+#
+#   ansible-playbook -i inventory upgrade-slurm-playbook.yml -e slurm_cluster=<group> --check
+#   ansible-playbook -i inventory upgrade-slurm-playbook.yml -e slurm_cluster=<group>
+#   ansible-playbook -i inventory upgrade-slurm-playbook.yml -e slurm_cluster=<group> -e slurm_rollback_from=<backup>
+
+- name: Upgrade a Slurm cluster in place
+  hosts: "{{ slurm_cluster | default('slurm_cluster_not_set') }}"
+  become: true
+  any_errors_fatal: true
+  roles:
+    - upgrade-lims-slurm
