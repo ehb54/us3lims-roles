@@ -38,3 +38,11 @@
     name: us3-listen
     enabled: yes
     state: started
+
+## The oneshot unit stays active after a daemon dies; start does nothing when all four run, and stops nothing.
+- name: Start any gridctl daemon that is not running
+  become: true
+  become_user: us3
+  ansible.builtin.command: php {{ user_home }}/us3/lims/bin/services.php start
+  register: lims_services_start
+  changed_when: "'already running' not in lims_services_start.stdout"

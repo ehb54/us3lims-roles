@@ -96,7 +96,8 @@
 ## cluster sizing to the upgrade script, the same "one owner" rule
 ## global_config.php's own copy task above already follows -- so this
 ## only runs on a genuinely fresh install, never on an already-upgraded
-## or still-pre-upgrade host.
+## or still-pre-upgrade host. A fresh install still marked unfinished also
+## gets it: the run that copied the template may have died before this task.
 ## With NO_LIMS: true,
 ## config-lims-lims/tasks/main.yml skips lims-tasks.yml entirely --
 ## which is the only place global_config_existed_already ever gets
@@ -122,4 +123,4 @@
   when: >-
     (NO_LIMS is undefined or NO_LIMS == false or NO_LIMS == '')
     and global_config_existed_already is defined
-    and not global_config_existed_already.stat.exists
+    and (not global_config_existed_already.stat.exists or lims_fresh_install_pending.stat.exists | default(false))
