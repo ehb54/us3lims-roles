@@ -39,10 +39,45 @@
     enabled: yes
     state: started
 
+- name: Read the gridctl daemons before the start
+  become: true
+  become_user: us3
+  ansible.builtin.command: php {{ user_home }}/us3/lims/bin/services.php status
+  register: lims_services_before
+  changed_when: false
+
 ## The oneshot unit stays active after a daemon dies; start does nothing when all four run, and stops nothing.
+## In its own session: 4.1.0's and 4.2.0's submitctl and esign exit on SIGHUP when the task's session ends.
 - name: Start any gridctl daemon that is not running
   become: true
   become_user: us3
-  ansible.builtin.command: php {{ user_home }}/us3/lims/bin/services.php start
+  ansible.builtin.command: setsid --wait php {{ user_home }}/us3/lims/bin/services.php start
   register: lims_services_start
-  changed_when: "'already running' not in lims_services_start.stdout"
+  changed_when: false
+
+## services.php leaves manage-us3-pipe to listen, which starts it only at its own start; listen's own command.
+- name: Start manage-us3-pipe if it is not running
+  become: true
+  become_user: us3
+  ansible.builtin.shell: >-
+    php {{ user_home }}/us3/lims/bin/services.php status | grep -Eq '^manage +[0-9]+ +running$' && echo running ||
+    setsid -f nohup php {{ user_home }}/us3/lims/bin/manage-us3-pipe.php
+    >> {{ user_home }}/us3/lims/etc/manage.log 2>&1 < /dev/null
+  register: lims_manage_start
+  changed_when: false
+
+## In a later task, after the sessions that started them have ended.
+- name: Read the gridctl daemons
+  become: true
+  become_user: us3
+  ansible.builtin.command: php {{ user_home }}/us3/lims/bin/services.php status
+  register: lims_services_status
+  changed_when: >-
+    lims_services_status.stdout_lines | select('match', '^\S+\s+\d+\s+running$') | list | length
+    > lims_services_before.stdout_lines | select('match', '^\S+\s+\d+\s+running$') | list | length
+
+- name: Check that the four gridctl daemons run
+  ansible.builtin.assert:
+    that: lims_services_status.stdout_lines | select('match', '^\S+\s+\d+\s+running$') | list | length == 4
+    fail_msg: "Not every gridctl daemon is running: {{ lims_services_status.stdout_lines | join(' / ') }}"
+    quiet: true

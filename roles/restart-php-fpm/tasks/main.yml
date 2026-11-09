@@ -1,20 +1,35 @@
 ---
 # tasks file for restart-php-fpm
 #
-# A finished host is only started here, so a re-run does not bounce live
-# PHP-FPM requests or GMP e-signature sessions; config-lims-php and
-# config-lims-apache restart them through their handlers when a file changes.
-# While a fresh install is unfinished, a failed run may have lost those
-# handlers, so both are restarted.
+# A service whose configuration files are all older than its start is only
+# started, so a converged re-run does not bounce live PHP-FPM requests or GMP
+# e-signature sessions. One running on a file written after it started was
+# missed by a handler (a run that failed before handlers ran, whichever play
+# began the install), so it is restarted.
+
+- name: Find php-fpm or httpd running on configuration written after it started
+  ansible.builtin.shell: |
+    stale() {
+      unit=$1; shift
+      systemctl is-active --quiet "$unit" || return 1
+      started=$(date -d "$(systemctl show -p ActiveEnterTimestamp --value "$unit")" +%s) || return 1
+      newest=$(stat -c %Y "$@" 2>/dev/null | sort -n | tail -1)
+      [ -n "$newest" ] && [ "$newest" -gt "$started" ]
+    }
+    stale php-fpm /etc/php.ini /etc/php-fpm.conf /etc/php-fpm.d/*.conf && echo php-fpm
+    stale httpd /etc/httpd/conf/*.conf /etc/httpd/conf.d/*.conf /etc/httpd/conf.modules.d/*.conf && echo httpd
+    true
+  register: lims_stale_services
+  changed_when: false
 
 - name: ensure php-fpm is running and enabled
   service:
        name: php-fpm
        enabled: yes
-       state: "{{ 'restarted' if lims_fresh_install_pending.stat.exists | default(false) else 'started' }}"
+       state: "{{ 'restarted' if 'php-fpm' in lims_stale_services.stdout_lines else 'started' }}"
 
 - name: ensure httpd is running and enabled
   service:
        name: httpd
        enabled: yes
-       state: "{{ 'restarted' if lims_fresh_install_pending.stat.exists | default(false) else 'started' }}"
+       state: "{{ 'restarted' if 'httpd' in lims_stale_services.stdout_lines else 'started' }}"
