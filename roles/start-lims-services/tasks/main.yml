@@ -39,6 +39,29 @@
     enabled: yes
     state: started
 
+## Main's play starts us3-listen before PHP's mysql extension and .us3lims.ini exist, and those daemons keep
+## failing until restarted. Only when one of those files is newer than the oldest running daemon, so converged runs keep them.
+## ctime, since rpm keeps a package file's build-time mtime but installing it sets the ctime.
+- name: Find gridctl daemons started before PHP's mysql extension or the LIMS configuration
+  become: true
+  become_user: us3
+  ansible.builtin.shell: |
+    pids=$(php {{ user_home }}/us3/lims/bin/services.php status | awk '$3 == "running" { print $2 }')
+    [ -n "$pids" ] || exit 0
+    boot=$(awk '/^btime/ { print $2 }' /proc/stat); hz=$(getconf CLK_TCK)
+    started=$(for p in $pids; do t=$(sed 's/.*) //' /proc/$p/stat 2>/dev/null | awk '{ print $20 }') && [ -n "$t" ] && echo $((boot + t / hz)); done | sort -n | head -1)
+    newest=$(stat -c %Z {{ user_home }}/us3/lims/.us3lims.ini /etc/php.d/*mysql*.ini 2>/dev/null | sort -n | tail -1)
+    [ -n "$started" ] && [ -n "$newest" ] && [ "$newest" -ge "$started" ] && echo stale || true
+  register: lims_listen_stale
+  changed_when: false
+
+## A reload runs services.php restart inside the unit: 4.2.0's unit has no KillMode=process, so a restart would stop its job monitors.
+- name: Restart the gridctl daemons on configuration written after their start (job monitors are kept)
+  ansible.builtin.systemd:
+    name: us3-listen
+    state: reloaded
+  when: "'stale' in lims_listen_stale.stdout"
+
 - name: Read the gridctl daemons before the start
   become: true
   become_user: us3

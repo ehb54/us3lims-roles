@@ -14,7 +14,7 @@
       systemctl is-active --quiet "$unit" || return 1
       started=$(date -d "$(systemctl show -p ActiveEnterTimestamp --value "$unit")" +%s) || return 1
       newest=$(stat -c %Y "$@" 2>/dev/null | sort -n | tail -1)
-      [ -n "$newest" ] && [ "$newest" -gt "$started" ]
+      [ -n "$newest" ] && [ "$newest" -ge "$started" ]
     }
     stale php-fpm /etc/php.ini /etc/php-fpm.conf /etc/php-fpm.d/*.conf && echo php-fpm
     stale httpd /etc/httpd/conf/*.conf /etc/httpd/conf.d/*.conf /etc/httpd/conf.modules.d/*.conf && echo httpd
