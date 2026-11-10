@@ -6,14 +6,24 @@
     src: "{{ lims_php_services_marker }}"
   register: lims_php_services_marker_read
 
+# In its own session: older gridctl daemons exit on SIGHUP when the play's terminal closes.
 - name: Start the gridctl services
-  ansible.builtin.command: php services.php start
+  ansible.builtin.command: setsid --wait php services.php start
+  args:
+    chdir: "{{ lims_php_lims_bin }}"
+  become: true
+  become_user: "{{ lims_php_lims_user }}"
+  changed_when: true
+
+# In a later task, after the session that started them has ended.
+- name: Read the gridctl services
+  ansible.builtin.command: php services.php status
   args:
     chdir: "{{ lims_php_lims_bin }}"
   become: true
   become_user: "{{ lims_php_lims_user }}"
   register: lims_php_services_start
-  changed_when: true
+  changed_when: false
 
 - name: Check the gridctl services
   ansible.builtin.assert:

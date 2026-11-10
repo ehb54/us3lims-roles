@@ -61,7 +61,11 @@
 
   roles:
 
+  ## vars: on a play takes a mapping, not a sequence -- every entry here
+  ## was written as "- key: value", a list of one-key mappings, which
+  ## made ansible-playbook --syntax-check refuse this whole file. Written
+  ## as a plain mapping instead; same keys, same values.
   vars:
-    - email_dir                   : "/home/usadmin/emails/academic"
-#    - email_dir                   : "/home/usadmin/emails/commercial"
-    - update_git                  : false
+    email_dir                   : "/home/usadmin/emails/academic"
+#    email_dir                   : "/home/usadmin/emails/commercial"
+    update_git                  : false

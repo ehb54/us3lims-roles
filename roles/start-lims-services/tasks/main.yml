@@ -1,0 +1,106 @@
+---
+# tasks file for start-lims-services
+#
+# Split out of config-lims-us3-user/tasks/lims-tasks.yml: starting
+# us3-listen and writing the cron
+# entries used to happen from within config-lims-us3-user, which runs
+# BEFORE config-lims-lims and install-demo-dbinst -- both of which call
+# uslims_upgrade.php, whose own step 1 requires the host be idle (no
+# gridctl daemon running, no LIMS cron entries). The same play had already
+# started that daemon and written those entries before either upgrade
+# call ran, so uslims_upgrade.php always refused with "host is not idle",
+# on every run, upgrade or fresh install alike. This role carries the
+# exact same tasks, moved to the end of the play (after every role that
+# calls uslims_upgrade.php), so the host stays idle until nothing more
+# needs it to be. See UPGRADE-AND-INSTALL-MODEL.md.
+
+- set_fact:
+    user_home: "/home"
+  when: user_home is undefined
+
+- name: Include cron related tasks
+  import_tasks: cron-tasks.yml
+
+- name: Copy over us3-listen.service
+  template:
+    src: "{{ 'us3-listen-4.2.0.service.j2' if lims_pre_430 | default(false) | bool else 'us3-listen.service.j2' }}"
+    dest: /etc/systemd/system/us3-listen.service
+  notify:
+    - reload daemon
+    - restart us3-listen
+
+- name: Reload systemd daemon
+  systemd:
+    daemon_reload: yes
+
+- name: Make sure us3-listen is enabled and running (never restarts an already-running service -- see the "restart us3-listen" handler for that)
+  service:
+    name: us3-listen
+    enabled: yes
+    state: started
+
+## Main's play starts us3-listen before PHP's mysql extension and .us3lims.ini exist, and those daemons keep
+## failing until restarted. Only when one of those files is newer than the oldest running daemon, so converged runs keep them.
+## ctime, since rpm keeps a package file's build-time mtime but installing it sets the ctime.
+- name: Find gridctl daemons started before PHP's mysql extension or the LIMS configuration
+  become: true
+  become_user: us3
+  ansible.builtin.shell: |
+    pids=$(php {{ user_home }}/us3/lims/bin/services.php status | awk '$3 == "running" { print $2 }')
+    [ -n "$pids" ] || exit 0
+    boot=$(awk '/^btime/ { print $2 }' /proc/stat); hz=$(getconf CLK_TCK)
+    started=$(for p in $pids; do t=$(sed 's/.*) //' /proc/$p/stat 2>/dev/null | awk '{ print $20 }') && [ -n "$t" ] && echo $((boot + t / hz)); done | sort -n | head -1)
+    newest=$(stat -c %Z {{ user_home }}/us3/lims/.us3lims.ini /etc/php.d/*mysql*.ini 2>/dev/null | sort -n | tail -1)
+    [ -n "$started" ] && [ -n "$newest" ] && [ "$newest" -ge "$started" ] && echo stale || true
+  register: lims_listen_stale
+  changed_when: false
+
+## A reload runs services.php restart inside the unit: 4.2.0's unit has no KillMode=process, so a restart would stop its job monitors.
+- name: Restart the gridctl daemons on configuration written after their start (job monitors are kept)
+  ansible.builtin.systemd:
+    name: us3-listen
+    state: reloaded
+  when: "'stale' in lims_listen_stale.stdout"
+
+- name: Read the gridctl daemons before the start
+  become: true
+  become_user: us3
+  ansible.builtin.command: php {{ user_home }}/us3/lims/bin/services.php status
+  register: lims_services_before
+  changed_when: false
+
+## The oneshot unit stays active after a daemon dies; start does nothing when all four run, and stops nothing.
+## In its own session: 4.1.0's and 4.2.0's submitctl and esign exit on SIGHUP when the task's session ends.
+- name: Start any gridctl daemon that is not running
+  become: true
+  become_user: us3
+  ansible.builtin.command: setsid --wait php {{ user_home }}/us3/lims/bin/services.php start
+  register: lims_services_start
+  changed_when: false
+
+## services.php leaves manage-us3-pipe to listen, which starts it only at its own start; listen's own command.
+- name: Start manage-us3-pipe if it is not running
+  become: true
+  become_user: us3
+  ansible.builtin.shell: >-
+    php {{ user_home }}/us3/lims/bin/services.php status | grep -Eq '^manage +[0-9]+ +running$' && echo running ||
+    setsid -f nohup php {{ user_home }}/us3/lims/bin/manage-us3-pipe.php
+    >> {{ user_home }}/us3/lims/etc/manage.log 2>&1 < /dev/null
+  register: lims_manage_start
+  changed_when: false
+
+## In a later task, after the sessions that started them have ended.
+- name: Read the gridctl daemons
+  become: true
+  become_user: us3
+  ansible.builtin.command: php {{ user_home }}/us3/lims/bin/services.php status
+  register: lims_services_status
+  changed_when: >-
+    lims_services_status.stdout_lines | select('match', '^\S+\s+\d+\s+running$') | list | length
+    > lims_services_before.stdout_lines | select('match', '^\S+\s+\d+\s+running$') | list | length
+
+- name: Check that the four gridctl daemons run
+  ansible.builtin.assert:
+    that: lims_services_status.stdout_lines | select('match', '^\S+\s+\d+\s+running$') | list | length == 4
+    fail_msg: "Not every gridctl daemon is running: {{ lims_services_status.stdout_lines | join(' / ') }}"
+    quiet: true

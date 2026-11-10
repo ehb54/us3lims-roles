@@ -102,7 +102,7 @@ cluster is back.
 ## Notes
 
 - The pin and its checksum are `slurm_ver` and `slurm_md5` in
-  `defaults/main.yml`; keep them equal to `example-playbook.yml`, and update
+  `defaults/main.yml`; keep them equal to `install-lims-server-playbook.yml`, and update
   `slurm_state_min_version` with them (Slurm reads saved state from the three
   previous releases).
 - GPUs (`GresTypes`, `gres.conf`) are left as they are; the role's Slurm build
