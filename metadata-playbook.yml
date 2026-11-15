@@ -92,18 +92,22 @@
 
   roles:
 
+  ## vars: on a play takes a mapping, not a sequence -- every entry here
+  ## was written as "- key: value", a list of one-key mappings, which
+  ## made ansible-playbook --syntax-check refuse this whole file. Written
+  ## as a plain mapping instead; same keys, same values.
   vars:
-    - metadata_dir                       : "/home/usadmin/metadata"
-    - update_git                         : true
-    - collect_metadata_string_variants   : false
-    - training_directory                 : "/tmp/training"
-    - get_metadata                       : true
-    - cleanup_metadata                   : true
+    metadata_dir                       : "/home/usadmin/metadata"
+    update_git                         : true
+    collect_metadata_string_variants   : false
+    training_directory                 : "/tmp/training"
+    get_metadata                       : true
+    cleanup_metadata                   : true
 # set limit results to non-zero for testing with a limited number of results per database
-    - limit_results                      : 0
-#    - metadata_format_file               : "uslims_metadata_format.json"
-#    - max_datasets                       : 9999
+    limit_results                      : 0
+#    metadata_format_file               : "uslims_metadata_format.json"
+#    max_datasets                       : 9999
 # for testing, limit datasets
-    - metadata_format_file               : "uslims_metadata_format_max10datasets.json"
-    - max_datasets                       : 10
+    metadata_format_file               : "uslims_metadata_format_max10datasets.json"
+    max_datasets                       : 10
 

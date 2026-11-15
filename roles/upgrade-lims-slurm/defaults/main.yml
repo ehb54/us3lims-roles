@@ -1,5 +1,5 @@
 ---
-# The Slurm every cluster is brought to (keep it equal to slurm_ver in example-playbook.yml)
+# The Slurm every cluster is brought to (keep it equal to slurm_ver in install-lims-server-playbook.yml)
 slurm_ver: 26.05.5
 slurm_md5: 3c96d51b61c05d5df3b96d7da6aad04d
 # The oldest release whose saved state slurm_ver reads (26.05 reads 24.11, 25.05

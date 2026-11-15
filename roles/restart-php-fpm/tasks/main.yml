@@ -1,14 +1,35 @@
 ---
 # tasks file for restart-php-fpm
+#
+# A service whose configuration files are all older than its start is only
+# started, so a converged re-run does not bounce live PHP-FPM requests or GMP
+# e-signature sessions. One running on a file written after it started was
+# missed by a handler (a run that failed before handlers ran, whichever play
+# began the install), so it is restarted.
 
-- name: restart php-fpm
+- name: Find php-fpm or httpd running on configuration written after it started
+  ansible.builtin.shell: |
+    stale() {
+      unit=$1; shift
+      systemctl is-active --quiet "$unit" || return 1
+      started=$(date -d "$(systemctl show -p ActiveEnterTimestamp --value "$unit")" +%s) || return 1
+      newest=$(stat -c %Y "$@" 2>/dev/null | sort -n | tail -1)
+      [ -n "$newest" ] && [ "$newest" -ge "$started" ]
+    }
+    stale php-fpm /etc/php.ini /etc/php-fpm.conf /etc/php-fpm.d/*.conf && echo php-fpm
+    stale httpd /etc/httpd/conf/*.conf /etc/httpd/conf.d/*.conf /etc/httpd/conf.modules.d/*.conf && echo httpd
+    true
+  register: lims_stale_services
+  changed_when: false
+
+- name: ensure php-fpm is running and enabled
   service:
        name: php-fpm
        enabled: yes
-       state: restarted
+       state: "{{ 'restarted' if 'php-fpm' in lims_stale_services.stdout_lines else 'started' }}"
 
-- name: restart httpd
+- name: ensure httpd is running and enabled
   service:
        name: httpd
        enabled: yes
-       state: restarted
+       state: "{{ 'restarted' if 'httpd' in lims_stale_services.stdout_lines else 'started' }}"

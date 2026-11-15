@@ -28,7 +28,7 @@ ansible-galaxy install -r requirements.yml
 
 ## Using it
 
-Modifying the example-playbook.yml is a good starting ground. 
+Modifying the install-lims-server-playbook.yml is a good starting ground. 
 
 ### Some required variable definitons: 
 
@@ -42,7 +42,7 @@ Modifying the example-playbook.yml is a good starting ground.
 
 `limsadmin_db_pass` - database password for limsadmin 
 
-`admin_email` - Email of Admin that will be primarily responsible for the LIMS server 
+`admin_email` - Email of Admin that will be primarily responsible for the LIMS server. A host built from main has the former fixed default (us3-admin@biophysics.uleth.ca) in listen-config.php; upgrading it to 4.3.0, pass `--site-admin-email` with this address to `uslims_upgrade.php`.
 
 `admins_db_pass` - Initial DB password for all admins - Defaults are for Alexey, Borries and Gary
 
@@ -51,6 +51,27 @@ Modifying the example-playbook.yml is a good starting ground.
 `ipaddr_int` - The internal IP address of the host
  
 `cron_admin` - MAILTO cron admin needs to be defined. 
+
+### Optional variables:
+
+`lims_enable_gmp` - `true` for a GMP site; sets `enable_GMP` in the dbinst base config written on first install. Default `false`.
+
+`lims_enable_pam` - `true` to enable PAM login; sets `enable_PAM` in the same base config. Default `false`.
+
+Set both in the inventory or host_vars, not in the playbook's `vars:`, which would override them.
+
+### Release pinning
+
+`site_release` - the ref (branch or tag) every checkout is pulled from, e.g. `release-2026-Q3` or `v4.2.0`. Set it, and `site_release_version`, in the inventory or host_vars, as above. With neither set, a host is built from `release-2026-Q2` (4.1.0), the default in `roles/site-release-defaults`. Each `*_branch` variable follows it; as a play var, one can be changed only with `-e`.
+
+`site_release_version` - the VERSION file that ref carries, e.g. `4.2.0`. Required when `site_release` is set; each existing checkout's VERSION is compared with it.
+
+A run on an existing host refuses, before it changes anything, when a checkout is on another ref or VERSION than declared or the host is busy. After stopping the gridctl services for `uslims_upgrade.php --check` (it starts again only what it stopped, and changes nothing else), it refuses when the check finds a problem. In all:
+- a checkout is on another ref or VERSION than declared (a host not yet upgraded to that release, or a stale checkout);
+- the host is busy (Slurm jobs, unfinished LIMS jobs, live job monitors or unsettled dispatch requests, as `uslims_jobs.php --busy` reports them), naming what is running;
+- `uslims_upgrade.php --check` reports failures this run cannot fix, settings only an operator can give, or conversion work not yet done (this playbook does not convert a host; finish the upgrade with `uslims_upgrade.php --apply`). Failures that each concern one instance are named and the run continues.
+
+The preflight comments out the LIMS lines in `/etc/crontab` and stops `us3-listen` while it checks, and restores both afterwards, refused or not. A run that died while the host was idled leaves `/etc/crontab.pre-upgrade-preflight`; the next run restores it before anything else.
 
 
 ### Running it: 

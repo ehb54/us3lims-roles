@@ -41,8 +41,12 @@
 
   roles:
 
+  ## vars: on a play takes a mapping, not a sequence -- every entry here
+  ## was written as "- key: value", a list of one-key mappings, which
+  ## made ansible-playbook --syntax-check refuse this whole file. Written
+  ## as a plain mapping instead; same keys, same values.
   vars:
-    - start_year : 2020
-    - end_year   : 2022
-    - usage_dir  : "/home/usadmin/usage/{{ ansible_date_time.date }}"
+    start_year : 2020
+    end_year   : 2022
+    usage_dir  : "/home/usadmin/usage/{{ ansible_date_time.date }}"
     

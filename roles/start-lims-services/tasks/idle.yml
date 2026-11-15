@@ -1,0 +1,160 @@
+---
+# Idles the host for a uslims_upgrade.php call. A busy host (Slurm jobs, or work uslims_jobs.php
+# --busy counts as uslims_upgrade.php's idle check does, or a state that cannot be read) is left
+# running and lims_host_busy is set, with lims_idle_reasons naming why, so the caller skips the
+# call. A host without the us3-listen unit was never put in service and is never busy. Otherwise us3-listen is stopped through systemd, so the unit is inactive and resume.yml or
+# this role's main tasks start it again. A raw "php services.php stop" left the oneshot unit
+# reported active, and "state: started" then never started the daemons.
+- set_fact:
+    user_home: "/home"
+  when: user_home is undefined
+
+- name: Look for the us3-listen unit and uslims_jobs.php
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - /etc/systemd/system/us3-listen.service
+    - "{{ user_home }}/us3/lims/database/utils/uslims_jobs.php"
+  register: lims_idle_files
+
+- name: Read the Slurm queue
+  ansible.builtin.shell: |
+    PATH=$PATH:/usr/local/bin:/opt/slurm/bin    # sudo secure_path leaves out a source-built Slurm
+    command -v squeue > /dev/null || { echo '@not-installed'; exit 0; }
+    # without a proxychains LD_PRELOAD from /etc/environment, which would send the connection to
+    # the local Slurm controller into the SOCKS tunnel
+    # every account's jobs unless global_config.php records a shared host, as uslims_upgrade.php's
+    # idle check judges the nodes; otherwise that check refuses after this play has idled the host
+    gc={{ www_common | default((www_base | default('/srv/www/htdocs')) ~ '/common') }}/global_config.php
+    if [ -r "$gc" ] && php -r 'include $argv[1]; exit(isset($single_tenant_deployment) && !$single_tenant_deployment ? 0 : 1);' "$gc" 2>/dev/null; then
+      env -u LD_PRELOAD squeue -h -u us3 -o '%i %u %T %j'
+    else
+      env -u LD_PRELOAD squeue -h -o '%i %u %T %j'
+    fi
+  register: lims_idle_squeue
+  changed_when: false
+  failed_when: false
+
+# --busy (4.3.0) prints "idle", or the work in flight with exit 1; an older uslims_jobs.php has
+# only --running, which prints "no currently active jobs" when idle.
+- name: Check whether uslims_jobs.php has --busy
+  ansible.builtin.command: grep -q -- '"--busy"' uslims_jobs.php
+  args:
+    chdir: "{{ user_home }}/us3/lims/database/utils"
+  register: lims_idle_has_busy
+  changed_when: false
+  failed_when: false
+  when: lims_idle_files.results[1].stat.exists
+
+- name: Read the LIMS work in flight
+  ansible.builtin.command: "php uslims_jobs.php {{ '--busy' if lims_idle_has_busy.rc | default(1) == 0 else '--running' }}"
+  args:
+    chdir: "{{ user_home }}/us3/lims/database/utils"
+  become: yes
+  become_user: us3
+  register: lims_idle_jobs
+  changed_when: false
+  failed_when: false
+  when: lims_idle_files.results[1].stat.exists
+
+- name: Read whether LIMS work is in flight
+  ansible.builtin.set_fact:
+    lims_idle_jobs_busy: >-
+      {{ lims_idle_files.results[1].stat.exists
+         and (lims_idle_jobs.rc != 0
+              or (lims_idle_has_busy.rc != 0 and 'no currently active jobs' not in lims_idle_jobs.stdout)) }}
+
+- name: Decide whether the host is busy
+  ansible.builtin.set_fact:
+    lims_host_busy: >-
+      {{ lims_idle_files.results[0].stat.exists
+         and (lims_idle_squeue.rc != 0
+              or lims_idle_squeue.stdout_lines | reject('equalto', '@not-installed') | list | length > 0
+              or lims_idle_jobs_busy | bool) }}
+    lims_idle_reasons: >-
+      {{ (lims_idle_squeue.stdout_lines | default([]) | reject('equalto', '@not-installed')
+          | map('regex_replace', '^', 'Slurm job ') | list)
+         + ([('could not read the Slurm queue: ' ~ (lims_idle_squeue.stderr | default('')))] if lims_idle_squeue.rc | default(0) != 0 else [])
+         + ((lims_idle_jobs.stdout_lines | default([]) | reject('match', '^(idle|note: )') | list
+             + lims_idle_jobs.stderr_lines | default([])) if lims_idle_jobs_busy | bool else []) }}
+    lims_idle_stopped_listen: false
+
+- name: Report the busy host
+  ansible.builtin.debug:
+    msg:
+      - "The host is busy or its job state could not be read; the gridctl services stay up and uslims_upgrade.php is skipped this run."
+      - "Slurm: {{ lims_idle_squeue.stdout_lines | join('; ') or lims_idle_squeue.stderr | default('') }}"
+      - "LIMS work: {{ (lims_idle_jobs.stdout_lines | default([])) | join('; ') }}"
+  when: lims_host_busy | bool
+
+# KillMode=process before the stop: a unit from an older run kills every job monitor in its cgroup.
+# A check that must change nothing (lims_idle_keep_unit) uses a runtime drop-in instead, which
+# resume.yml removes.
+- name: Install the current us3-listen unit before stopping it
+  ansible.builtin.template:
+    src: "{{ 'us3-listen-4.2.0.service.j2' if lims_pre_430 | default(false) | bool else 'us3-listen.service.j2' }}"
+    dest: /etc/systemd/system/us3-listen.service
+  register: lims_idle_unit
+  when:
+    - not lims_host_busy | bool
+    - lims_idle_files.results[0].stat.exists
+    - not lims_idle_keep_unit | default(false) | bool
+
+- name: Check whether the installed us3-listen unit stops only its daemons
+  ansible.builtin.command: grep -q '^KillMode=process' /etc/systemd/system/us3-listen.service
+  register: lims_idle_killmode
+  changed_when: false
+  failed_when: false
+  when:
+    - not lims_host_busy | bool
+    - lims_idle_files.results[0].stat.exists
+    - lims_idle_keep_unit | default(false) | bool
+
+- name: Make the runtime drop-in directory
+  ansible.builtin.file:
+    path: /run/systemd/system/us3-listen.service.d
+    state: directory
+    mode: '0755'
+  when:
+    - not lims_host_busy | bool
+    - lims_idle_keep_unit | default(false) | bool
+    - lims_idle_killmode.rc | default(0) != 0
+
+- name: Stop only the daemons for this check, through a runtime drop-in
+  ansible.builtin.copy:
+    dest: /run/systemd/system/us3-listen.service.d/zz-lims-idle.conf
+    content: "[Service]\nKillMode=process\n"
+    mode: '0644'
+  register: lims_idle_dropin
+  when:
+    - not lims_host_busy | bool
+    - lims_idle_keep_unit | default(false) | bool
+    - lims_idle_killmode.rc | default(0) != 0
+
+- name: Reload systemd for the new unit
+  ansible.builtin.systemd:
+    daemon_reload: yes
+  when: lims_idle_unit is changed or lims_idle_dropin is changed
+
+- name: Check whether us3-listen is active
+  ansible.builtin.command: systemctl is-active us3-listen
+  register: lims_idle_listen_active
+  changed_when: false
+  failed_when: false
+  when: not lims_host_busy | bool
+
+# ExecStop is "php services.php stop" as us3, the graceful shutdown
+- name: Stop us3-listen
+  ansible.builtin.service:
+    name: us3-listen
+    state: stopped
+  when:
+    - not lims_host_busy | bool
+    - lims_idle_listen_active.stdout | default('') == 'active'
+
+- name: Record that this run stopped us3-listen
+  ansible.builtin.set_fact:
+    lims_idle_stopped_listen: true
+  when:
+    - not lims_host_busy | bool
+    - lims_idle_listen_active.stdout | default('') == 'active'

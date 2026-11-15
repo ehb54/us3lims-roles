@@ -92,14 +92,18 @@
     - build-qwt
     - add-modulefile-home-gui-qt6
     
+  ## vars: on a play takes a mapping, not a sequence -- every entry here
+  ## was written as "- key: value", a list of one-key mappings, which
+  ## made ansible-playbook --syntax-check refuse this whole file. Written
+  ## as a plain mapping instead; same keys, same values.
   vars:
-    - comp_opt:                   "{{ optimization }}"
-    - qt_major_version:           "6.9"
-    - qt_version:                 "6.9.3"
-    - qwt_version:                "6.3.0"
-    - cores_for_parallel_compile: "{{ ansible_processor_vcpus }}"
-    - gcc_toolset_version:        13
+    comp_opt:                   "{{ optimization }}"
+    qt_major_version:           "6.9"
+    qt_version:                 "6.9.3"
+    qwt_version:                "6.3.0"
+    cores_for_parallel_compile: "{{ ansible_processor_vcpus }}"
+    gcc_toolset_version:        13
 
-    - slurm_cores :               "{{ ansible_processor_vcpus }}"
-    - slurm_sbatch_extras : ""
-    # - slurm_sbatch_extras : "#SBATCH -O\n"
+    slurm_cores :               "{{ ansible_processor_vcpus }}"
+    slurm_sbatch_extras : ""
+    # slurm_sbatch_extras : "#SBATCH -O\n"
