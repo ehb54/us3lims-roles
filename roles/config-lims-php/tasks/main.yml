@@ -2,7 +2,8 @@
 - name: install php related dependencies
   dnf:
       enablerepo: "{{ powertools }}"
-      name: "{{ packages }}"
+      # PHP 8 (EL9+) has json built in; there is no php-json package
+      name: "{{ packages | reject('equalto', 'php-json') | list if (ansible_facts['distribution_major_version'] | int) >= 9 else packages }}"
       update_cache: yes
 
 ## dbinst's show_image.php calls mb_strlen()
