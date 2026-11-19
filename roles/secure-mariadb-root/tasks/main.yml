@@ -20,7 +20,40 @@
           Set mariadb_root_my_cnf to another defaults file with root's [client] password.
         quiet: true
 
+## The mysql modules need PyMySQL in the python that runs them. The roles install the
+## python3-PyMySQL package, which belongs to the system python (platform-python on EL8), but
+## Ansible's interpreter discovery picks a newer python3.11/3.12 where one is installed.
+- name: Find a python that has PyMySQL
+  ansible.builtin.command:
+    argv: ["{{ item }}", -c, "import pymysql"]
+  loop: >-
+    {{ (([ansible_python_interpreter] if ansible_python_interpreter is defined
+           and not ansible_python_interpreter.startswith('auto') else [])
+        + ([ansible_facts.discovered_interpreter_python] if ansible_facts.discovered_interpreter_python is defined else [])
+        + mariadb_root_python_candidates) | unique }}
+  register: mariadb_root_python_probe
+  check_mode: false
+  changed_when: false
+  failed_when: false
+
+- name: Use the first python that has PyMySQL
+  ansible.builtin.set_fact:
+    mariadb_root_python: >-
+      {{ (mariadb_root_python_probe.results | selectattr('rc', 'equalto', 0)
+          | map(attribute='item') | list + [''])[0] }}
+
+- name: Require a python with PyMySQL
+  ansible.builtin.assert:
+    that: mariadb_root_python | length > 0
+    fail_msg: >-
+      No python on this host can import pymysql (tried
+      {{ mariadb_root_python_probe.results | map(attribute='item') | join(', ') }}).
+      Install python3-PyMySQL for one of them.
+    quiet: true
+
 - name: Read the root accounts
+  vars:
+    ansible_python_interpreter: "{{ mariadb_root_python }}"
   community.mysql.mysql_query:
     login_unix_socket: "{{ mariadb_root_socket }}"
     login_user: root
@@ -71,9 +104,11 @@
 
 - name: Report the passwordless root login over loopback
   ansible.builtin.debug:
+    ## the error says why: 1045/1130 = no account lets it in, 2002/2003 = nothing listens there
     msg: >-
       passwordless root login over {{ item.item }}:
-      {{ ('ACCEPTED as ' ~ item.stdout) if item.rc == 0 else 'refused' }}
+      {{ ('ACCEPTED as ' ~ item.stdout) if item.rc == 0
+         else 'refused (' ~ (item.stderr_lines | first | default('') | regex_replace('^ERROR ', '')) ~ ')' }}
   loop: "{{ mariadb_root_tcp_before.results }}"
   loop_control:
     label: "{{ item.item }}"
@@ -95,6 +130,8 @@
       when: mariadb_root_localhost_open | bool
 
     - name: Drop the root accounts other than root@localhost that have no password
+      vars:
+        ansible_python_interpreter: "{{ mariadb_root_python }}"
       community.mysql.mysql_user:
         name: root
         host: "{{ item }}"
@@ -118,6 +155,8 @@
           failed_when: mariadb_root_tcp_after.rc == 0
 
         - name: Log in as root with the credentials
+          vars:
+            ansible_python_interpreter: "{{ mariadb_root_python }}"
           community.mysql.mysql_query:
             login_unix_socket: "{{ mariadb_root_socket }}"
             login_user: root

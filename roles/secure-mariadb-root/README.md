@@ -24,6 +24,10 @@ Modes are set by `mariadb_root_mode`; the playbook maps `-e run=1` to `apply`.
 
 `--check` with `-e run=1` shows what `apply` would drop.
 
+A loopback login the server refuses is reported with its error: `1045`/`1130` means no account lets it in, `2002`/`2003` means MariaDB doesn't listen there (e.g. `::1` when it is bound to IPv4 only).
+
+The mysql modules need PyMySQL. The `python3-PyMySQL` package installs it for the system python (platform-python on EL8), but Ansible's interpreter discovery picks a newer `python3.11`/`python3.12` where one is installed. The role therefore tries the inventory's or discovered interpreter first, then `mariadb_root_python_candidates`, and runs its database tasks with the first one that can import `pymysql`. If none can, it stops and says so.
+
 Root's credentials come from the dbutils defaults file `~us3/lims/database/utils/my.cnf` (`mariadb_root_my_cnf`). `config-lims-database` passes `mariadb_root_login_password` (`root_db_pass`) instead, since that file doesn't exist yet during a fresh install.
 
 ## Role Variables
@@ -39,6 +43,8 @@ See `defaults/main.yml`.
 `mariadb_root_socket` - default `/var/lib/mysql/mysql.sock`
 
 `mariadb_root_check_hosts` - addresses the passwordless-login check tries, default `127.0.0.1` and `::1`
+
+`mariadb_root_python_candidates` - pythons tried for PyMySQL after the inventory's or discovered one
 
 ## Notes
 
