@@ -16,6 +16,16 @@ mariadb_root_my_cnf: "{{ user_home | default('/home') }}/us3/lims/database/utils
 
 mariadb_root_socket: /var/lib/mysql/mysql.sock
 
+# pythons tried, after the one Ansible discovered, for the mysql modules (they need PyMySQL,
+# which the python3-PyMySQL package installs for the system python only)
+mariadb_root_python_candidates:
+  - /usr/libexec/platform-python
+  - /usr/bin/python3
+  - /usr/bin/python3.12
+  - /usr/bin/python3.11
+  - /usr/bin/python3.9
+  - /usr/bin/python3.6
+
 # loopback addresses the passwordless-login check tries
 mariadb_root_check_hosts:
   - 127.0.0.1
