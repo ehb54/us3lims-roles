@@ -23,3 +23,24 @@
   when:
     - lims_php_stream_enabled is defined
     - lims_php_stream_enabled not in ['', lims_php_stream]
+
+# EL10 has no dnf module streams. Each php is a separate set of packages: php-* is php 8.3
+# (supported for the life of EL10), php8.4-* is php 8.4, and the two conflict. config-lims-php
+# installs php-*, so a host that already has php 8.4 stops here, before any role changes it.
+- name: Look for php 8.4 packages (EL10)
+  ansible.builtin.command: rpm -q php8.4-common
+  register: lims_php84_read
+  changed_when: false
+  failed_when: false
+  when:
+    - ansible_facts['os_family'] == 'RedHat'
+    - ansible_facts['distribution_major_version'] | int >= 10
+
+- name: Refuse a host that has php 8.4 (EL10)
+  ansible.builtin.fail:
+    msg: >-
+      {{ lims_php84_read.stdout | trim }} is installed. The LIMS roles install the php-* packages
+      (php 8.3), which conflict with php8.4-*. Remove the php8.4 packages or use another host.
+  when:
+    - lims_php84_read.rc is defined
+    - lims_php84_read.rc == 0

@@ -2,6 +2,8 @@
 
 Moves an EL8 LIMS host (RHEL, Oracle Linux, Alma, Rocky 8) from the `php:7.2` module stream to `php:7.4`. Red Hat retired `php:7.2` in 2021, so it gets no security fixes, including none for PHP2Shell (CVE-2026-109618, CVE-2026-109619). `php:7.4` is supported for the life of RHEL 8, and its fixes arrive through `dnf`. Run it through `upgrade-php-playbook.yml`. ultrascan-tickets#1150.
 
+On EL10 the `info` and `mitigate` modes run as on EL8. EL10 has no dnf module streams (its php version comes with the package names; the LIMS roles install `php-*`, php 8.3), so `upgrade` refuses there.
+
 ## What it does
 
 Modes are set by `lims_php_mode`; the playbook maps `-e run=1` to `upgrade` and `-e mitigate=1` to `mitigate`.
