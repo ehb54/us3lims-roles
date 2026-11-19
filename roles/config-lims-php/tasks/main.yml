@@ -49,9 +49,12 @@
     - restart php-fpm
   when: not lims_pre_430 | default(false) | bool
 
+## EL8 (php 7.4): php.ini. EL10 (php 8.3): php-el10.ini, the EL10 php 8.3 php.ini with the same LIMS
+## settings (memory_limit, post_max_size, expose_php, imagick) and without session.sid_length and
+## session.sid_bits_per_character, which php 8.4 deprecates, so the file also starts clean on php 8.4
 - name: Configure php.ini
   copy:
-        src: php.ini
+        src: "{{ 'php-el10.ini' if (ansible_facts['distribution_major_version'] | int) >= 10 else 'php.ini' }}"
         dest: /etc/php.ini
         backup: yes
   notify: restart php-fpm
