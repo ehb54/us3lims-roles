@@ -50,6 +50,12 @@
     dest: /etc/postfix/sasl/sasl_passwd
     mode: '0600'
 
+- name: postfix default map type (EL8/Debian hash, EL10 lmdb since EL10 has no Berkeley DB)
+  command:
+    cmd: postconf -h default_database_type
+  register: postfix_db_type
+  changed_when: false
+
 - name: Run postmap
   command:
     chdir: /etc/postfix/sasl
@@ -62,7 +68,7 @@
     group: root
     mode: '0600'
   with_items:
-    - /etc/postfix/sasl/sasl_passwd.db
+    - "/etc/postfix/sasl/sasl_passwd.{{ 'lmdb' if postfix_db_type.stdout == 'lmdb' else 'db' }}"
     - /etc/postfix/sasl/sasl_passwd
 
 - name: Stop postfix
@@ -79,7 +85,7 @@
     - inet_protocols=ipv4
     - relayhost=[{{ postfix_relay_smtp_host }}]:{{ postfix_relay_smtp_port }}
     - smtp_use_tls=yes
-    - smtp_sasl_password_maps=hash:/etc/postfix/sasl/sasl_passwd
+    - smtp_sasl_password_maps={{ postfix_db_type.stdout }}:/etc/postfix/sasl/sasl_passwd
     - smtp_sasl_auth_enable=yes
     - smtp_sasl_security_options=
     - smtp_tls_security_level=may
