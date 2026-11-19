@@ -82,6 +82,29 @@
       become: yes
       when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
 
+    ## What ultrascan3's qmake build links beyond Qt and Qwt (-larchive, -lmysqlclient, -lGLU, -lX11 -lXau,
+    ## -lssl -lcrypto, -lz), and rsync for makesomo.sh. build-qt/build-qt6 install these only when they build Qt, so with a Qt already
+    ## in /opt (an earlier run, or a copy) makeall.sh failed in utils (archive_entry.h) and built almost nothing.
+    - name: Install the ultrascan3 build dependencies for RedHat
+      dnf:
+        name:
+          - "{{ 'gcc-toolset-9' if (ansible_facts['distribution_major_version'] | int) < 10 else 'gcc-c++' }}"
+          - make
+          - libarchive-devel
+          - mariadb-devel
+          - mesa-libGL-devel
+          - mesa-libGLU-devel
+          - libX11-devel
+          - libXau-devel
+          - openssl-devel
+          - zlib-devel
+          # makesomo.sh copies the SOMO programs into /opt/ultrascan3/bin with rsync
+          - rsync
+        enablerepo: "{{ powertools | default(omit) }}"
+        state: present
+      become: yes
+      when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
+
     - name: install git dependency Debian
       apt:
         name:

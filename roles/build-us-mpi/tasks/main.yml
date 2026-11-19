@@ -80,6 +80,20 @@
   become: yes
   become_user: us3
   block:
+    ## What us_utils (NO_DB) links beyond Qt and MPI: -larchive, -lssl -lcrypto, -lz. build-qt/build-qt6 install
+    ## these only when they build Qt, so with a Qt already in /opt us_utils failed (archive_entry.h).
+    - name: Install the us_mpi_analysis build dependencies for RedHat
+      dnf:
+        name:
+          - make
+          - libarchive-devel
+          - openssl-devel
+          - zlib-devel
+        enablerepo: "{{ powertools | default(omit) }}"
+        state: present
+      become_user: root
+      when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
+
     - name: Git clone ultrascan3 repository
       git:
        repo: "{{ us3_repo }}"
