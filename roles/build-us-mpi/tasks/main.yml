@@ -136,6 +136,9 @@
         - update
         - build
         - install
+      register: us3_make_uma_rh
+      ## each step's result is read by make-uma-check.yml below, which fails the role on a failed one
+      failed_when: false
       when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
 
     - name: make us_mpi_analysis for Debian
@@ -147,6 +150,11 @@
         - build
         - install
       when: ansible_facts['os_family'] == "Debian"
+      register: us3_make_uma_deb
+      failed_when: false
+
+    - name: Stop on make-uma errors
+      ansible.builtin.include_tasks: make-uma-check.yml
 
   when: us_mpi_installed_details.stat.exists == false
 

@@ -1,5 +1,7 @@
 #!/bin/sh
 #	make-uma	Make Us_Mpi_Analysis (update,build,install)
+# Each step stops at its first failed command and exits 1, so "make-uma build && make-uma install"
+# (build-us-mpi, uslims_git_info.php) stops on a build error.
 
 US3BASE={{ us3_nodb_path }}
 UTILDIR=$US3BASE/utils
@@ -25,26 +27,26 @@ for ARGI in $ARGA; do
 case "$ARGI" in
 
   update)
-    cd ${US3BASE}
-    git pull
-    git checkout {{ us3_branch }}
+    cd ${US3BASE} || exit 1
+    git pull || exit 1
+    git checkout {{ us3_branch }} || exit 1
   ;;
 
   build)
-    cd ${UTILDIR}
-    ${QTDIR}/bin/qmake
-    make -j {{ cores_for_parallel_compile }}
-    cd ${PROGDIR}
-    ${QTDIR}/bin/qmake
-    make -j {{ cores_for_parallel_compile }}
+    cd ${UTILDIR} || exit 1
+    ${QTDIR}/bin/qmake || exit 1
+    make -j {{ cores_for_parallel_compile }} || exit 1
+    cd ${PROGDIR} || exit 1
+    ${QTDIR}/bin/qmake || exit 1
+    make -j {{ cores_for_parallel_compile }} || exit 1
   ;;
 
   install|copy)
-    cd ${PROGDIR}
+    cd ${PROGDIR} || exit 1
     echo "cp --preserve=timestamps ${PROG} ${UBINDIR}"
     echo "cp --preserve=timestamps ../../lib/${LIBR} ${ULIBDIR}"
-    cp --preserve=timestamps ${PROG} ${UBINDIR}
-    cp --preserve=timestamps ../../lib/${LIBR} ${ULIBDIR}
+    cp --preserve=timestamps ${PROG} ${UBINDIR} || exit 1
+    cp --preserve=timestamps ../../lib/${LIBR} ${ULIBDIR} || exit 1
     chown -R us3 ${UBINDIR} ${ULIBDIR}
     ls -l ${UBINDIR} ${ULIBDIR}
   ;;
