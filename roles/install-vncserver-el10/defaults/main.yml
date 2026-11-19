@@ -1,0 +1,39 @@
+---
+# EL10 has no Xvnc of its own: the RPMs come from the TigerVNC project's EL10 builds.
+tigervnc_el10_version: "1.16.2"
+tigervnc_el10_release: "1.el10"
+tigervnc_el10_url: "https://sourceforge.net/projects/tigervnc/files/stable/{{ tigervnc_el10_version }}/el10/RPMS"
+
+# Downloaded RPMs stay here; get_url fetches a file only when it is missing or its checksum differs.
+tigervnc_el10_rpm_dir: /var/cache/tigervnc-el10
+
+# Pinned by SHA-256: EL10's rpm can't import TigerVNC's signing key (its self-signature is SHA-1),
+# so the RPM signatures can't be checked there. Change these together with tigervnc_el10_version.
+tigervnc_el10_rpms:
+  - { arch: x86_64, name: tigervnc-server-minimal, sha256: b512ff471f552b60885c98a7356da53b7e0a501912f21b28607cf17624cb60e5 }
+  - { arch: x86_64, name: tigervnc-server, sha256: 1ba3cb3aab1c24695c3310a6db7720a402c79f060f4f0008f9453adfe1211b16 }
+  - { arch: x86_64, name: tigervnc, sha256: 355fc56ccc182d03e2fd47bf2e35fdd0a63772575bcb280696ed476871fd1c87 }
+  - { arch: noarch, name: tigervnc-license, sha256: 918dd5e6928797a51d28ff958c6b34f2d60e80dcb7e50b279e6d94a93be575a6 }
+  - { arch: noarch, name: tigervnc-icons, sha256: 07d07aa5e1d0680432b8f551ec861d82b0f2af0509f76397534f6af3e497e1ac }
+  - { arch: noarch, name: tigervnc-selinux, sha256: 913d4b75dc8175cc0db7ee979d80851d2a48da902c3f0c25d9eb62b798bcc479 }
+
+# From EPEL 10 / OL10 AppStream. EL10 has no X11 desktop (GNOME 49 is Wayland-only, no Xfce or MATE),
+# so the session inside Xvnc is icewm.
+vnc_el10_packages:
+  - icewm
+  - xterm
+  - xorg-x11-fonts-Type1
+
+# Written by vncadmin into a new user's ~/.vnc/config
+vnc_session: icewm-session
+vnc_geometry: 1920x1200
+
+# Registered for VNC on a fresh install, as install-vncserver does on EL8 (config-lims-admin creates the accounts)
+vnc_admin_users:
+  - demeler
+  - alexey
+  - ehb
+  - saeed
+
+# icewm taskbar buttons for UltraScan and SOMO (/etc/icewm/toolbar); needs qt_version and qwt_version
+vnc_icewm_toolbar: true
