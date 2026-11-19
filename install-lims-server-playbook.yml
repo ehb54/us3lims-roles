@@ -50,18 +50,32 @@
            cmd: dnf config-manager --set-enabled ol{{ ansible_facts['distribution_major_version'] }}_codeready_builder
         when: ansible_facts['distribution'] == "OracleLinux"
 
+      ## Fedora's EPEL 10 is built against the newest RHEL 10 minor, ahead of the Oracle Linux 10
+      ## base (OL 10.2: EPEL's python3-pyOpenSSL needs a newer python3-cryptography, so
+      ## "update system" cannot depsolve). Oracle Linux 10+ uses Oracle's EPEL mirror instead,
+      ## which matches its minor release.
+      - name: note whether this host takes Oracle's EPEL mirror
+        set_fact:
+          lims_oracle_epel: "{{ ansible_facts['distribution'] == 'OracleLinux' and (ansible_facts['distribution_major_version'] | int) >= 10 }}"
+
       ## The dnf module checks the release rpm's signature; on a fresh EL10 the EPEL key is not there yet.
       - name: import the EPEL signing key for RedHat
         ansible.builtin.rpm_key:
            key: https://dl.fedoraproject.org/pub/epel/RPM-GPG-KEY-EPEL-{{ ansible_facts['distribution_major_version'] }}
            state: present
-        when: ansible_facts['distribution'] == "RedHat" or ansible_os_family == "Rocky" or ansible_facts['distribution'] == "OracleLinux"
+        when: (ansible_facts['distribution'] == "RedHat" or ansible_os_family == "Rocky" or ansible_facts['distribution'] == "OracleLinux") and not lims_oracle_epel
 
       - name: install EPEL repo for RedHat
         yum:
            name: https://dl.fedoraproject.org/pub/epel/epel-release-latest-{{ ansible_facts['distribution_major_version'] }}.noarch.rpm
            state: present
-        when: ansible_facts['distribution'] == "RedHat" or ansible_os_family == "Rocky" or ansible_facts['distribution'] == "OracleLinux"
+        when: (ansible_facts['distribution'] == "RedHat" or ansible_os_family == "Rocky" or ansible_facts['distribution'] == "OracleLinux") and not lims_oracle_epel
+
+      - name: install Oracle's EPEL mirror for Oracle Linux 10+
+        dnf:
+           name: "oracle-epel-release-el{{ ansible_facts['distribution_major_version'] }}"
+           state: present
+        when: lims_oracle_epel
 
       ## The CodeReady Builder / PowerTools repo id differs by distribution, not only by
       ## major version: Oracle Linux names it ol<N>_codeready_builder (no 'crb' id on OL).
