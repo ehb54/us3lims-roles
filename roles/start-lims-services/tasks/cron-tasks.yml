@@ -17,16 +17,6 @@
     line: 'MAILTO="{{ cron_admin }}"'
     insertbefore: BOF
 
-# - deprecated
-#- name: Set gridctl_pro cronjob
-#  cron:
-#    name: gridctl_pro cronjob
-#    minute: "*/1"
-#    job: /usr/bin/cronic php {{ user_home }}/us3/lims/bin/gridctl_pro.php
-#    user: us3
-#    cron_file: /etc/crontab
-#  when: cron_enable_pro == 'yes'
-
 - name: set cluster_status cronjob marker
   lineinfile:
     path: /etc/crontab
