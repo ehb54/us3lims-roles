@@ -25,6 +25,13 @@
         state: present
         update_cache: yes
 
+## EL10 is cgroup v2 only: Slurm's cgroup/v2 plugin builds only with "--with cgroupv2", which needs dbus-devel
+- name: install the Slurm cgroup v2 build dependency (EL10+)
+  dnf:
+        name: dbus-devel
+        state: present
+  when: ansible_facts['distribution_major_version'] | int >= 10
+
 - name: check if munge key already exists
   stat:
     path: /etc/munge/munge.key
@@ -66,7 +73,7 @@
 
 ## if this fails, might need to # ln -s annobin.so /opt/rh/gcc-toolset-11/root/usr/lib/gcc/x86_64-redhat-linux/11/plugin/gcc-annobin.so
 - name: build slurm packages
-  shell: "rpmbuild -ta /tmp/slurm-{{ slurm_ver }}.tar.bz2"
+  shell: "rpmbuild -ta {{ '--with cgroupv2 ' if (ansible_facts['distribution_major_version'] | int) >= 10 else '' }}/tmp/slurm-{{ slurm_ver }}.tar.bz2"
   when: "('slurm' not in ansible_facts.packages and slurm_hash == 'none' )  or ('slurm' not in ansible_facts.packages and slurm_integrity.stat.checksum == slurm_hash)"
 
 - name: install built packages
