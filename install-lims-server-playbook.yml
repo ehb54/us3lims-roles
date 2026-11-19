@@ -576,7 +576,13 @@
       ## its own assert always failed on a fresh build).
       - role: config-lims-mpi-runtime
         when: not lims_pre_430 | default(false) | bool
-      - install-vncserver
+      ## The server desktop: install-vncserver (the OS's TigerVNC, GNOME sessions) on EL8. EL10 has no Xvnc or xrdp
+      ## packages, so install-vncserver-el10 (TigerVNC's own EL10 RPMs, icewm from EPEL) there (ultrascan-tickets#1292).
+      ## Each writes /etc/lims-admin-accounts-provisioned once the admin accounts are registered for VNC.
+      - role: install-vncserver
+        when: ansible_facts['distribution_major_version'] | int < 10
+      - role: install-vncserver-el10
+        when: ansible_facts['distribution_major_version'] | int >= 10
       - install-postfix
       - install-chrony
       - install-google-fonts
@@ -594,7 +600,9 @@
       - role: start-lims-services
         when: NO_LIMS is undefined or NO_LIMS == false or NO_LIMS == ''
       - config-lims-backup
-      - install-xrdp
+      ## no xrdp on EL10
+      - role: install-xrdp
+        when: ansible_facts['distribution_major_version'] | int < 10
       - install-proxychains4
 #optional    - install-fail2ban
 #scigap-only - config-lims-scigap
