@@ -5,6 +5,19 @@
     path: /opt/qt-{{ qt_version }}/lib/libQt5Core.so
   register: qt_installed_details
 
+## This role builds Qt 5 with gcc-toolset-9, which EL10 does not have (only gcc-toolset-15;
+## the system GCC is 14). EL10 hosts take Qt 6 from build-qt6.
+- name: Refuse to build Qt 5 on EL10
+  ansible.builtin.fail:
+    msg: >-
+      build-qt builds Qt 5 with gcc-toolset-9, which EL{{ ansible_facts['distribution_major_version'] }}
+      does not have. Set qt_major_version and qt_version to a Qt 6 release (e.g. "6.12" and "6.12.0"),
+      which build-qt6 builds with the system GCC.
+  when:
+    - ansible_facts['os_family'] == "RedHat"
+    - (ansible_facts['distribution_major_version'] | int) >= 10
+    - not qt_installed_details.stat.exists or qt_force_rebuild is defined
+
 - name: Install, configure and compile qt
   block:
     - name: Check if qt-everywhere-src-{{ qt_version }}.tar.xz is downloaded

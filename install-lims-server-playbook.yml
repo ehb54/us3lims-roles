@@ -561,7 +561,11 @@
           web_hardening_mode: apply
       - config-lims-lims
       - config-lims-slurm
-      - build-qt
+      ## Qt 5 (build-qt) or Qt 6 (build-qt6), from qt_major_version below. EL10 builds Qt 6 only.
+      - role: build-qt
+        when: qt_major_version is version('6', '<')
+      - role: build-qt6
+        when: qt_major_version is version('6', '>=')
       - build-qwt
       - build-us3
       - build-mpich
@@ -649,6 +653,10 @@
 
         qt_major_version:  "5.15"
         qt_version:        "5.15.19"
+        # EL10 builds Qt 6 only (build-qt6, with the system GCC), e.g.
+        # qt_major_version:  "6.12"
+        # qt_version:        "6.12.0"
+        # Qt 6 on EL8 also needs gcc_toolset_version (13, as in install-qt6-playbook.yml)
         qwt_version:       "6.3.0"
         cores_for_parallel_compile: "{{ ansible_processor_vcpus }}"
         ## The eight pins below derive from site_release, which defaults in
