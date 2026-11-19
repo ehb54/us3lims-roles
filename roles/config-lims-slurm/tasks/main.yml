@@ -30,8 +30,9 @@
     path: /etc/munge/munge.key
   register: munge_key
 
+## munge 0.5.14+ (EL10) has no create-munge-key script; mungekey --create writes the key as munge:munge 0600
 - name: create munge key
-  shell: "/usr/sbin/create-munge-key"
+  shell: "if [ -x /usr/sbin/create-munge-key ]; then /usr/sbin/create-munge-key; else runuser -u munge -- /usr/sbin/mungekey --create --keyfile /etc/munge/munge.key; fi"
   when: munge_key.stat.exists == false
   notify:
     - restart munge
