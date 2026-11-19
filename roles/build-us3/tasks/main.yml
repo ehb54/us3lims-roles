@@ -144,7 +144,8 @@
         chdir: /opt/ultrascan3
         cmd: umask 022 && {{ us3_gcc_enable }}gcc -v 2> build.gccversion && ./makeall.sh -j {{ cores_for_parallel_compile }} > build.stdout 2> build.stderr
       environment: 
-        PATH: /opt/qt-{{ qt_version }}/bin/:/usr/bin:/usr/local/bin:/bin
+        ## Qt 6 installs qhelpgenerator (makeall.sh's doc/manual step, qch) in libexec, not bin
+        PATH: /opt/qt-{{ qt_version }}/bin/:/opt/qt-{{ qt_version }}/libexec:/usr/bin:/usr/local/bin:/bin
         QTDIR: /opt/qt-{{ qt_version }}
         QWTDIR: /opt/qt-{{ qt_version }}-qwt-{{ qwt_version }}
     
@@ -163,7 +164,8 @@
         chdir: /opt/ultrascan3
         cmd: umask 022 && ./makeall.sh -j {{ cores_for_parallel_compile }} > build.stdout 2> build.stderr
       environment: 
-        PATH: /opt/qt-{{ qt_version }}/bin/:/usr/bin:/usr/local/bin:/bin
+        ## Qt 6 installs qhelpgenerator (makeall.sh's doc/manual step, qch) in libexec, not bin
+        PATH: /opt/qt-{{ qt_version }}/bin/:/opt/qt-{{ qt_version }}/libexec:/usr/bin:/usr/local/bin:/bin
         QTDIR: /opt/qt-{{ qt_version }}
         QWTDIR: /opt/qt-{{ qt_version }}-qwt-{{ qwt_version }}
     
@@ -176,6 +178,9 @@
         us3 : /opt/ultrascan3
 #        LD_LIBRARY: ${US3LIB}:${QTLIB}:${QWTLIB}:${OLPATH}:${USDIR}
       when: ansible_facts['os_family'] == "Debian"
+
+    - name: Stop on makeall.sh build errors
+      ansible.builtin.include_tasks: makeall-check.yml
 
   when: us_installed_details.stat.exists == false or qt_force_rebuild is defined
 
@@ -260,6 +265,9 @@
         ULTRASCAN:  /opt/ultrascan3/
 #        LD_LIBRARY: ${US3LIB}:${QTLIB}:${QWTLIB}:${OLPATH}:${USDIR}
       when: ansible_facts['os_family'] == "Debian"
+
+    - name: Stop on makesomo.sh build errors
+      ansible.builtin.include_tasks: makesomo-check.yml
 
     - name: Make convenience us.sh, us_somo.sh us_env.sh
       template: 
