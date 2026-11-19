@@ -239,3 +239,19 @@
         state: absent
 
   when: qt_installed_details.stat.exists == false or qt_force_rebuild is defined
+
+## Qt 6's xcb platform plugin loads these at run time; Qt 6.5 and later also needs xcb-util-cursor. The
+## -devel packages above bring them in when this role builds Qt, but a Qt already in /opt (an earlier run,
+## or a copy) needs them too: without them every Qt 6 GUI program, UltraScan in a VNC session among them,
+## aborts with "Could not load the Qt platform plugin xcb". xcb-util-cursor comes from EPEL on EL8.
+- name: Install the X11 libraries Qt's xcb platform plugin loads
+  dnf:
+    name:
+      - libxkbcommon-x11
+      - xcb-util-cursor
+      - xcb-util-wm
+      - xcb-util-keysyms
+      - xcb-util-image
+      - xcb-util-renderutil
+    state: present
+  when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
