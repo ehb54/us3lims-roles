@@ -1,0 +1,29 @@
+---
+# MariaDB accounts at a host name, which the server ignores under skip-name-resolve: drops them.
+# Earlier versions of config-lims-database made new_us3user, us3php, gfac and us3_notice at the
+# server's name; MariaDB 10.11 refuses grants to them, and they stop SHOW GRANTS based tools.
+# ultrascan-tickets#1290; see roles/mariadb-hostname-accounts.
+#
+# report only: ansible-playbook mariadb-hostname-accounts-playbook.yml -l <host>
+# apply:       ansible-playbook mariadb-hostname-accounts-playbook.yml -l <host> -e "run=1"
+#
+# Root's credentials come from ~us3/lims/database/utils/my.cnf on the host (mariadb_hostname_my_cnf).
+# Add --check to an apply run to see what it would drop without dropping it.
+
+- name: MariaDB accounts at host names
+  hosts: all
+  gather_facts: false
+  remote_user: usadmin
+  become: true
+
+  pre_tasks:
+    - name: Require a host limit
+      ansible.builtin.assert:
+        that: ansible_limit is defined
+        fail_msg: "limit the hosts with -l <host>"
+        quiet: true
+
+  roles:
+    - role: mariadb-hostname-accounts
+      vars:
+        mariadb_hostname_mode: "{{ 'apply' if run is defined else 'report' }}"
