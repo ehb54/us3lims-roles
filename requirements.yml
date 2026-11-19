@@ -10,6 +10,7 @@ roles:
 collections:
   - name: ansible.posix
     version: "2.2.2"
+  # stay below 6: community.mysql 6.0 drops MariaDB support
   - name: community.mysql
     version: "5.0.2"
   - name: community.crypto
