@@ -20,7 +20,7 @@
   yum:
     name:
       - environment-modules
-      - gcc-toolset-9
+      - "{{ 'gcc-toolset-9' if (ansible_facts['distribution_major_version'] | int) < 10 else 'gcc-c++' }}"
 #      - mpich
 #      - mpich-devel
   when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
@@ -62,14 +62,14 @@
     src: mpi-build.j2
     dest: /etc/modulefiles/ultrascan/mpi-build
     mode: '0644'
-  when: ansible_facts['os_family'] == "Debian"
+  when: not us3_gcc_toolset_modulefile
 
 - name: Copy over template files for ultrascan/mpi-build modulefiles for RedHat
   template: 
     src: mpi-build-gcc-toolset-9.j2
     dest: /etc/modulefiles/ultrascan/mpi-build
     mode: '0644'
-  when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
+  when: us3_gcc_toolset_modulefile
 
 - name: Check if us-mpi already installed, using {{ us3_cluster_path }}/bin/us_mpi_analysis as a proxy
   stat: 
@@ -114,10 +114,10 @@
         - "{{ us3_nodb_path }}/build.stdout"
         - "{{ us3_nodb_path }}/build.stderr"
 
-    - name: make us_mpi_analysis for RedHat using gcc-9
+    - name: make us_mpi_analysis for RedHat using us3_gcc_enable (gcc-toolset-9 on EL8, system GCC on EL10)
       shell:
         chdir: "{{ us3_nodb_path }}"
-        cmd: . /opt/rh/gcc-toolset-9/enable && gcc -v 2> build.gccversion && ./make-uma {{ item }} >> build.stdout 2>> build.stderr
+        cmd: "{{ us3_gcc_enable }}gcc -v 2> build.gccversion && ./make-uma {{ item }} >> build.stdout 2>> build.stderr"
       with_items:
         - update
         - build

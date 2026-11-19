@@ -1,0 +1,3 @@
+---
+# EL10 ships only gcc-toolset-15 (system GCC is 14): build with the system GCC there
+qt_gcc_enable: "{{ '' if (ansible_facts['distribution_major_version'] | int) >= 10 else '. /opt/rh/gcc-toolset-' ~ (gcc_toolset_version | default(9)) ~ '/enable && ' }}"
