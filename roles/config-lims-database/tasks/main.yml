@@ -168,6 +168,16 @@
           login_user: root
           login_password: "{{ root_db_pass }}"
 
+## mysql_install_db (MariaDB 10.3) leaves root@127.0.0.1, root@::1 and root@<hostname> with no
+## password; the tasks above set only root@localhost's unless root_old_db_pass is given
+## (ultrascan-tickets#1294). Nothing to do on MariaDB 10.4+.
+- name: Drop the root accounts that have no password
+  ansible.builtin.include_role:
+    name: secure-mariadb-root
+  vars:
+    mariadb_root_mode: apply
+    mariadb_root_login_password: "{{ root_db_pass }}"
+
 ## root_pwd_check (mysqladmin -u root status, with no explicit -p) is only
 ## ever meant to answer "does root have no password yet", so the initial
 ## password-set task above can tell a genuinely fresh host apart from one
