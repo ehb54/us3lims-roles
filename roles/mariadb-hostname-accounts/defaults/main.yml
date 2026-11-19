@@ -1,0 +1,26 @@
+---
+# MariaDB accounts at a host name, which the server ignores under skip-name-resolve
+# (ultrascan-tickets#1290)
+
+# report: show skip_name_resolve and every account whose host is a name, and whether the server
+#         ignores it; change nothing
+# apply:  drop the accounts the server ignores, then check that none is left
+mariadb_hostname_mode: report
+
+# Root's credentials: the dbutils defaults file every LIMS host has (install-demo-dbinst writes it).
+# config-lims-database passes mariadb_hostname_login_password instead on a fresh install, before
+# that file exists.
+mariadb_hostname_my_cnf: "{{ user_home | default('/home') }}/us3/lims/database/utils/my.cnf"
+# mariadb_hostname_login_password: (unset: use mariadb_hostname_my_cnf)
+
+mariadb_hostname_socket: /var/lib/mysql/mysql.sock
+
+# pythons tried, after the one Ansible discovered, for the mysql modules (they need PyMySQL,
+# which the python3-PyMySQL package installs for the system python only)
+mariadb_hostname_python_candidates:
+  - /usr/libexec/platform-python
+  - /usr/bin/python3
+  - /usr/bin/python3.12
+  - /usr/bin/python3.11
+  - /usr/bin/python3.9
+  - /usr/bin/python3.6

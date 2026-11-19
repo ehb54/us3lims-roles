@@ -207,3 +207,13 @@
 
 - name: Create db grants
   import_tasks: create-grants.yml
+
+## Earlier versions of create-grants.yml also made each account at the server's host name, which
+## the server ignores under skip-name-resolve; MariaDB 10.11 refuses grants to such an account
+## (ultrascan-tickets#1290). Nothing to do on a host this version built.
+- name: Drop the accounts at host names, which the server ignores
+  ansible.builtin.include_role:
+    name: mariadb-hostname-accounts
+  vars:
+    mariadb_hostname_mode: apply
+    mariadb_hostname_login_password: "{{ root_db_pass }}"

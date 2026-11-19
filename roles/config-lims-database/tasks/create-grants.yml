@@ -1,4 +1,10 @@
 ---
+## Each account is made at the loopback hosts only. The server runs with skip-name-resolve
+## (tasks/main.yml), so it never matches an account at a host name: MariaDB 10.11 refuses a
+## grant to one once it has restarted, and mysql_user fails reading its grants on 10.3 too.
+## Accounts earlier versions of this file made at the server's name are dropped by the
+## mariadb-hostname-accounts role (tasks/main.yml).
+
 # new_us3user privs
 - name: Do new_us3user grants 
   mysql_user:
@@ -11,7 +17,6 @@
         login_user: root
         login_password: "{{ root_db_pass }}"
   with_items:
-        - "{{ server_name }}"
         - 127.0.0.1
         - localhost
         - ::1
@@ -28,7 +33,6 @@
         login_user: root
         login_password: "{{ root_db_pass }}"
   with_items:
-        - "{{ server_name }}"
         - 127.0.0.1
         - localhost
         - ::1
@@ -53,7 +57,6 @@
         login_user: root
         login_password: "{{ root_db_pass }}"
   with_items:
-        - "{{ server_name }}"
         - 127.0.0.1
         - localhost
         - ::1
@@ -69,7 +72,6 @@
         login_user: root
         login_password: "{{ root_db_pass }}"
   with_items:
-        - "{{ server_name }}"
         - 127.0.0.1
         - localhost
         - ::1
