@@ -100,4 +100,4 @@ The pattern repeats for the next shape change: add migrations to the registry, k
 
 ## Related architecture context worth knowing while working on either playbook set
 
-- **Oracle Linux 10 is the eventual OS target, and it drops VNC/GNOME for xfce+xrdp.** xfce/xrdp is already the standing default for any *new validation* work (us3lims-roles installs it alongside the existing TigerVNC path, scoped to validation builds), not a general production replacement yet.
+- **Oracle Linux 10 is the eventual OS target, and it has no Xvnc, xrdp or Xfce packages** (none in its repositories or EPEL). There the install playbook runs `install-vncserver-el10`: TigerVNC's own EL10 RPMs, with icewm from EPEL. On EL8 it runs `install-vncserver` (the OS's TigerVNC) and `install-xrdp`, as before. A fresh install goes to OL10 directly, without an in-place upgrade through OL9.
