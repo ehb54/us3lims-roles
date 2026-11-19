@@ -11,9 +11,10 @@
         state: directory
         mode: '0755'
 
+    ## EL10 is cgroup v2 only: Slurm's cgroup/v2 plugin builds only with "--with cgroupv2", which needs dbus-devel
     - name: install what the build needs beyond config-lims-slurm's packages
       ansible.builtin.dnf:
-        name: "{{ slurm_build_packages }}"
+        name: "{{ slurm_build_packages + (['dbus-devel'] if (ansible_facts['distribution_major_version'] | int) >= 10 else []) }}"
         state: present
 
     - name: get the Slurm source
@@ -27,7 +28,7 @@
       ansible.builtin.shell:
         cmd: >-
           umask 022 &&
-          rpmbuild -ta --define "_topdir {{ slurm_build_root }}/rpmbuild-{{ slurm_ver }}"
+          rpmbuild -ta {{ '--with cgroupv2 ' if (ansible_facts['distribution_major_version'] | int) >= 10 else '' }}--define "_topdir {{ slurm_build_root }}/rpmbuild-{{ slurm_ver }}"
           {{ slurm_build_root }}/slurm-{{ slurm_ver }}.tar.bz2 > {{ slurm_build_root }}/rpmbuild-{{ slurm_ver }}.log 2>&1 &&
           touch {{ slurm_build_root }}/rpmbuild-{{ slurm_ver }}/BUILT ||
           { tail -25 {{ slurm_build_root }}/rpmbuild-{{ slurm_ver }}.log; exit 1; }
