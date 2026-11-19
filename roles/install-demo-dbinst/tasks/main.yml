@@ -78,6 +78,45 @@
         'newinst_branch', 'webinfo_branch', 'utils_branch']
        + (['airavata_branch'] if lims_pre_430 | default(false) | bool else []) }}
 
+## A re-run of the play finds the demo instance in place, and stage3_import_databases.php then fails on it.
+## The import and the password reset are skipped when all of the instance is there: its docroot, its
+## database with tables, and its row in the metadata table of us3_db_name (newus3). A partial instance (an
+## import that failed midway) is imported as before, which stops with the clean-up steps the notice below gives.
+- name: Look for the demo instance's docroot
+  ansible.builtin.stat:
+    path: "{{ www_uslims | default((www_base | default('/srv/www/htdocs')) ~ '/uslims3') }}/uslims3_Demo"
+  register: demo_docroot
+  when: NO_LIMS is undefined or NO_LIMS == false or NO_LIMS == ''
+
+- name: Count the demo instance's tables and metadata rows
+  ansible.builtin.command:
+    argv:
+      - mysql
+      - "--defaults-file={{ user_home }}/us3/lims/database/utils/my.cnf"
+      - -u
+      - root
+      - -N
+      - -B
+      - -e
+      - >-
+        SELECT (SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='uslims3_Demo'),
+        (SELECT COUNT(*) FROM {{ us3_db_name | default('newus3') }}.metadata WHERE dbname='uslims3_Demo')
+  register: demo_db_counts
+  changed_when: false
+  when: NO_LIMS is undefined or NO_LIMS == false or NO_LIMS == ''
+
+- name: Note whether the demo instance is already in place
+  ansible.builtin.set_fact:
+    demo_in_place: >-
+      {{ demo_docroot.stat.exists | default(false)
+         and (demo_db_counts.stdout | default('0 0')).split()[0] | int > 0
+         and (demo_db_counts.stdout | default('0 0')).split()[1] | int > 0 }}
+
+- name: Say that the demo instance is already in place
+  ansible.builtin.debug:
+    msg: "uslims3_Demo is already in place (docroot, {{ demo_db_counts.stdout.split()[0] }} tables, metadata row): import and password reset skipped"
+  when: demo_in_place | bool
+
 - name: import data in case of failure notice
   ansible.builtin.debug:
     msg: |
@@ -93,18 +132,23 @@
          and under the mysql shell on the host:
            drop database uslims3_Demo;
            delete from newus3.metadata where dbname='uslims3_Demo';
+  when: not demo_in_place | bool
 
 - name: import data
   ansible.builtin.shell:
     chdir: "{{ user_home }}/us3/lims/database/utils/dbmigrate"
     cmd: "yes | php -d mysqli.allow_local_infile=On stage3_import_databases.php uslims.aucsolutions.com {{ hostname }} {{ ipaddr_ext }} > lastmigrate.log 2>&1"
-  when: NO_LIMS is undefined or NO_LIMS == false or NO_LIMS == ''
+  when:
+    - NO_LIMS is undefined or NO_LIMS == false or NO_LIMS == ''
+    - not demo_in_place | bool
 
 - name: update passwords
   ansible.builtin.shell:
     chdir: "{{ user_home }}/us3/lims/database/utils"
     cmd: "php uslims_people.php --update --db uslims3_Demo"
-  when: NO_LIMS is undefined or NO_LIMS == false or NO_LIMS == ''
+  when:
+    - NO_LIMS is undefined or NO_LIMS == false or NO_LIMS == ''
+    - not demo_in_place | bool
 
 - name: run ~us3/lims/bin/set_cluster_authorizations.php uslims3_Demo updatepeople
   ansible.builtin.shell:
