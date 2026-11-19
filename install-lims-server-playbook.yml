@@ -42,29 +42,30 @@
 
       - name: enable codeready for RedHat
         command:
-           cmd: subscription-manager repos --enable "codeready-builder-for-rhel-8-x86_64-rpms"
+           cmd: subscription-manager repos --enable "codeready-builder-for-rhel-{{ ansible_facts['distribution_major_version'] }}-{{ ansible_facts['architecture'] }}-rpms"
         when: ansible_facts['distribution'] == "RedHat"
 
       - name: enable codeready for Oracle
         command:
-           cmd: dnf config-manager --set-enabled ol8_codeready_builder
+           cmd: dnf config-manager --set-enabled ol{{ ansible_facts['distribution_major_version'] }}_codeready_builder
         when: ansible_facts['distribution'] == "OracleLinux"
 
       - name: install EPEL repo for RedHat
         yum:
-           name: https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm
+           name: https://dl.fedoraproject.org/pub/epel/epel-release-latest-{{ ansible_facts['distribution_major_version'] }}.noarch.rpm
            state: present
         when: ansible_facts['distribution'] == "RedHat" or ansible_os_family == "Rocky" or ansible_facts['distribution'] == "OracleLinux"
 
+      ## The CodeReady Builder / PowerTools repo id differs by distribution, not only by
+      ## major version: Oracle Linux names it ol<N>_codeready_builder (no 'crb' id on OL).
       - name: set powertools / crb
         set_fact:
-          powertools: "crb"
-        when: ansible_facts['distribution_major_version'] == '9'
-
-      - name: set powertools / crb
-        set_fact:
-          powertools: "powertools"
-        when: ansible_facts['distribution_major_version'] == '8'
+          powertools: >-
+            {{ 'codeready-builder-for-rhel-' ~ ansible_facts['distribution_major_version'] ~ '-' ~ ansible_facts['architecture'] ~ '-rpms'
+               if ansible_facts['distribution'] == 'RedHat' else
+               'ol' ~ ansible_facts['distribution_major_version'] ~ '_codeready_builder'
+               if ansible_facts['distribution'] == 'OracleLinux' else
+               'powertools' if ansible_facts['distribution_major_version'] == '8' else 'crb' }}
 
       - name: set user_home
         set_fact:
