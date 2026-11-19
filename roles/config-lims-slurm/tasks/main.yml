@@ -47,7 +47,10 @@
 - name: get slurm source
   get_url:
         url: "https://download.schedmd.com/slurm/slurm-{{ slurm_ver }}.tar.bz2"
-        dest: /tmp
+        ## a file dest (not the /tmp directory) plus checksum skips the request when the tarball is already
+        ## there and matches (as upgrade-lims-slurm does), so a rerun does not need download.schedmd.com
+        dest: "/tmp/slurm-{{ slurm_ver }}.tar.bz2"
+        checksum: "{{ ('md5:' ~ slurm_md5) if slurm_md5 != 'none' else (('sha1:' ~ slurm_sha1) if slurm_sha1 != 'none' else omit) }}"
 
 - name: Get slurm package checksum
   stat:
