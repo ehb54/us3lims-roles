@@ -1,0 +1,22 @@
+---
+# MariaDB root accounts that log in with no password (ultrascan-tickets#1294)
+
+# report: list the root accounts, say which have no password, and try a passwordless root login
+#         over 127.0.0.1 and ::1; change nothing
+# apply:  drop every root account other than root@localhost that has no password, then check
+#         that a passwordless root login over 127.0.0.1 and ::1 is refused and root@localhost
+#         still logs in with the credentials below
+mariadb_root_mode: report
+
+# Root's credentials: the dbutils defaults file every LIMS host has (install-demo-dbinst writes it).
+# config-lims-database passes mariadb_root_login_password instead on a fresh install, before
+# that file exists.
+mariadb_root_my_cnf: "{{ user_home | default('/home') }}/us3/lims/database/utils/my.cnf"
+# mariadb_root_login_password: (unset: use mariadb_root_my_cnf)
+
+mariadb_root_socket: /var/lib/mysql/mysql.sock
+
+# loopback addresses the passwordless-login check tries
+mariadb_root_check_hosts:
+  - 127.0.0.1
+  - "::1"

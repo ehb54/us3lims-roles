@@ -1,0 +1,28 @@
+---
+# MariaDB root accounts that log in with no password: drops root@127.0.0.1, root@::1 and
+# root@<hostname> when they have no password, as mysql_install_db (MariaDB 10.3) left them on
+# hosts config-lims-database built. ultrascan-tickets#1294; see roles/secure-mariadb-root.
+#
+# report only: ansible-playbook secure-mariadb-root-playbook.yml -l <host>
+# apply:       ansible-playbook secure-mariadb-root-playbook.yml -l <host> -e "run=1"
+#
+# Root's credentials come from ~us3/lims/database/utils/my.cnf on the host (mariadb_root_my_cnf).
+# Add --check to an apply run to see what it would drop without dropping it.
+
+- name: MariaDB root accounts without a password
+  hosts: all
+  gather_facts: false
+  remote_user: usadmin
+  become: true
+
+  pre_tasks:
+    - name: Require a host limit
+      ansible.builtin.assert:
+        that: ansible_limit is defined
+        fail_msg: "limit the hosts with -l <host>"
+        quiet: true
+
+  roles:
+    - role: secure-mariadb-root
+      vars:
+        mariadb_root_mode: "{{ 'apply' if run is defined else 'report' }}"

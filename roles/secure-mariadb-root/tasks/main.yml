@@ -1,0 +1,129 @@
+---
+## mysql_install_db (MariaDB 10.3 and older) creates root@127.0.0.1, root@::1 and root@<hostname>
+## without passwords; config-lims-database sets only root@localhost's password unless
+## root_old_db_pass is given. This removes them, leaving root@localhost as a fresh
+## MariaDB 10.4+ install has it (ultrascan-tickets#1294).
+
+- name: Use the dbutils defaults file for root's credentials
+  when: mariadb_root_login_password is not defined
+  block:
+    - name: Check for {{ mariadb_root_my_cnf }}
+      ansible.builtin.stat:
+        path: "{{ mariadb_root_my_cnf }}"
+      register: mariadb_root_my_cnf_stat
+
+    - name: Require {{ mariadb_root_my_cnf }}
+      ansible.builtin.assert:
+        that: mariadb_root_my_cnf_stat.stat.exists
+        fail_msg: >-
+          {{ mariadb_root_my_cnf }} is missing: it holds root's database credentials on LIMS hosts.
+          Set mariadb_root_my_cnf to another defaults file with root's [client] password.
+        quiet: true
+
+- name: Read the root accounts
+  community.mysql.mysql_query:
+    login_unix_socket: "{{ mariadb_root_socket }}"
+    login_user: root
+    login_password: "{{ mariadb_root_login_password | default(omit) }}"
+    config_file: "{{ omit if mariadb_root_login_password is defined else mariadb_root_my_cnf }}"
+    ## no password: Password and authentication_string both empty, with a plugin that checks a
+    ## password (unix_socket and the like authenticate the OS user instead). Aliased: 10.3 names
+    ## the result columns as the query spells them, 10.4+ (mysql.user is a view) as the view does.
+    query: >-
+      SELECT Host AS host, plugin AS plugin,
+             (password = '' AND authentication_string = ''
+              AND plugin IN ('', 'mysql_native_password', 'mysql_old_password')) AS no_password
+      FROM mysql.user WHERE user = 'root' ORDER BY host
+  register: mariadb_root_accounts
+  check_mode: false
+  changed_when: false
+
+- name: Sort the root accounts
+  ansible.builtin.set_fact:
+    mariadb_root_all: "{{ mariadb_root_accounts.query_result[0] }}"
+    mariadb_root_drop: >-
+      {{ mariadb_root_accounts.query_result[0]
+         | selectattr('no_password', 'equalto', 1)
+         | rejectattr('host', 'equalto', 'localhost')
+         | map(attribute='host') | list }}
+    mariadb_root_localhost_open: >-
+      {{ mariadb_root_accounts.query_result[0]
+         | selectattr('no_password', 'equalto', 1)
+         | selectattr('host', 'equalto', 'localhost') | list | length > 0 }}
+
+- name: Report the root accounts
+  ansible.builtin.debug:
+    msg: >-
+      root@{{ item.host }}:
+      {{ 'NO PASSWORD' if item.no_password == 1 else 'needs credentials (' ~ (item.plugin or 'mysql_native_password') ~ ')' }}
+  loop: "{{ mariadb_root_all }}"
+  loop_control:
+    label: "root@{{ item.host }}"
+
+- name: Try a passwordless root login over loopback
+  ansible.builtin.command:
+    argv: [mysql, --no-defaults, -h, "{{ item }}", -u, root, -N, -e, "SELECT CURRENT_USER()"]
+  loop: "{{ mariadb_root_check_hosts }}"
+  register: mariadb_root_tcp_before
+  check_mode: false
+  changed_when: false
+  failed_when: false
+
+- name: Report the passwordless root login over loopback
+  ansible.builtin.debug:
+    msg: >-
+      passwordless root login over {{ item.item }}:
+      {{ ('ACCEPTED as ' ~ item.stdout) if item.rc == 0 else 'refused' }}
+  loop: "{{ mariadb_root_tcp_before.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Report what apply drops
+  ansible.builtin.debug:
+    msg: >-
+      {{ ('apply drops: root@' ~ (mariadb_root_drop | join(', root@'))) if mariadb_root_drop
+         else 'nothing to drop' }}
+
+- name: Drop the passwordless root accounts and check
+  when: mariadb_root_mode == 'apply'
+  block:
+    - name: Refuse when root@localhost itself has no password
+      ansible.builtin.fail:
+        msg: >-
+          root@localhost has no password. This role drops only the other root accounts; set
+          root@localhost's password first (config-lims-database with root_db_pass).
+      when: mariadb_root_localhost_open | bool
+
+    - name: Drop the root accounts other than root@localhost that have no password
+      community.mysql.mysql_user:
+        name: root
+        host: "{{ item }}"
+        state: absent
+        login_unix_socket: "{{ mariadb_root_socket }}"
+        login_user: root
+        login_password: "{{ mariadb_root_login_password | default(omit) }}"
+        config_file: "{{ omit if mariadb_root_login_password is defined else mariadb_root_my_cnf }}"
+      loop: "{{ mariadb_root_drop }}"
+
+    # --check drops nothing, so there is nothing to verify
+    - name: Verify
+      when: not ansible_check_mode
+      block:
+        - name: Try a passwordless root login over loopback again
+          ansible.builtin.command:
+            argv: [mysql, --no-defaults, -h, "{{ item }}", -u, root, -N, -e, "SELECT CURRENT_USER()"]
+          loop: "{{ mariadb_root_check_hosts }}"
+          register: mariadb_root_tcp_after
+          changed_when: false
+          failed_when: mariadb_root_tcp_after.rc == 0
+
+        - name: Log in as root with the credentials
+          community.mysql.mysql_query:
+            login_unix_socket: "{{ mariadb_root_socket }}"
+            login_user: root
+            login_password: "{{ mariadb_root_login_password | default(omit) }}"
+            config_file: "{{ omit if mariadb_root_login_password is defined else mariadb_root_my_cnf }}"
+            query: SELECT CURRENT_USER() AS u
+          register: mariadb_root_after
+          changed_when: false
+          failed_when: mariadb_root_after.query_result[0][0].u != 'root@localhost'
