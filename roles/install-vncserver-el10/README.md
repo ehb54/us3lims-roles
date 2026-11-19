@@ -16,7 +16,7 @@ The desktop inside each session is icewm.
 ## What it does
 
 1. Stops unless the host is EL10 or later.
-2. Downloads the TigerVNC RPMs (`tigervnc_el10_rpms`) into `tigervnc_el10_rpm_dir`, each checked against its pinned SHA-256. A file that is already there and matches isn't fetched again.
+2. Downloads the TigerVNC RPMs (`tigervnc_el10_rpms`) into `tigervnc_el10_rpm_dir`, each checked against its pinned SHA-256. A file that is already there and matches isn't fetched again. Each file gets `tigervnc_el10_download_timeout` seconds per attempt and `tigervnc_el10_download_retries` more attempts.
 3. Installs them in one dnf transaction with `vnc_el10_packages` (icewm, xterm, Type1 fonts).
    - `tigervnc-server` requires `tigervnc-selinux` whenever `selinux-policy-targeted` is installed, so the whole set goes in together.
    - GPG checking is off for these local files only. The RPMs are signed, but EL10's rpm refuses to import TigerVNC's key (fingerprint `95EF2D885E44FE1788C59D3E327F91294582A460`): its self-signature uses SHA-1. The checksums stand in for the signature check.
@@ -45,6 +45,10 @@ See `defaults/main.yml`.
 `tigervnc_el10_rpms` - name, arch and SHA-256 of each RPM. Change it together with the version.
 
 `tigervnc_el10_rpm_dir` - where the RPMs are kept, default `/var/cache/tigervnc-el10`
+
+`tigervnc_el10_download_timeout` - seconds per download attempt, default 60 (get_url's own default is 10)
+
+`tigervnc_el10_download_retries` - further attempts per file after a failed one, 10 s apart, default 5
 
 `vnc_el10_packages` - distribution packages installed with them, default icewm, xterm, xorg-x11-fonts-Type1
 
