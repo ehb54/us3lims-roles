@@ -50,6 +50,13 @@
            cmd: dnf config-manager --set-enabled ol{{ ansible_facts['distribution_major_version'] }}_codeready_builder
         when: ansible_facts['distribution'] == "OracleLinux"
 
+      ## The dnf module checks the release rpm's signature; on a fresh EL10 the EPEL key is not there yet.
+      - name: import the EPEL signing key for RedHat
+        ansible.builtin.rpm_key:
+           key: https://dl.fedoraproject.org/pub/epel/RPM-GPG-KEY-EPEL-{{ ansible_facts['distribution_major_version'] }}
+           state: present
+        when: ansible_facts['distribution'] == "RedHat" or ansible_os_family == "Rocky" or ansible_facts['distribution'] == "OracleLinux"
+
       - name: install EPEL repo for RedHat
         yum:
            name: https://dl.fedoraproject.org/pub/epel/epel-release-latest-{{ ansible_facts['distribution_major_version'] }}.noarch.rpm
