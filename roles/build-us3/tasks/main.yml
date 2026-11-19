@@ -196,26 +196,6 @@
         - /opt/ultrascan3/build_somo.stdout
         - /opt/ultrascan3/build_somo.stderr
 
-    - name: Check if us_somo us_revision.h exists
-      stat: 
-        path: /opt/ultrascan3/us_somo/develop/include/us_revision.h
-      register: us_somo_revision_h_details
-  
-    - name: Create us_somo us_revision.h
-      block:
-        - name: Copy over ansible_set_us_revision.sh
-          template: 
-            src: ansible_set_us_revision.sh.j2
-            dest: /opt/ultrascan3/us_somo/develop/ansible_set_us_revision.sh
-            mode: '0755'
-
-        - name: Run ansible_set_us_revision.sh
-          shell:
-            chdir: /opt/ultrascan3/us_somo/develop
-            cmd: ./ansible_set_us_revision.sh >> /opt/ultrascan3/build_somo.stdout 2>> /opt/ultrascan3/build_somo.stderr
-
-      when: us_somo_revision_h_details.stat.exists == false
-
     - name: copy over local.pri
       template: 
         src: somo.local.pri.j2
