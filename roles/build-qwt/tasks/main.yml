@@ -48,6 +48,17 @@
         cmd: umask 022 && tar jxf /opt/qwt-{{ qwt_version }}.tar.bz2 --strip-components=1 
       when: qwt_src_extracted_details.stat.exists == false
 
+    ## Qwt's own build dependencies: build-qt/build-qt6 install them only when they build Qt,
+    ## so a Qt already in /opt (an earlier run, or a copy) left them out
+    - name: Install the qwt build dependencies for RedHat
+      dnf:
+        name:
+          - "{{ 'gcc-toolset-' ~ gcc_toolset_version if (ansible_facts['distribution_major_version'] | int) < 10 else 'gcc-c++' }}"
+          - make
+          - mesa-libGL-devel
+        state: present
+      when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
+
     - name: Configure qwt for RedHat using qt_gcc_enable (gcc-toolset on EL8, system GCC on EL10)
       shell:
         chdir: /opt/qt-{{ qt_version }}-qwt-{{ qwt_version }}
