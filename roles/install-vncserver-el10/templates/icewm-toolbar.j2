@@ -1,0 +1,5 @@
+# {{ ansible_managed }}
+# icewm taskbar buttons for every user (a user's ~/.icewm/toolbar overrides this file)
+prog "UltraScan" /opt/ultrascan3/etc/us3-icon-128x128.png env LD_LIBRARY_PATH=/opt/qt-{{ qt_version }}/lib:/opt/qt-{{ qt_version }}-qwt-{{ qwt_version }}/lib:/opt/ultrascan3/lib /opt/ultrascan3/bin/us
+prog "US-SOMO" /opt/ultrascan3/etc/somo3_icon_512x512.png env LD_LIBRARY_PATH=/opt/qt-{{ qt_version }}/lib:/opt/qt-{{ qt_version }}-qwt-{{ qwt_version }}/lib:/opt/ultrascan3/lib /opt/ultrascan3/bin/us3_somo
+prog "Terminal" utilities-terminal xterm

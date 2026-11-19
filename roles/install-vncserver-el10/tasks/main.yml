@@ -1,0 +1,137 @@
+---
+# EL10 counterpart of install-vncserver: the same per-user Xvnc sessions, vncadmin/vncctl and
+# admin registration, with the TigerVNC project's EL10 RPMs and an icewm session.
+
+- name: This role is for EL10 and later (EL8 uses install-vncserver)
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['os_family'] == "RedHat"
+      - ansible_facts['distribution_major_version'] | int >= 10
+    fail_msg: >-
+      install-vncserver-el10 is for EL10+; use install-vncserver on
+      {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_major_version'] }}
+    quiet: true
+
+- name: Directory for the TigerVNC RPMs
+  ansible.builtin.file:
+    path: "{{ tigervnc_el10_rpm_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Download the TigerVNC EL10 RPMs (checked by SHA-256)
+  ansible.builtin.get_url:
+    url: "{{ tigervnc_el10_url }}/{{ item.arch }}/{{ item.name }}-{{ tigervnc_el10_version }}-{{ tigervnc_el10_release }}.{{ item.arch }}.rpm/download"
+    dest: "{{ tigervnc_el10_rpm_dir }}/{{ item.name }}-{{ tigervnc_el10_version }}-{{ tigervnc_el10_release }}.{{ item.arch }}.rpm"
+    checksum: "sha256:{{ item.sha256 }}"
+    owner: root
+    group: root
+    mode: '0644'
+  loop: "{{ tigervnc_el10_rpms }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: tigervnc_el10_download
+
+## One transaction: tigervnc-server requires tigervnc-selinux whenever
+## selinux-policy-targeted is installed. GPG checking is off for these
+## local files only: EL10's rpm rejects TigerVNC's signing key (SHA-1
+## self-signature); the SHA-256 checksums above stand in for it.
+- name: Install TigerVNC from the downloaded RPMs, icewm and fonts
+  ansible.builtin.dnf:
+    name: "{{ tigervnc_el10_download.results | map(attribute='dest') | list + vnc_el10_packages }}"
+    disable_gpg_check: true
+    state: present
+
+- name: Add group 'vncusers'
+  ansible.builtin.group:
+    name: vncusers
+    state: present
+
+- name: Install vncadmin
+  ansible.builtin.template:
+    src: vncadmin.j2
+    dest: /usr/sbin/vncadmin
+    owner: root
+    group: root
+    mode: u=rx
+
+- name: Install vncctl
+  ansible.builtin.copy:
+    src: vncctl
+    dest: /usr/bin/vncctl
+    owner: root
+    group: root
+    mode: u=rwx,g=rx,o=rx
+
+- name: Let vncusers run vncctl through sudo
+  ansible.builtin.copy:
+    src: vncctl.sudoers.d
+    dest: /etc/sudoers.d/vncctl
+    owner: root
+    group: root
+    mode: u=rw,g=r,o=r
+    validate: visudo -cf %s
+
+- name: Directory for icewm's system configuration
+  ansible.builtin.file:
+    path: /etc/icewm
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  when: vnc_icewm_toolbar | bool
+
+- name: Taskbar buttons for UltraScan and SOMO in icewm
+  ansible.builtin.template:
+    src: icewm-toolbar.j2
+    dest: /etc/icewm/toolbar
+    owner: root
+    group: root
+    mode: '0644'
+  when:
+    - vnc_icewm_toolbar | bool
+    - qt_version is defined
+    - qwt_version is defined
+
+## Admin VNC registration: the same marker logic as install-vncserver,
+## which this role replaces on EL10. config-lims-admin writes
+## /etc/lims-admin-accounts-pending and sets lims_admin_fresh; the last
+## role that reads "not yet provisioned" writes the provisioned marker.
+## On EL10 that is this role, so a play that leaves out both VNC roles
+## must write the marker itself.
+- name: Check whether admin accounts have already been provisioned once
+  ansible.builtin.stat:
+    path: /etc/lims-admin-accounts-provisioned
+  register: lims_admin_accounts_provisioned
+
+- name: Add admin users to vnc (fresh install only -- see install-vncserver)
+  ansible.builtin.command:
+    cmd: /usr/sbin/vncadmin add {{ item }}
+  loop: "{{ vnc_admin_users }}"
+  register: lims_vnc_admin_add
+  # a user registered by an earlier, partly failed run is already done
+  failed_when: lims_vnc_admin_add.rc != 0 and 'is already defined' not in lims_vnc_admin_add.stderr
+  changed_when: lims_vnc_admin_add.rc == 0
+  ignore_errors: true
+  environment:
+    USER: root
+  when: lims_admin_fresh | bool
+
+- name: Record that admin accounts have now been provisioned once
+  ansible.builtin.file:
+    path: /etc/lims-admin-accounts-provisioned
+    state: touch
+    owner: root
+    group: root
+    mode: '0644'
+  when:
+    - not lims_admin_accounts_provisioned.stat.exists
+    - not (lims_pre_430 | default(false) | bool and lims_admin_global_config_existed_already.stat.exists)
+    - lims_vnc_admin_add is not failed
+
+- name: Clear the pending admin provisioning marker
+  ansible.builtin.file:
+    path: /etc/lims-admin-accounts-pending
+    state: absent
+  when: lims_vnc_admin_add is not failed
