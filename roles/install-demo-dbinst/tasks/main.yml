@@ -227,7 +227,8 @@
         lims_upgrade_not_run: >-
           {{ lims_upgrade_not_run | default([]) + ['install-demo-dbinst: '
              ~ ('the host is busy' if lims_host_busy | default(false) | bool
-                else (demo_uslims_upgrade_result.stdout_lines | select('search', 'FAIL ]') | map('trim') | join('; ')
+                else ((demo_uslims_upgrade_result.stdout_lines + demo_uslims_upgrade_result.stderr_lines)
+                      | select('search', 'FAIL ]') | map('trim') | unique | join('; ')
                       or 'the host is not idle'))] }}
       when: >-
         lims_host_busy | default(false) | bool
