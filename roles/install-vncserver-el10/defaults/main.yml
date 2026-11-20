@@ -7,6 +7,10 @@ tigervnc_el10_url: "https://sourceforge.net/projects/tigervnc/files/stable/{{ ti
 # Downloaded RPMs stay here; get_url fetches a file only when it is missing or its checksum differs.
 tigervnc_el10_rpm_dir: /var/cache/tigervnc-el10
 
+# Seconds per download attempt (get_url's own default is 10), and further attempts per file
+tigervnc_el10_download_timeout: 60
+tigervnc_el10_download_retries: 5
+
 # Pinned by SHA-256: EL10's rpm can't import TigerVNC's signing key (its self-signature is SHA-1),
 # so the RPM signatures can't be checked there. Change these together with tigervnc_el10_version.
 tigervnc_el10_rpms:

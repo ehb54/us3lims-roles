@@ -25,6 +25,7 @@
     url: "{{ tigervnc_el10_url }}/{{ item.arch }}/{{ item.name }}-{{ tigervnc_el10_version }}-{{ tigervnc_el10_release }}.{{ item.arch }}.rpm/download"
     dest: "{{ tigervnc_el10_rpm_dir }}/{{ item.name }}-{{ tigervnc_el10_version }}-{{ tigervnc_el10_release }}.{{ item.arch }}.rpm"
     checksum: "sha256:{{ item.sha256 }}"
+    timeout: "{{ tigervnc_el10_download_timeout }}"
     owner: root
     group: root
     mode: '0644'
@@ -32,6 +33,10 @@
   loop_control:
     label: "{{ item.name }}"
   register: tigervnc_el10_download
+  # retried per file: SourceForge's mirror redirects time out now and then
+  until: tigervnc_el10_download is succeeded
+  retries: "{{ tigervnc_el10_download_retries }}"
+  delay: 10
 
 ## One transaction: tigervnc-server requires tigervnc-selinux whenever
 ## selinux-policy-targeted is installed. GPG checking is off for these
