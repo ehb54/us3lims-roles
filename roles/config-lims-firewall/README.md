@@ -7,10 +7,12 @@ The following services are enabled:
 - ssh 
 - mysql 
 
+It also opens UDP `udpport` (12233), where us3-listen receives job status messages (not under `NO_LIMS`).
+
 ## Requirements 
 None
 ## Role Variables 
-None
+`udpport` (config-lims-lims, default 12233)
 ## Example Playbook 
 ```yaml
 - hosts: servers  

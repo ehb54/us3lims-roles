@@ -25,6 +25,18 @@
     - ssh
     - mysql
 
+## us_mpi_analysis sends each job's status to us3-listen on this UDP port (config-lims-lims's
+## udpport). Without it, firewalld drops the status messages, and a job's status stays
+## SUBMITTED until it finishes. A cloud host also needs the port in its security group.
+- name: Open the UDP port jobs send their status to (us3-listen)
+  firewalld:
+      zone: public
+      port: "{{ udpport | default(12233) }}/udp"
+      permanent: yes
+      state: enabled
+  notify: reload firewalld
+  when: NO_LIMS is undefined or NO_LIMS == false or NO_LIMS == ''
+
 - name: reload firewall
   ansible.builtin.shell:
     cmd: firewall-cmd --reload
