@@ -220,6 +220,18 @@
       ansible.builtin.debug:
         msg: "uslims_upgrade.php found the host still not idle; something outside this play is using it -- rerun once it is clear."
       when: not lims_host_busy | default(false) | bool and demo_uslims_upgrade_result.rc != 0 and 'the host is not idle' in demo_uslims_upgrade_result.stderr
+
+    ## Read by the install play's post_tasks, as config-lims-lims's converge does.
+    - name: Record that uslims_upgrade.php did not converge uslims3_Demo
+      ansible.builtin.set_fact:
+        lims_upgrade_not_run: >-
+          {{ lims_upgrade_not_run | default([]) + ['install-demo-dbinst: '
+             ~ ('the host is busy' if lims_host_busy | default(false) | bool
+                else (demo_uslims_upgrade_result.stdout_lines | select('search', 'FAIL ]') | map('trim') | join('; ')
+                      or 'the host is not idle'))] }}
+      when: >-
+        lims_host_busy | default(false) | bool
+        or (demo_uslims_upgrade_result.rc != 0 and 'the host is not idle' in demo_uslims_upgrade_result.stderr)
   ## The crontab first and us3-listen second, each attempted whatever the other does; the
   ## snapshot is kept unless it was restored, for the next run's leftover check.
   always:
