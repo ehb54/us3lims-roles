@@ -2,6 +2,7 @@
 # Move EL8 LIMS hosts from the retired php:7.2 module stream to php:7.4, rebuild the
 # hand-built PECL extensions (imagick, pam) and apply the PHP2Shell settings
 # (CVE-2026-109618, CVE-2026-109619). ultrascan-tickets#1150; see roles/upgrade-lims-php.
+# On EL10 (no php module streams) the report and the PHP2Shell settings run; the upgrade refuses.
 #
 # report only:            ansible-playbook upgrade-php-playbook.yml -l <host>
 # PHP2Shell settings only: ansible-playbook upgrade-php-playbook.yml -l <host> -e "mitigate=1"

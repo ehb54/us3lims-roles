@@ -30,6 +30,8 @@ setenv        us3	    $::env(HOME)/ultrascan3_qt6
 prepend-path  PATH          $::env(HOME)/ultrascan3_qt6/bin:/opt/qt-{{ qt_version }}/bin:/opt/qt-{{ qt_version }}/libexec
 prepend-path  LD_LIBRARY_PATH $::env(HOME)/ultrascan3_qt6/lib:/opt/qt-{{ qt_version }}/lib:/opt/qt-{{ qt_version }}-qwt-{{ qwt_version }}/lib
 
+{# EL8 builds Qt 6 with gcc-toolset-N; EL10 has no such toolset (only 15) and builds it with the system GCC #}
+{% if ansible_facts['os_family'] in ['RedHat', 'Rocky'] and (ansible_facts['distribution_major_version'] | int) < 10 %}
 # gcc-toolset-{{ gcc_toolset_version }} addendum
 prepend-path    INFOPATH        /opt/rh/gcc-toolset-{{ gcc_toolset_version }}/root/usr/share/info
 prepend-path    LD_LIBRARY_PATH /opt/rh/gcc-toolset-{{ gcc_toolset_version }}/root/usr/lib64:/opt/rh/gcc-toolset-{{ gcc_toolset_version }}/root/usr/lib:/opt/rh/gcc-toolset-{{ gcc_toolset_version }}/root/usr/lib64/dyninst:/opt/rh/gcc-toolset-{{ gcc_toolset_version }}/root/usr/lib/dyninst
@@ -37,3 +39,4 @@ prepend-path    MANPATH /opt/rh/gcc-toolset-{{ gcc_toolset_version }}/root/usr/s
 prepend-path    PATH    /opt/rh/gcc-toolset-{{ gcc_toolset_version }}/root/usr/bin
 prepend-path    PKG_CONFIG_PATH /opt/rh/gcc-toolset-{{ gcc_toolset_version }}/root/usr/lib64/pkgconfig
 setenv          PCP_DIR /opt/rh/gcc-toolset-{{ gcc_toolset_version }}/root
+{% endif %}

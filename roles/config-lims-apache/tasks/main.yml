@@ -36,6 +36,14 @@
         state: directory
   when: self_signed == 'yes'
 
+## openssl_privatekey, openssl_csr and openssl_certificate (community.crypto) need the python
+## cryptography library on the host. EL8 has it with platform-python; a fresh EL10 install may not.
+- name: install python3-cryptography for the self-signed cert modules
+  dnf:
+        name: python3-cryptography
+        state: present
+  when: self_signed == 'yes' and ansible_facts['os_family'] == "RedHat"
+
 - name: generate the self-signed private key
   openssl_privatekey:
         path: "{{ ssl_self_key_path }}"

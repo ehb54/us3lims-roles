@@ -3,9 +3,13 @@
   ansible.builtin.assert:
     that:
       - ansible_facts['os_family'] == 'RedHat'
-      - ansible_facts['distribution_major_version'] == '8'
       - lims_php_mode in ['info', 'mitigate', 'upgrade']
-    fail_msg: "upgrade-lims-php handles EL8 php module streams only; lims_php_mode is info, mitigate or upgrade"
+      # EL10 has no php module streams to switch: info and mitigate only
+      - ansible_facts['distribution_major_version'] == '8' or
+        ((ansible_facts['distribution_major_version'] | int) >= 10 and lims_php_mode in ['info', 'mitigate'])
+    fail_msg: >-
+      lims_php_mode is info, mitigate or upgrade. upgrade switches EL8 php module streams and runs on EL8 only;
+      EL10 has no module streams (its php version comes with the package names), so it takes info and mitigate only
     quiet: true
 
 - name: Read the enabled php module stream
@@ -74,7 +78,8 @@
         httpd {{ 'running' if 'httpd' in lims_php_running_before else 'stopped' }};
         {{ 'a stopped one stays stopped' if lims_php_keep_stopped | bool
            else 'a stopped one will be started (lims_php_keep_stopped false)' }}
-      - "php module stream: {{ lims_php_stream_enabled | default('', true) or 'none enabled' }} (target {{ lims_php_stream }})"
+      - "php module stream: {{ (lims_php_stream_enabled | default('', true) or 'none enabled') ~ ' (target ' ~ lims_php_stream ~ ')'
+                               if ansible_facts['distribution_major_version'] == '8' else 'none (EL' ~ ansible_facts['distribution_major_version'] ~ ' has no php module streams)' }}"
       - "php version: {{ lims_php_version_before }} ({{ lims_php_rpm_read.stdout_lines[0] }})"
       - "PHP2Shell fix in the installed php packages: {{ 'yes' if (lims_php_rpm_read.stdout_lines[1] | int) > 0 else 'no' }}"
       - "hand-built extensions: {{ lims_php_hand_built | join(', ') or 'none' }}"

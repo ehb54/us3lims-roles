@@ -1,0 +1,36 @@
+---
+# make-uma (update, build, install) exits non-zero when a step fails. The build loop runs all three steps and
+# leaves the results here (us3_make_uma_rh / us3_make_uma_deb). Fail the role on a failed step, or when
+# us_mpi_analysis (and, for the qmake build, libus_utils.so.10) is not in us3_cluster_path afterwards,
+# with the end of build.stderr.
+- name: Note the make-uma steps that failed
+  ansible.builtin.set_fact:
+    us3_make_uma_failed: >-
+      {{ ((us3_make_uma_rh.results | default([])) + (us3_make_uma_deb.results | default([])))
+         | selectattr('rc', 'defined') | rejectattr('rc', 'equalto', 0) | map(attribute='item') | list }}
+
+- name: Look for us_mpi_analysis and libus_utils in {{ us3_cluster_path }}
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop: >-
+    {{ [us3_cluster_path ~ '/bin/us_mpi_analysis']
+       + ([] if (us3_build_system | default('qmake')) == 'cmake' else [us3_cluster_path ~ '/lib/libus_utils.so.10']) }}
+  register: us3_make_uma_installed
+
+- name: Note what make-uma did not install
+  ansible.builtin.set_fact:
+    us3_make_uma_missing: "{{ us3_make_uma_installed.results | rejectattr('stat.exists') | map(attribute='item') | list }}"
+
+- name: Read the end of build.stderr
+  ansible.builtin.command: tail -20 {{ us3_nodb_path }}/build.stderr
+  register: us3_make_uma_stderr
+  changed_when: false
+  failed_when: false
+  when: us3_make_uma_failed | length > 0 or us3_make_uma_missing | length > 0
+
+- name: Fail on make-uma errors
+  ansible.builtin.fail:
+    msg:
+      - "{{ ('make-uma ' ~ us3_make_uma_failed | join(', ') ~ ' failed. ') if us3_make_uma_failed else '' }}{{ ('Not installed: ' ~ us3_make_uma_missing | join(', ') ~ '. ') if us3_make_uma_missing else '' }}The output is in {{ us3_nodb_path }}/build.stdout and build.stderr; build.stderr ends:"
+      - "{{ us3_make_uma_stderr.stdout_lines | default([]) }}"
+  when: us3_make_uma_failed | length > 0 or us3_make_uma_missing | length > 0

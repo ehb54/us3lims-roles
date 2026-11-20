@@ -1,0 +1,5 @@
+---
+# EL8 builds with gcc-toolset-9, so its gui-build, home-gui-build and mpi-build modulefiles carry
+# the toolset; EL10 has no gcc-toolset-9 (only gcc-toolset-15; the system GCC is 14) and, like
+# Debian, gets the plain ones (as build-us3 and build-us-mpi write them)
+us3_gcc_toolset_modulefile: "{{ ansible_facts['os_family'] in ['RedHat', 'Rocky'] and (ansible_facts['distribution_major_version'] | int) < 10 }}"

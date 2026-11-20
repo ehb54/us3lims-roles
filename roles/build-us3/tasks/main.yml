@@ -47,28 +47,28 @@
     src: gui-build.j2
     dest: /etc/modulefiles/ultrascan/gui-build
     mode: '0644'
-  when: ansible_facts['os_family'] == "Debian"
+  when: not us3_gcc_toolset_modulefile
 
 - name: Copy over template files for ultrascan/gui-build modulefiles for RedHat
   template:
     src: gui-build-gcc-toolset-9.j2
     dest: /etc/modulefiles/ultrascan/gui-build
     mode: '0644'
-  when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
+  when: us3_gcc_toolset_modulefile
 
 - name: Copy over template files for ultrascan/home-gui-build modulefiles for Debian
   template:
     src: home-gui-build.j2
     dest: /etc/modulefiles/ultrascan/home-gui-build
     mode: '0644'
-  when: ansible_facts['os_family'] == "Debian"
+  when: not us3_gcc_toolset_modulefile
 
 - name: Copy over template files for ultrascan/home-gui-build modulefiles for RedHat
   template:
     src: home-gui-build-gcc-toolset-9.j2
     dest: /etc/modulefiles/ultrascan/home-gui-build
     mode: '0644'
-  when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
+  when: us3_gcc_toolset_modulefile
 
 - name: Install, configure and compile us3
   become: no
@@ -79,6 +79,29 @@
         name:
           - git
         update_cache: yes
+      become: yes
+      when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
+
+    ## What ultrascan3's qmake build links beyond Qt and Qwt (-larchive, -lmysqlclient, -lGLU, -lX11 -lXau,
+    ## -lssl -lcrypto, -lz), and rsync for makesomo.sh. build-qt/build-qt6 install these only when they build Qt, so with a Qt already
+    ## in /opt (an earlier run, or a copy) makeall.sh failed in utils (archive_entry.h) and built almost nothing.
+    - name: Install the ultrascan3 build dependencies for RedHat
+      dnf:
+        name:
+          - "{{ 'gcc-toolset-9' if (ansible_facts['distribution_major_version'] | int) < 10 else 'gcc-c++' }}"
+          - make
+          - libarchive-devel
+          - mariadb-devel
+          - mesa-libGL-devel
+          - mesa-libGLU-devel
+          - libX11-devel
+          - libXau-devel
+          - openssl-devel
+          - zlib-devel
+          # makesomo.sh copies the SOMO programs into /opt/ultrascan3/bin with rsync
+          - rsync
+        enablerepo: "{{ powertools | default(omit) }}"
+        state: present
       become: yes
       when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
 
@@ -116,12 +139,13 @@
            src: local.pri.j2
            dest: /opt/ultrascan3/local.pri
     
-    - name: make ultrascan3 for RedHat using gcc-9
+    - name: make ultrascan3 for RedHat using us3_gcc_enable (gcc-toolset-9 on EL8, system GCC on EL10)
       shell:
         chdir: /opt/ultrascan3
-        cmd: umask 022 && . /opt/rh/gcc-toolset-9/enable && gcc -v 2> build.gccversion && ./makeall.sh -j {{ cores_for_parallel_compile }} > build.stdout 2> build.stderr
+        cmd: umask 022 && {{ us3_gcc_enable }}gcc -v 2> build.gccversion && ./makeall.sh -j {{ cores_for_parallel_compile }} > build.stdout 2> build.stderr
       environment: 
-        PATH: /opt/qt-{{ qt_version }}/bin/:/usr/bin:/usr/local/bin:/bin
+        ## Qt 6 installs qhelpgenerator (makeall.sh's doc/manual step, qch) in libexec, not bin
+        PATH: /opt/qt-{{ qt_version }}/bin/:/opt/qt-{{ qt_version }}/libexec:/usr/bin:/usr/local/bin:/bin
         QTDIR: /opt/qt-{{ qt_version }}
         QWTDIR: /opt/qt-{{ qt_version }}-qwt-{{ qwt_version }}
     
@@ -140,7 +164,8 @@
         chdir: /opt/ultrascan3
         cmd: umask 022 && ./makeall.sh -j {{ cores_for_parallel_compile }} > build.stdout 2> build.stderr
       environment: 
-        PATH: /opt/qt-{{ qt_version }}/bin/:/usr/bin:/usr/local/bin:/bin
+        ## Qt 6 installs qhelpgenerator (makeall.sh's doc/manual step, qch) in libexec, not bin
+        PATH: /opt/qt-{{ qt_version }}/bin/:/opt/qt-{{ qt_version }}/libexec:/usr/bin:/usr/local/bin:/bin
         QTDIR: /opt/qt-{{ qt_version }}
         QWTDIR: /opt/qt-{{ qt_version }}-qwt-{{ qwt_version }}
     
@@ -153,6 +178,9 @@
         us3 : /opt/ultrascan3
 #        LD_LIBRARY: ${US3LIB}:${QTLIB}:${QWTLIB}:${OLPATH}:${USDIR}
       when: ansible_facts['os_family'] == "Debian"
+
+    - name: Stop on makeall.sh build errors
+      ansible.builtin.include_tasks: makeall-check.yml
 
   when: us_installed_details.stat.exists == false or qt_force_rebuild is defined
 
@@ -173,35 +201,15 @@
         - /opt/ultrascan3/build_somo.stdout
         - /opt/ultrascan3/build_somo.stderr
 
-    - name: Check if us_somo us_revision.h exists
-      stat: 
-        path: /opt/ultrascan3/us_somo/develop/include/us_revision.h
-      register: us_somo_revision_h_details
-  
-    - name: Create us_somo us_revision.h
-      block:
-        - name: Copy over ansible_set_us_revision.sh
-          template: 
-            src: ansible_set_us_revision.sh.j2
-            dest: /opt/ultrascan3/us_somo/develop/ansible_set_us_revision.sh
-            mode: '0755'
-
-        - name: Run ansible_set_us_revision.sh
-          shell:
-            chdir: /opt/ultrascan3/us_somo/develop
-            cmd: ./ansible_set_us_revision.sh >> /opt/ultrascan3/build_somo.stdout 2>> /opt/ultrascan3/build_somo.stderr
-
-      when: us_somo_revision_h_details.stat.exists == false
-
     - name: copy over local.pri
       template: 
         src: somo.local.pri.j2
         dest: /opt/ultrascan3/us_somo/develop/local.pri
     
-    - name: Extra qmakes for RedHat using gcc-9
+    - name: Extra qmakes for RedHat using us3_gcc_enable (gcc-toolset-9 on EL8, system GCC on EL10)
       shell:
         chdir: /opt/ultrascan3/us_somo/develop/{{ item }}
-        cmd: . /opt/rh/gcc-toolset-9/enable && /opt/qt-{{ qt_version }}/bin/qmake {{ item }}.pro
+        cmd: "{{ us3_gcc_enable }}/opt/qt-{{ qt_version }}/bin/qmake {{ item }}.pro"
       with_items:
         - us_admin
         - us_saxs_cmds_t
@@ -218,10 +226,10 @@
         - us3_hydrodyn
       when: ansible_facts['os_family'] == "Debian"
 
-    - name: Make somo for RedHat using gcc-9
+    - name: Make somo for RedHat using us3_gcc_enable (gcc-toolset-9 on EL8, system GCC on EL10)
       shell:
         chdir: /opt/ultrascan3
-        cmd: umask 022 && . /opt/rh/gcc-toolset-9/enable && ./makesomo.sh -j {{ cores_for_parallel_compile }} >> build_somo.stdout 2>> build_somo.stderr
+        cmd: umask 022 && {{ us3_gcc_enable }}./makesomo.sh -j {{ cores_for_parallel_compile }} >> build_somo.stdout 2>> build_somo.stderr
       environment: 
         PATH: /opt/qt-{{ qt_version }}/bin/:/usr/bin:/usr/local/bin:/bin
         QTDIR: /opt/qt-{{ qt_version }}
@@ -257,6 +265,9 @@
         ULTRASCAN:  /opt/ultrascan3/
 #        LD_LIBRARY: ${US3LIB}:${QTLIB}:${QWTLIB}:${OLPATH}:${USDIR}
       when: ansible_facts['os_family'] == "Debian"
+
+    - name: Stop on makesomo.sh build errors
+      ansible.builtin.include_tasks: makesomo-check.yml
 
     - name: Make convenience us.sh, us_somo.sh us_env.sh
       template: 
@@ -308,12 +319,13 @@
     dest: /tmp/python_bin/python3
     state: link
 
-- name: Build documentation for us3 for RedHat using gcc-9
+- name: Build documentation for us3 for RedHat using us3_gcc_enable (gcc-toolset-9 on EL8, system GCC on EL10)
   shell:
     chdir: /opt/ultrascan3/doc/manual
-    cmd: umask 022 && . /opt/rh/gcc-toolset-9/enable && gcc -v 2> build_doc.gccversion && make -j1 > build_doc.stdout 2> build_doc.stderr
+    cmd: umask 022 && {{ us3_gcc_enable }}gcc -v 2> build_doc.gccversion && make -j1 > build_doc.stdout 2> build_doc.stderr
   environment: 
-    PATH: /tmp/python_bin:/opt/qt-{{ qt_version }}/bin/:/usr/bin:/usr/local/bin:/bin
+    ## Qt 6 installs qhelpgenerator (used by the doc Makefile's "qch" target) in libexec, not bin
+    PATH: /tmp/python_bin:/opt/qt-{{ qt_version }}/bin/:/opt/qt-{{ qt_version }}/libexec:/usr/bin:/usr/local/bin:/bin
   when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
 
 - name: Build documentation for us3 for Debian
@@ -321,7 +333,8 @@
     chdir: /opt/ultrascan3/doc/manual
     cmd: umask 022 && gcc -v 2> build_doc.gccversion && make -j1 > build_doc.stdout 2> build_doc.stderr
   environment: 
-    PATH: /tmp/python_bin:/opt/qt-{{ qt_version }}/bin/:/usr/bin:/usr/local/bin:/bin
+    ## Qt 6 installs qhelpgenerator (used by the doc Makefile's "qch" target) in libexec, not bin
+    PATH: /tmp/python_bin:/opt/qt-{{ qt_version }}/bin/:/opt/qt-{{ qt_version }}/libexec:/usr/bin:/usr/local/bin:/bin
   when: ansible_facts['os_family'] == "Debian"
 
 - name: Create group for us3

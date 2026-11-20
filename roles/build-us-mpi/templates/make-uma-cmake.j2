@@ -1,0 +1,65 @@
+#!/bin/sh
+#	make-uma	Make Us_Mpi_Analysis (update,build,install) -- CMake build (US3_PROFILE=HPC)
+#	same commands as the qmake make-uma, so uslims_git_info.php's build_cmd
+#	("./make-uma build && ./make-uma install") does not change
+
+US3BASE={{ us3_nodb_path }}
+BLDDIR=$US3BASE/build-hpc
+UBINDIR={{ us3_cluster_path }}/bin/
+
+QTDIR=/opt/qt-{{ qt_version }}
+MPICXX={{ us3_mpi_cxx | default('/usr/lib64/mpich/bin/mpicxx') }}
+JOBS={{ cores_for_parallel_compile }}
+
+PROG=us_mpi_analysis
+ARGA="$@"
+if [ "$ARGA" = "all" ]; then
+  ARGA="update build install"
+fi
+
+for ARGI in $ARGA; do
+
+case "$ARGI" in
+
+  update)
+    cd ${US3BASE} || exit 1
+    git pull || exit 1
+    git checkout {{ us3_branch }} || exit 1
+  ;;
+
+  build)
+    # configure once (a new branch or Qt changes the cache: "make-uma clean" first)
+    if [ ! -f ${BLDDIR}/build.ninja ]; then
+      cmake -S ${US3BASE} -B ${BLDDIR} -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release -DUSE_QT6=ON -DCMAKE_PREFIX_PATH=${QTDIR} \
+        -DUS3_PROFILE=HPC -DUS3_NO_DB=ON -DBUILD_DOCUMENTATION=OFF \
+        -DMPI_CXX_COMPILER=${MPICXX} \
+        -DCMAKE_CXX_FLAGS="{{ comp_opt }}" || exit 1
+    fi
+    cmake --build ${BLDDIR} -j ${JOBS} --target ${PROG} || exit 1
+  ;;
+
+  install|copy)
+    # us_utils is linked statically in the HPC profile: only the program is copied
+    echo "cp --preserve=timestamps ${BLDDIR}/bin/${PROG} ${UBINDIR}"
+    cp --preserve=timestamps ${BLDDIR}/bin/${PROG} ${UBINDIR} || exit 1
+    chown -R us3 ${UBINDIR}
+    ls -l ${UBINDIR}
+  ;;
+
+  clean)
+    rm -rf ${BLDDIR}
+  ;;
+
+  *)
+    echo "make-uma    -    Make Us_Mpi_Analysis (CMake)"
+    echo "   usage:"
+    echo "make-uma update     (do git pull)"
+    echo "make-uma build      (configure if needed, build ${PROG})"
+    echo "make-uma install    (install ${PROG} in us3 dirs)"
+    echo "make-uma clean      (remove the CMake build directory)"
+    exit 1
+  ;;
+esac
+
+done

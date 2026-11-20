@@ -20,7 +20,7 @@
   yum:
     name:
       - environment-modules
-      - gcc-toolset-9
+      - "{{ 'gcc-toolset-9' if (ansible_facts['distribution_major_version'] | int) < 10 else 'gcc-c++' }}"
 #      - mpich
 #      - mpich-devel
   when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
@@ -62,14 +62,14 @@
     src: mpi-build.j2
     dest: /etc/modulefiles/ultrascan/mpi-build
     mode: '0644'
-  when: ansible_facts['os_family'] == "Debian"
+  when: not us3_gcc_toolset_modulefile
 
 - name: Copy over template files for ultrascan/mpi-build modulefiles for RedHat
   template: 
     src: mpi-build-gcc-toolset-9.j2
     dest: /etc/modulefiles/ultrascan/mpi-build
     mode: '0644'
-  when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
+  when: us3_gcc_toolset_modulefile
 
 - name: Check if us-mpi already installed, using {{ us3_cluster_path }}/bin/us_mpi_analysis as a proxy
   stat: 
@@ -80,6 +80,20 @@
   become: yes
   become_user: us3
   block:
+    ## What us_utils (NO_DB) links beyond Qt and MPI: -larchive, -lssl -lcrypto, -lz. build-qt/build-qt6 install
+    ## these only when they build Qt, so with a Qt already in /opt us_utils failed (archive_entry.h).
+    - name: Install the us_mpi_analysis build dependencies for RedHat
+      dnf:
+        name:
+          - make
+          - libarchive-devel
+          - openssl-devel
+          - zlib-devel
+        enablerepo: "{{ powertools | default(omit) }}"
+        state: present
+      become_user: root
+      when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
+
     - name: Git clone ultrascan3 repository
       git:
        repo: "{{ us3_repo }}"
@@ -99,12 +113,12 @@
 
     - name: Copy over template files for building us-mpi
       template: 
-        src: "{{ item.name }}.j2"
+        src: "{{ item.src | default(item.name) }}.j2"
         dest: "{{ us3_nodb_path }}/{{ item.name }}"
         mode: "{{ item.mode }}"
       with_items:
         - { name: local.pri, mode: '0644' }
-        - { name: make-uma, mode: '0755' }
+        - { name: make-uma, src: "{{ 'make-uma-cmake' if (us3_build_system | default('qmake')) == 'cmake' else 'make-uma' }}", mode: '0755' }
 
     - name: Clean up build.stdout, .stderr
       file:
@@ -114,14 +128,17 @@
         - "{{ us3_nodb_path }}/build.stdout"
         - "{{ us3_nodb_path }}/build.stderr"
 
-    - name: make us_mpi_analysis for RedHat using gcc-9
+    - name: make us_mpi_analysis for RedHat using us3_gcc_enable (gcc-toolset-9 on EL8, system GCC on EL10)
       shell:
         chdir: "{{ us3_nodb_path }}"
-        cmd: . /opt/rh/gcc-toolset-9/enable && gcc -v 2> build.gccversion && ./make-uma {{ item }} >> build.stdout 2>> build.stderr
+        cmd: "{{ us3_gcc_enable }}gcc -v 2> build.gccversion && ./make-uma {{ item }} >> build.stdout 2>> build.stderr"
       with_items:
         - update
         - build
         - install
+      register: us3_make_uma_rh
+      ## each step's result is read by make-uma-check.yml below, which fails the role on a failed one
+      failed_when: false
       when: ansible_facts['os_family'] == "RedHat" or ansible_facts['os_family'] == "Rocky"
 
     - name: make us_mpi_analysis for Debian
@@ -133,6 +150,11 @@
         - build
         - install
       when: ansible_facts['os_family'] == "Debian"
+      register: us3_make_uma_deb
+      failed_when: false
+
+    - name: Stop on make-uma errors
+      ansible.builtin.include_tasks: make-uma-check.yml
 
   when: us_mpi_installed_details.stat.exists == false
 
@@ -147,12 +169,12 @@
   become: yes
   become_user: us3
   template:
-    src: "{{ item.name }}.j2"
+    src: "{{ item.src | default(item.name) }}.j2"
     dest: "{{ us3_nodb_path }}/{{ item.name }}"
     mode: "{{ item.mode }}"
   with_items:
     - { name: local.pri, mode: '0644' }
-    - { name: make-uma, mode: '0755' }
+    - { name: make-uma, src: "{{ 'make-uma-cmake' if (us3_build_system | default('qmake')) == 'cmake' else 'make-uma' }}", mode: '0755' }
   when: us3_nodb_details.stat.exists
 
 - name: Test mpi
@@ -182,7 +204,7 @@
         
   - name: Copy over template files for mpi tests
     template: 
-      src: "{{ item.name }}.j2"
+      src: "{{ item.src | default(item.name) }}.j2"
       dest: "{{ mpi_test_path }}/{{ item.subdir }}/{{ item.name }}"
       mode: '0755'
     with_items:

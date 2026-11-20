@@ -42,29 +42,51 @@
 
       - name: enable codeready for RedHat
         command:
-           cmd: subscription-manager repos --enable "codeready-builder-for-rhel-8-x86_64-rpms"
+           cmd: subscription-manager repos --enable "codeready-builder-for-rhel-{{ ansible_facts['distribution_major_version'] }}-{{ ansible_facts['architecture'] }}-rpms"
         when: ansible_facts['distribution'] == "RedHat"
 
       - name: enable codeready for Oracle
         command:
-           cmd: dnf config-manager --set-enabled ol8_codeready_builder
+           cmd: dnf config-manager --set-enabled ol{{ ansible_facts['distribution_major_version'] }}_codeready_builder
         when: ansible_facts['distribution'] == "OracleLinux"
+
+      ## Fedora's EPEL 10 is built against the newest RHEL 10 minor, ahead of the Oracle Linux 10
+      ## base (OL 10.2: EPEL's python3-pyOpenSSL needs a newer python3-cryptography, so
+      ## "update system" cannot depsolve). Oracle Linux 10+ uses Oracle's EPEL mirror instead,
+      ## which matches its minor release.
+      - name: note whether this host takes Oracle's EPEL mirror
+        set_fact:
+          lims_oracle_epel: "{{ ansible_facts['distribution'] == 'OracleLinux' and (ansible_facts['distribution_major_version'] | int) >= 10 }}"
+
+      ## The dnf module checks the release rpm's signature; on a fresh EL10 the EPEL key is not there yet.
+      - name: import the EPEL signing key for RedHat
+        ansible.builtin.rpm_key:
+           key: https://dl.fedoraproject.org/pub/epel/RPM-GPG-KEY-EPEL-{{ ansible_facts['distribution_major_version'] }}
+           state: present
+        when: (ansible_facts['distribution'] == "RedHat" or ansible_os_family == "Rocky" or ansible_facts['distribution'] == "OracleLinux") and not lims_oracle_epel
 
       - name: install EPEL repo for RedHat
         yum:
-           name: https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm
+           name: https://dl.fedoraproject.org/pub/epel/epel-release-latest-{{ ansible_facts['distribution_major_version'] }}.noarch.rpm
            state: present
-        when: ansible_facts['distribution'] == "RedHat" or ansible_os_family == "Rocky" or ansible_facts['distribution'] == "OracleLinux"
+        when: (ansible_facts['distribution'] == "RedHat" or ansible_os_family == "Rocky" or ansible_facts['distribution'] == "OracleLinux") and not lims_oracle_epel
 
+      - name: install Oracle's EPEL mirror for Oracle Linux 10+
+        dnf:
+           name: "oracle-epel-release-el{{ ansible_facts['distribution_major_version'] }}"
+           state: present
+        when: lims_oracle_epel
+
+      ## The CodeReady Builder / PowerTools repo id differs by distribution, not only by
+      ## major version: Oracle Linux names it ol<N>_codeready_builder (no 'crb' id on OL).
       - name: set powertools / crb
         set_fact:
-          powertools: "crb"
-        when: ansible_facts['distribution_major_version'] == '9'
-
-      - name: set powertools / crb
-        set_fact:
-          powertools: "powertools"
-        when: ansible_facts['distribution_major_version'] == '8'
+          powertools: >-
+            {{ 'codeready-builder-for-rhel-' ~ ansible_facts['distribution_major_version'] ~ '-' ~ ansible_facts['architecture'] ~ '-rpms'
+               if ansible_facts['distribution'] == 'RedHat' else
+               'ol' ~ ansible_facts['distribution_major_version'] ~ '_codeready_builder'
+               if ansible_facts['distribution'] == 'OracleLinux' else
+               'powertools' if ansible_facts['distribution_major_version'] == '8' else 'crb' }}
 
       - name: set user_home
         set_fact:
@@ -539,7 +561,11 @@
           web_hardening_mode: apply
       - config-lims-lims
       - config-lims-slurm
-      - build-qt
+      ## Qt 5 (build-qt) or Qt 6 (build-qt6), from qt_major_version below. EL10 builds Qt 6 only.
+      - role: build-qt
+        when: qt_major_version is version('6', '<')
+      - role: build-qt6
+        when: qt_major_version is version('6', '>=')
       - build-qwt
       - build-us3
       - build-mpich
@@ -550,7 +576,13 @@
       ## its own assert always failed on a fresh build).
       - role: config-lims-mpi-runtime
         when: not lims_pre_430 | default(false) | bool
-      - install-vncserver
+      ## The server desktop: install-vncserver (the OS's TigerVNC, GNOME sessions) on EL8. EL10 has no Xvnc or xrdp
+      ## packages, so install-vncserver-el10 (TigerVNC's own EL10 RPMs, icewm from EPEL) there (ultrascan-tickets#1292).
+      ## Each writes /etc/lims-admin-accounts-provisioned once the admin accounts are registered for VNC.
+      - role: install-vncserver
+        when: ansible_facts['distribution_major_version'] | int < 10
+      - role: install-vncserver-el10
+        when: ansible_facts['distribution_major_version'] | int >= 10
       - install-postfix
       - install-chrony
       - install-google-fonts
@@ -568,7 +600,9 @@
       - role: start-lims-services
         when: NO_LIMS is undefined or NO_LIMS == false or NO_LIMS == ''
       - config-lims-backup
-      - install-xrdp
+      ## no xrdp on EL10
+      - role: install-xrdp
+        when: ansible_facts['distribution_major_version'] | int < 10
       - install-proxychains4
 #optional    - install-fail2ban
 #scigap-only - config-lims-scigap
@@ -627,6 +661,10 @@
 
         qt_major_version:  "5.15"
         qt_version:        "5.15.19"
+        # EL10 builds Qt 6 only (build-qt6, with the system GCC), e.g.
+        # qt_major_version:  "6.12"
+        # qt_version:        "6.12.0"
+        # Qt 6 on EL8 also needs gcc_toolset_version (13, as in install-qt6-playbook.yml)
         qwt_version:       "6.3.0"
         cores_for_parallel_compile: "{{ ansible_processor_vcpus }}"
         ## The eight pins below derive from site_release, which defaults in

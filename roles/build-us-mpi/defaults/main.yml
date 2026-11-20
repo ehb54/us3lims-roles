@@ -4,8 +4,16 @@
 us3_path: "{{ user_home }}/us3"
 us3_nodb_path: "{{ us3_path }}/us3-nodb"
 us3_cluster_path: "{{ us3_path }}/cluster"
-gcc_path: "{{ '/opt/rh/gcc-toolset-9/root/bin' if ansible_facts['os_family'] == 'RedHat' else '/usr/bin' }}"
+gcc_path: "{{ '/opt/rh/gcc-toolset-9/root/bin' if ansible_facts['os_family'] == 'RedHat' and (ansible_facts['distribution_major_version'] | int) < 10 else '/usr/bin' }}"
 mpi_test_path: "{{ us3_path }}/tests"
 
 # git url ultrascan3 is cloned from, override with -e "us3_repo=..." to build us3_branch from a fork
 us3_repo: "https://github.com/ehb54/ultrascan3.git"
+
+# EL10 ships no gcc-toolset-9 (only gcc-toolset-15; system GCC is 14): build with the system GCC there
+us3_gcc_enable: "{{ '' if (ansible_facts['distribution_major_version'] | int) >= 10 else '. /opt/rh/gcc-toolset-9/enable && ' }}"
+us3_gcc_toolset_modulefile: "{{ ansible_facts['os_family'] in ['RedHat', 'Rocky'] and (ansible_facts['distribution_major_version'] | int) < 10 }}"
+
+# how make-uma builds us_mpi_analysis: qmake (make-uma.j2) or cmake (make-uma-cmake.j2, US3_PROFILE=HPC,
+# us_utils static, so only the program is installed); uslims_git_info.php's build_cmd is the same for both
+us3_build_system: qmake

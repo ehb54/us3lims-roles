@@ -1,0 +1,29 @@
+---
+# makesomo.sh exits 0 whatever happens: a failed make (make's "*** ... Error" lines on stderr), a missing
+# command such as rsync, which copies the programs into /opt/ultrascan3/bin (": command not found"), or
+# its own "ERROR:" lines about the bin64 symlink. Fail the role on any of them, and when us3_somo is not
+# in /opt/ultrascan3/bin afterwards. us3_makesomo_out: the build task's output files without the
+# .stdout/.stderr suffix; us3_somo_bin: where us3_somo must be.
+- name: Read makesomo.sh's build errors
+  ansible.builtin.shell: |
+    set -e
+    grep -h -E '^make(\[[0-9]+\])?: \*\*\* |: command not found' "{{ us3_makesomo_out | default('/opt/ultrascan3/build_somo') }}.stderr" || [ $? -eq 1 ]
+    grep -h -E '^ERROR: ' "{{ us3_makesomo_out | default('/opt/ultrascan3/build_somo') }}.stdout" || [ $? -eq 1 ]
+  register: us3_makesomo_errors
+  changed_when: false
+
+- name: Check that makesomo.sh installed us3_somo
+  ansible.builtin.stat:
+    path: "{{ us3_somo_bin | default('/opt/ultrascan3/bin/us3_somo') }}"
+  register: us_somo_built_details
+
+- name: Note makesomo.sh's problems
+  ansible.builtin.set_fact:
+    us3_makesomo_problems: >-
+      {{ us3_makesomo_errors.stdout_lines | unique | list
+         + ([] if us_somo_built_details.stat.exists else ['us3_somo is not in ' ~ (us3_somo_bin | default('/opt/ultrascan3/bin/us3_somo')) | dirname]) }}
+
+- name: Fail on makesomo.sh's build errors
+  ansible.builtin.fail:
+    msg: "makesomo.sh failed: {{ us3_makesomo_problems | join('; ') }}. Its output is in {{ us3_makesomo_out | default('/opt/ultrascan3/build_somo') }}.stdout and .stderr."
+  when: us3_makesomo_problems | length > 0

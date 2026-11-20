@@ -32,6 +32,10 @@
   command:
     cmd: rpm -i --nodeps msttcore-fonts-installer-2.6-1.noarch.rpm 
     chdir: /tmp
+  register: msttcore_rpm
+  ## a re-run of the play finds it installed: rpm -i then fails with "is already installed"
+  changed_when: msttcore_rpm.rc == 0
+  failed_when: msttcore_rpm.rc != 0 and 'is already installed' not in msttcore_rpm.stderr
 
 - name: Run fc-cache -f
   command:

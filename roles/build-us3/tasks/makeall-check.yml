@@ -1,0 +1,19 @@
+---
+# makeall.sh exits 0 even when directories fail to build: it prints "***ERROR*** building <dir>" for each
+# and "*** N Build Error(s) ***" at the end. Fail the role on any of them, naming the directories, instead
+# of going on with a partial /opt/ultrascan3. us3_makeall_stdout: makeall.sh's output (the build task's
+# build.stdout); the compiler output is in build.log beside it.
+- name: Read makeall.sh's build errors
+  ansible.builtin.command:
+    argv: [grep, -F, "***ERROR*** building", "{{ us3_makeall_stdout | default('/opt/ultrascan3/build.stdout') }}"]
+  register: us3_makeall_errors
+  changed_when: false
+  failed_when: us3_makeall_errors.rc > 1
+
+- name: Fail on makeall.sh's build errors
+  ansible.builtin.fail:
+    msg: >-
+      makeall.sh failed to build {{ us3_makeall_errors.stdout_lines | map('regex_replace', '^.*building ', '') | join(', ') }}
+      ({{ us3_makeall_errors.stdout_lines | length }} of its directories). The compiler output is in
+      {{ (us3_makeall_stdout | default('/opt/ultrascan3/build.stdout')) | dirname }}/build.log.
+  when: us3_makeall_errors.stdout_lines | length > 0
