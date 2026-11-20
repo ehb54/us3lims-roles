@@ -738,7 +738,7 @@
         certbot_auto_renew: true
         certbot_auto_renew_hour: "1"
         certbot_auto_renew_minute: "30"
-        cerbot_auto_renew_options: "--quiet --no-self-upgrade"
+        certbot_auto_renew_options: "--quiet --no-self-upgrade"
 
         slurm_ver: 26.05.5 # Change to appropriate version (and in roles/upgrade-lims-slurm/defaults/main.yml)
         slurm_md5: 3c96d51b61c05d5df3b96d7da6aad04d

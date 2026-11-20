@@ -26,8 +26,22 @@
     msg: certbot will fail if firewall does not have ports 80,443 open
   when: self_signed == 'no'
 
+## geerlingguy.certbot's renewal job defaults to the ssh user's crontab (ansible_user), where
+## certbot can't renew: it needs root for /etc/letsencrypt, port 80 and stopping httpd. Remove
+## that entry from earlier runs (same expression as the role's default), then renew as root.
+- name: Remove a certbot renewal job left in the ssh user's crontab
+  ansible.builtin.cron:
+    name: Certbot automatic renewal.
+    user: "{{ ansible_user | default(lookup('env', 'USER')) }}"
+    state: absent
+  when:
+    - self_signed == 'no'
+    - (ansible_user | default(lookup('env', 'USER'))) != 'root'
+
 - include_role:
          name: geerlingguy.certbot
+  vars:
+    certbot_auto_renew_user: root
   when: self_signed == 'no'
 
 - name: Create ssl folder for self-signed cert
