@@ -10,8 +10,11 @@ lims_mpi_candidates:
     mpi_module: "mpi/openmpi-{{ ansible_architecture }}"
     analysis_module: ultrascan/mpi
     library_prefix: /usr/lib64/openmpi/
-lims_modules_init: /etc/profile.d/modules.sh
+## The script the MPI shells and env_script_lines source to get "module". Empty: environment-modules'
+## own bash init (/usr/share/Modules/init/bash) when it exists, else /etc/profile.d/modules.sh. That file is
+## an alternatives link (modules.sh) that can point at Lmod, with a MODULEPATH that lacks the LIMS modulefiles.
+lims_modules_init: ""
 lims_mpi_environment: |
-  source {{ lims_modules_init | quote }}
+  source {{ lims_modules_init_path | quote }}
   module purge
   module load {{ lims_selected_mpi.mpi_module | quote }} {{ lims_selected_mpi.analysis_module | quote }}
