@@ -366,7 +366,8 @@
 
           ## In a later task, since it reads the facts above. Printed as a list, one command to a line, with
           ## no backslash in any command: the play's output would escape a backslash and spoil a copy.
-          ## The gridctl lines stay commented out: uslims_upgrade.php retires them.
+          ## Retired-controller names below only catch leftover entries; they are not active services.
+          ## Keep any such entries disabled when restoring the live LIMS cron jobs.
           - name: "Compose how to clear what uslims_upgrade.php --check reports"
             ansible.builtin.set_fact:
               lims_preflight_steps:
