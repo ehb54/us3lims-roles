@@ -67,4 +67,9 @@ See `defaults/main.yml`.
 - **EPEL:** icewm and `xorg-x11-xinit` need EPEL 10 enabled (the install play's pre_tasks enable it).
 - **Admin markers:** config-lims-admin writes `/etc/lims-admin-accounts-pending`, and whichever VNC role runs last writes `/etc/lims-admin-accounts-provisioned`. On EL10 that is this role. A play that runs neither VNC role must write the marker some other way, or every later run counts as a fresh install.
 - **`~/.vnc`:** TigerVNC 1.16 logs that `~/.vnc` is deprecated (new paths are `~/.config/tigervnc` and `~/.local/state/tigervnc`), but it still reads `~/.vnc/config` and `~/.vnc/passwd`. `vncadmin` and `vncctl` keep using `~/.vnc`, as on EL8.
-- **Users with an EL8 `~/.vnc/config`:** if it says `session=gnome`, it has to become `session=icewm-session` on EL10. `vncadmin info` shows such a file as "Custom".
+- **Users with an EL8 `~/.vnc/config`:** a `session=gnome` line still gives them a desktop.
+  - EL10 has no `/usr/share/xsessions/gnome.desktop`, so TigerVNC logs "Could not load configured desktop session gnome".
+  - It then starts the first session file in `/usr/share/xsessions`, which on these hosts is `icewm-session`.
+  - Changing the line to `session=icewm-session` only removes the warning.
+  - `vncadmin info` shows such a file as "Custom".
+  - GNOME itself can't run inside Xvnc on EL10: gnome-shell 49's X11 mode crashes at startup.
