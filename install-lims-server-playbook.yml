@@ -58,18 +58,19 @@
         set_fact:
           lims_oracle_epel: "{{ ansible_facts['distribution'] == 'OracleLinux' and (ansible_facts['distribution_major_version'] | int) >= 10 }}"
 
+      ## Rocky and Alma report os_family RedHat, so these test the distribution.
       ## The dnf module checks the release rpm's signature; on a fresh EL10 the EPEL key is not there yet.
       - name: import the EPEL signing key for RedHat
         ansible.builtin.rpm_key:
            key: https://dl.fedoraproject.org/pub/epel/RPM-GPG-KEY-EPEL-{{ ansible_facts['distribution_major_version'] }}
            state: present
-        when: (ansible_facts['distribution'] == "RedHat" or ansible_os_family == "Rocky" or ansible_facts['distribution'] == "OracleLinux") and not lims_oracle_epel
+        when: ansible_facts['distribution'] in ['RedHat', 'Rocky', 'AlmaLinux', 'OracleLinux'] and not lims_oracle_epel
 
       - name: install EPEL repo for RedHat
         yum:
            name: https://dl.fedoraproject.org/pub/epel/epel-release-latest-{{ ansible_facts['distribution_major_version'] }}.noarch.rpm
            state: present
-        when: (ansible_facts['distribution'] == "RedHat" or ansible_os_family == "Rocky" or ansible_facts['distribution'] == "OracleLinux") and not lims_oracle_epel
+        when: ansible_facts['distribution'] in ['RedHat', 'Rocky', 'AlmaLinux', 'OracleLinux'] and not lims_oracle_epel
 
       - name: install Oracle's EPEL mirror for Oracle Linux 10+
         dnf:
@@ -523,10 +524,14 @@
         when: ansible_facts['os_family'] == "RedHat"
 
   post_tasks:
+    ## Not while a uslims_upgrade.php call was refused or skipped (lims_upgrade_not_run, set by
+    ## config-lims-lims and install-demo-dbinst): the host is not converged, and without the marker
+    ## the next run's preflight would refuse it instead of converging it.
     - name: "A finished run ends a fresh install"
       ansible.builtin.file:
         path: /etc/lims-fresh-install-pending
         state: absent
+      when: lims_upgrade_not_run | default([]) | length == 0
 
     ## The roles leave a commented line off as deliberate, so one commented out for an upgrade would stay off unnoticed.
     - name: "Find LIMS cron lines left commented out"
@@ -543,6 +548,18 @@
       ansible.builtin.debug:
         msg: "These LIMS cron lines are off, each after the crontab it is in. Uncomment any you commented out for an upgrade: {{ lims_commented_cron.stdout_lines }}"
       when: lims_commented_cron.stdout_lines | default([]) | length > 0
+
+    ## Last, so every other role and post_task has run. An installed host keeps the roles' notes.
+    - name: "Stop when a fresh install is not finished"
+      ansible.builtin.fail:
+        msg: >-
+          This fresh install is not finished: uslims_upgrade.php did not run
+          ({{ lims_upgrade_not_run | join('; ') }}). /etc/lims-fresh-install-pending stays, so the
+          next run finishes it. Clear what is named and rerun this play. A console autologin counts
+          as a login (for example, systemctl stop getty@tty1 until the next reboot).
+      when:
+        - lims_upgrade_not_run | default([]) | length > 0
+        - lims_fresh_install_pending.stat.exists | default(false)
 
   roles:
       - site-release-defaults
@@ -722,7 +739,7 @@
         certbot_auto_renew: true
         certbot_auto_renew_hour: "1"
         certbot_auto_renew_minute: "30"
-        cerbot_auto_renew_options: "--quiet --no-self-upgrade"
+        certbot_auto_renew_options: "--quiet --no-self-upgrade"
 
         slurm_ver: 26.05.5 # Change to appropriate version (and in roles/upgrade-lims-slurm/defaults/main.yml)
         slurm_md5: 3c96d51b61c05d5df3b96d7da6aad04d

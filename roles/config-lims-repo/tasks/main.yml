@@ -1,9 +1,10 @@
 ---
-# using dnf in a shell because we want the power tools repo to be persistent for epel 
+# using dnf in a shell because we want the power tools repo to be persistent for epel
+# (Rocky and Alma report os_family RedHat, so test the distribution; RHEL and Oracle Linux enable theirs in the play)
 - name: enable power tool for epel
   shell: dnf config-manager --set-enabled {{ powertools }}
   changed_when: false
-  when: (ansible_facts['distribution'] == "CentOS" and ansible_facts['distribution_major_version'] == "8") or ansible_facts['os_family'] == "Rocky"
+  when: (ansible_facts['distribution'] == "CentOS" and ansible_facts['distribution_major_version'] == "8") or ansible_facts['distribution'] in ['Rocky', 'AlmaLinux']
 
 - name: install epel via greeling's role
   include_role:

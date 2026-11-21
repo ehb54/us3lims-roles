@@ -1,4 +1,18 @@
 ---
+- name: Look for environment-modules' own bash init
+  ansible.builtin.stat:
+    path: /usr/share/Modules/init/bash
+  register: lims_envmodules_init
+  when: lims_modules_init | default('', true) | length == 0
+
+## /etc/profile.d/modules.sh can be Lmod's init (alternatives link modules.sh), whose MODULEPATH may not
+## include /etc/modulefiles or /usr/share/modulefiles, so environment-modules' own init comes first.
+- name: Choose the script that sets up environment modules
+  ansible.builtin.set_fact:
+    lims_modules_init_path: >-
+      {{ lims_modules_init if lims_modules_init | default('', true) | length > 0
+         else ('/usr/share/Modules/init/bash' if lims_envmodules_init.stat.exists else '/etc/profile.d/modules.sh') }}
+
 - name: Check for MPI metadata recorded by the analysis build
   ansible.builtin.stat:
     path: "{{ lims_mpi_manifest }}"
@@ -20,15 +34,19 @@
   become_user: us3
   ansible.builtin.shell: |
     set -eo pipefail
-    source {{ lims_modules_init | quote }}
+    source {{ lims_modules_init_path | quote }}
     module purge
     module load {{ item.mpi_module | quote }} {{ item.analysis_module | quote }}
-    launcher=$(command -v mpirun)
-    case "$launcher" in {{ item.library_prefix | quote }}*) ;; *) exit 1;; esac
-    analysis=$(command -v us_mpi_analysis)
+    launcher=$(command -v mpirun) || { echo "no mpirun after module load" >&2; exit 1; }
+    case "$launcher" in {{ item.library_prefix | quote }}*) ;; *) echo "mpirun is $launcher" >&2; exit 1;; esac
+    analysis=$(command -v us_mpi_analysis) || { echo "no us_mpi_analysis after module load" >&2; exit 1; }
     libraries=$(ldd "$analysis")
-    if printf '%s\n' "$libraries" | grep -q 'not found'; then exit 1; fi
-    printf '%s\n' "$libraries" | grep -E 'libmpi[^ ]* => ' | grep -F {{ item.library_prefix | quote }}
+    if printf '%s\n' "$libraries" | grep -q 'not found'; then
+      printf '%s\n' "$libraries" | grep -m1 'not found' >&2
+      exit 1
+    fi
+    printf '%s\n' "$libraries" | grep -E 'libmpi[^ ]* => ' | grep -F {{ item.library_prefix | quote }} ||
+      { echo "us_mpi_analysis does not load libmpi from {{ item.library_prefix }}" >&2; exit 1; }
   args:
     executable: /bin/bash
   loop: "{{ lims_mpi_candidates }}"
@@ -41,7 +59,13 @@
   ansible.builtin.assert:
     that:
       - (lims_mpi_detection.results | selectattr('rc', 'equalto', 0) | list | length) == 1
-    fail_msg: "Cannot identify a unique MPI runtime for us_mpi_analysis. Check the installed build, or supply site module paths in lims_mpi_candidates."
+    fail_msg: >-
+      Cannot identify a unique MPI runtime for us_mpi_analysis:
+      {{ lims_mpi_detection.results | selectattr('rc', 'equalto', 0) | list | length }} of
+      {{ lims_mpi_detection.results | length }} candidates passed, with modules from {{ lims_modules_init_path }}.
+      {% for r in lims_mpi_detection.results if r.rc != 0 %}{{ r.item.implementation }}:
+      {{ (r.stderr_lines | default([]) | select | first) | default('rc ' ~ r.rc, true) }}. {% endfor %}
+      Check the installed build, or supply site module paths in lims_mpi_candidates.
   when: not lims_mpi_manifest_stat.stat.exists
 
 - name: Select the detected analysis runtime
