@@ -80,7 +80,9 @@
          | rejectattr('host', 'match', '^[0-9.]*$')
          | list }}
 
-## The server refuses SHOW GRANTS for an account it ignores (1141); it answers for one it matches.
+## The server refuses SHOW GRANTS for an account it ignores with error 1141 (no such grant), and
+## answers for one it matches. Any other error, such as a lost connection (2013) or a missing
+## privilege, says nothing about the account, so it stops the play here.
 - name: Ask the server for each one's grants
   vars:
     ansible_python_interpreter: "{{ mariadb_hostname_python }}"
@@ -99,16 +101,25 @@
   register: mariadb_hostname_grants
   check_mode: false
   changed_when: false
-  failed_when: false
+  failed_when: >-
+    mariadb_hostname_grants.query_result is not defined
+    and mariadb_hostname_grants.msg | default('') is not search('\(1141, ')
 
 - name: Sort them
   ansible.builtin.set_fact:
     mariadb_hostname_ignored: >-
       {{ mariadb_hostname_grants.results | rejectattr('query_result', 'defined')
+         | selectattr('msg', 'defined') | selectattr('msg', 'search', '\(1141, ')
          | map(attribute='item') | list }}
     mariadb_hostname_matched: >-
       {{ mariadb_hostname_grants.results | selectattr('query_result', 'defined')
          | map(attribute='item') | list }}
+
+- name: Require that the server answered or refused with 1141 for each one
+  ansible.builtin.assert:
+    that: (mariadb_hostname_ignored | length) + (mariadb_hostname_matched | length) == (mariadb_hostname_named | length)
+    fail_msg: SHOW GRANTS gave an unexpected result for an account at a host name; nothing is dropped.
+    quiet: true
 
 - name: Name them
   ansible.builtin.set_fact:
@@ -140,6 +151,46 @@
 - name: Drop the accounts the server ignores, and check
   when: mariadb_hostname_mode == 'apply' and mariadb_hostname_skip | bool and mariadb_hostname_ignored | length > 0
   block:
+    ## Asked again right before the drop: one that is no longer refused with 1141, or any error,
+    ## stops the play before anything is dropped.
+    - name: Read skip_name_resolve again
+      vars:
+        ansible_python_interpreter: "{{ mariadb_hostname_python }}"
+      community.mysql.mysql_query:
+        login_unix_socket: "{{ mariadb_hostname_socket }}"
+        login_user: root
+        login_password: "{{ mariadb_hostname_login_password | default(omit) }}"
+        config_file: "{{ omit if mariadb_hostname_login_password is defined else mariadb_hostname_my_cnf }}"
+        query: SELECT @@skip_name_resolve AS skip_name_resolve
+      register: mariadb_hostname_reread
+      check_mode: false
+      changed_when: false
+      failed_when: >-
+        mariadb_hostname_reread.query_result is not defined
+        or mariadb_hostname_reread.query_result[0][0].skip_name_resolve | int != 1
+
+    - name: Check that the server still refuses each one with 1141
+      vars:
+        ansible_python_interpreter: "{{ mariadb_hostname_python }}"
+      community.mysql.mysql_query:
+        login_unix_socket: "{{ mariadb_hostname_socket }}"
+        login_user: root
+        login_password: "{{ mariadb_hostname_login_password | default(omit) }}"
+        config_file: "{{ omit if mariadb_hostname_login_password is defined else mariadb_hostname_my_cnf }}"
+        query: SHOW GRANTS FOR %s@%s
+        positional_args:
+          - "{{ item.user }}"
+          - "{{ item.host }}"
+      loop: "{{ mariadb_hostname_ignored }}"
+      loop_control:
+        label: "{{ item.user }}@{{ item.host }}"
+      register: mariadb_hostname_recheck
+      check_mode: false
+      changed_when: false
+      failed_when: >-
+        mariadb_hostname_recheck.query_result is defined
+        or mariadb_hostname_recheck.msg | default('') is not search('\(1141, ')
+
     - name: Drop the accounts at host names that the server ignores
       vars:
         ansible_python_interpreter: "{{ mariadb_hostname_python }}"
