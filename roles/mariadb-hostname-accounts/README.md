@@ -17,10 +17,13 @@ A host built by the current `create-grants.yml` has none of these accounts, so t
 
 Modes are set by `mariadb_hostname_mode`. The playbook maps `-e run=1` to `apply`.
 
-- `report` (default): shows `skip_name_resolve` and every account whose host is a name. For each one, it says whether the server ignores it, which the server shows by refusing `SHOW GRANTS` for it. It also names the accounts `apply` would drop. Nothing is changed.
+- `report` (default): shows `skip_name_resolve` and every account whose host is a name. For each one, it says whether the server ignores it, which the server shows by refusing `SHOW GRANTS` for it with error 1141. It also names the accounts `apply` would drop. Nothing is changed.
 - `apply`:
-  1. Drops each account at a host name that the server ignores.
-  2. Checks that none of them is left.
+  1. Asks the server again: `skip_name_resolve` must still be ON, and each account must still be refused with 1141.
+  2. Drops each account at a host name that the server ignores.
+  3. Checks that none of them is left.
+
+Only error 1141 marks an account as ignored. Any other `SHOW GRANTS` error, such as a lost connection or a missing privilege, stops the run before anything is dropped.
 
   Running it again changes nothing.
 
@@ -29,6 +32,8 @@ A host counts as a name unless it is `localhost`, empty, an IP address, or a pat
 When `skip_name_resolve` is OFF, accounts at host names can match logins, so nothing is dropped and the report says so. An account at a host name that the server still answers for is left alone too.
 
 `--check` with `-e run=1` shows what `apply` would drop.
+
+`tests/run.sh` runs the role against throwaway MariaDB 10.3 and 10.11 servers in containers; see `tests/README.md`.
 
 Root's credentials come from the dbutils defaults file `~us3/lims/database/utils/my.cnf` (`mariadb_hostname_my_cnf`). `config-lims-database` passes `mariadb_hostname_login_password` (`root_db_pass`) instead, since that file doesn't exist yet during a fresh install. The mysql tasks run with the first python that can import `pymysql`, as in `secure-mariadb-root`.
 
