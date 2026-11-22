@@ -33,6 +33,8 @@ When `skip_name_resolve` is OFF, accounts at host names can match logins, so not
 
 `--check` with `-e run=1` shows what `apply` would drop.
 
+`tests/run.sh` runs the role against throwaway MariaDB 10.3 and 10.11 servers in containers; see `tests/README.md`.
+
 Root's credentials come from the dbutils defaults file `~us3/lims/database/utils/my.cnf` (`mariadb_hostname_my_cnf`). `config-lims-database` passes `mariadb_hostname_login_password` (`root_db_pass`) instead, since that file doesn't exist yet during a fresh install. The mysql tasks run with the first python that can import `pymysql`, as in `secure-mariadb-root`.
 
 ## Role Variables
