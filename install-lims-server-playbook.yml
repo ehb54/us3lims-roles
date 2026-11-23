@@ -266,6 +266,56 @@
         register: lims_fresh_install_pending
         when: site_release is defined
 
+      ## lims_os_upgrade: converging a working host after an OS-only upgrade (ultrascan-tickets#1314).
+      ## The LIMS code and data are as they were, so no checkout is pulled, checked out or re-cloned,
+      ## uslims_upgrade.php is not run (neither this preflight's --check nor the --apply calls in
+      ## config-lims-lims and install-demo-dbinst), and /opt/ultrascan3 and {{ user_home }}/us3/us3-nodb
+      ## are recompiled in place from the source already there (build-us3, build-us-mpi). The host is
+      ## idled before the OS upgrade, by the procedure. Refused, before anything changes, on a host
+      ## without the LIMS install and the two source trees it keeps.
+      - name: "OS-upgrade converge: look for the LIMS install and the ultrascan3 source trees"
+        ansible.builtin.stat:
+          path: "{{ item }}"
+        loop:
+          - "{{ www_common | default((www_base | default('/srv/www/htdocs')) ~ '/common') }}/global_config.php"
+          - /opt/ultrascan3/.git
+          - "{{ user_home }}/us3/us3-nodb/.git"
+        register: lims_os_upgrade_paths
+        when: lims_os_upgrade | default(false) | bool
+
+      - name: "OS-upgrade converge: refuse a host without them"
+        ansible.builtin.fail:
+          msg: >-
+            lims_os_upgrade converges a host whose LIMS is already installed and keeps its source
+            trees, but this host has no
+            {{ lims_os_upgrade_paths.results | rejectattr('stat.exists') | map(attribute='item') | join(', ') }}.
+            Nothing was changed. Run without lims_os_upgrade for a fresh install.
+        when:
+          - lims_os_upgrade | default(false) | bool
+          - lims_os_upgrade_paths.results | rejectattr('stat.exists') | list | length > 0
+
+      ## A release before 4.3.0 is not supported on EL10, and an OS-upgrade converge cannot bring
+      ## one forward (it changes no checkout, and uslims_upgrade.php, which 4.2.0 and older don't
+      ## have, is not run). Such a host is upgraded to 4.3.0 on its old OS first.
+      - name: "OS-upgrade converge: refuse a release before 4.3.0 on EL10"
+        ansible.builtin.fail:
+          msg: >-
+            This site runs {{ site_release_version }}, and a LIMS release before 4.3.0 is not supported on
+            {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_major_version'] }}.
+            Nothing was changed. Upgrade the LIMS to 4.3.0 or newer on the old OS first.
+        when:
+          - lims_os_upgrade | default(false) | bool
+          - lims_pre_430 | default(false) | bool
+          - ansible_facts['distribution_major_version'] | int >= 10
+
+      - name: "OS-upgrade converge: say what this run leaves alone"
+        ansible.builtin.debug:
+          msg: >-
+            lims_os_upgrade is set: every checkout stays at its commit, uslims_upgrade.php is not run,
+            and /opt/ultrascan3 and {{ user_home }}/us3/us3-nodb are recompiled in place against
+            Qt {{ qt_version }} where their programs are not built against it yet.
+        when: lims_os_upgrade | default(false) | bool
+
       ## NO_LIMS installs no LIMS, so there is no upgrade state to check.
       - name: "Skip uslims_upgrade.php's preflight check under NO_LIMS"
         ansible.builtin.set_fact:
@@ -527,7 +577,9 @@
                 /etc/crontab could not be restored from /etc/crontab.pre-upgrade-preflight, so its
                 LIMS lines are still commented out; the next run restores it before anything else.
             when: lims_preflight_restore is failed
-        when: site_release is defined and uslims_upgrade_preflight_script.stat.exists and not lims_fresh_install_pending.stat.exists
+        when:
+          - site_release is defined and uslims_upgrade_preflight_script.stat.exists and not lims_fresh_install_pending.stat.exists
+          - not lims_os_upgrade | default(false) | bool
 
       ## After every gate and the busy check, so a refused run has changed neither.
       - name: disable selinux
@@ -711,6 +763,10 @@
         newinst_branch:    "{{ site_release }}"
         webinfo_branch:    "{{ site_release }}"
         utils_branch:      "{{ site_release }}"
+        ## true (-e lims_os_upgrade=true) to converge a working host after an OS-only upgrade:
+        ## no checkout is touched, uslims_upgrade.php is not run, and /opt/ultrascan3 and
+        ## ~us3/us3-nodb are recompiled in place (ultrascan-tickets#1314, UPGRADE-AND-INSTALL-MODEL.md).
+        lims_os_upgrade:   false
         ## Pre-4.3.0 only: written into dbutils' db_config.php for the Airavata bridge.
         airavata_branch:   "meta-scheduler-prod"
 

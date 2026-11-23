@@ -73,6 +73,16 @@ A run on an existing host refuses, before it changes anything, when a checkout i
 
 The preflight comments out the LIMS lines in `/etc/crontab` and stops `us3-listen` while it checks, and restores both afterwards, refused or not. A run that died while the host was idled leaves `/etc/crontab.pre-upgrade-preflight`; the next run restores it before anything else.
 
+### After an OS-only upgrade
+
+`lims_os_upgrade` - `true` (`-e lims_os_upgrade=true`) to converge a working host after an in-place OS upgrade (for example OL 8 to 10 with Leapp), which keeps the LIMS code and data as they were. Default `false`. With it:
+- no checkout is pulled, checked out or re-cloned: every LIMS checkout, `/opt/ultrascan3` and `~us3/us3-nodb` stay at their commits, with any local changes;
+- `uslims_upgrade.php` is not run, neither the preflight `--check` nor the `--apply` calls;
+- `/opt/ultrascan3` and `~us3/us3-nodb` (installed into `~us3/cluster`) are recompiled in place against the Qt and Qwt the run builds, after the old build's output is removed (objects, moc files, and the Makefiles and `.qmake.stash` files qmake generated). `/opt/ultrascan3/bin` is given the tree's owner for the rebuild and its own owner back after it. A program that already loads that Qt is left as it is, so a rerun compiles nothing.
+- on EL10, the VNC display assignments vncadmin made on the old OS, which RPM keeps as `/etc/tigervnc/vncserver.users.rpmsave` when the old tigervnc-server goes, are put back if the new `vncserver.users` has none.
+
+The run refuses, before it changes anything, on a host without `global_config.php` or either source tree, and on EL10 for a release before 4.3.0 (not supported there; upgrade the LIMS on the old OS first). Idle the host before the OS upgrade; this run does not check it. See UPGRADE-AND-INSTALL-MODEL.md.
+
 
 ### Running it: 
 ```

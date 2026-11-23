@@ -50,6 +50,39 @@
     dest: /etc/postfix/sasl/sasl_passwd
     mode: '0600'
 
+## EL10 has no Berkeley DB, so its postfix has no hash: maps (there is no postfix-hash package),
+## and its own main.cf makes lmdb the default. A main.cf kept from EL8 or EL9 by an in-place
+## upgrade (ultrascan-tickets#1314) has no default_database_type, postfix's built-in default is
+## still hash, and postmap below fails. So on EL10 lmdb is made the default and the alias maps'
+## hash: becomes lmdb:, as in a new EL10 main.cf. A main.cf that already says lmdb is left as it is.
+- name: Look up postfix's map types on EL10, which has no Berkeley DB
+  ansible.builtin.command:
+    cmd: postconf -h default_database_type alias_maps alias_database
+  register: postfix_el10_maps
+  changed_when: false
+  when: ansible_facts['os_family'] == "RedHat" and ansible_facts['distribution_major_version'] | int >= 10
+
+- name: Make lmdb postfix's map type on EL10, where a main.cf kept by an in-place upgrade still says hash
+  ansible.builtin.command:
+    argv:
+      - postconf
+      - -e
+      - default_database_type=lmdb
+      - "alias_maps={{ postfix_el10_maps.stdout_lines[1] | regex_replace('(^|[\\s,])hash:', '\\1lmdb:') }}"
+      - "alias_database={{ postfix_el10_maps.stdout_lines[2] | regex_replace('(^|[\\s,])hash:', '\\1lmdb:') }}"
+  register: postfix_el10_to_lmdb
+  changed_when: true
+  when:
+    - ansible_facts['os_family'] == "RedHat" and ansible_facts['distribution_major_version'] | int >= 10
+    - postfix_el10_maps.stdout_lines[0] == 'hash' or postfix_el10_maps.stdout_lines[1:] | select('search', '(^|[\\s,])hash:') | list | length > 0
+
+## Not a handler: the aliases must be built before postfix is checked and started below.
+- name: Build the lmdb alias database after the change to lmdb  # noqa: no-handler
+  ansible.builtin.command:
+    cmd: newaliases
+  changed_when: true
+  when: postfix_el10_to_lmdb is changed
+
 - name: postfix default map type (EL8/Debian hash, EL10 lmdb since EL10 has no Berkeley DB)
   command:
     cmd: postconf -h default_database_type
