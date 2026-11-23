@@ -22,11 +22,13 @@ tigervnc_el10_rpms:
   - { arch: noarch, name: tigervnc-selinux, sha256: 913d4b75dc8175cc0db7ee979d80851d2a48da902c3f0c25d9eb62b798bcc479 }
 
 # From EPEL 10 / OL10 AppStream. EL10 has no X11 desktop (GNOME 49 is Wayland-only, no Xfce or MATE),
-# so the session inside Xvnc is icewm.
+# so the session inside Xvnc is icewm. firefox: a fresh install gets it with the Workstation group,
+# but Leapp's EL9 to EL10 upgrade removes it, and the group isn't installed again (ultrascan-tickets#1319).
 vnc_el10_packages:
   - icewm
   - xterm
   - xorg-x11-fonts-Type1
+  - firefox
 
 # Written by vncadmin into a new user's ~/.vnc/config
 vnc_session: icewm-session
@@ -39,5 +41,6 @@ vnc_admin_users:
   - ehb
   - saeed
 
-# icewm taskbar buttons for UltraScan and SOMO (/etc/icewm/toolbar); needs qt_version and qwt_version
+# icewm taskbar buttons (/etc/icewm/toolbar): UltraScan, US-GMP (with install_commercial), US-SOMO,
+# Firefox and a terminal, as the EL8 GNOME favorites; needs qt_version and qwt_version
 vnc_icewm_toolbar: true
