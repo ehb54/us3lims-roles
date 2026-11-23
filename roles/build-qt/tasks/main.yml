@@ -80,6 +80,9 @@
           - mesa-libGL-devel
           - libxkbcommon-devel
           - libxkbcommon-x11-devel
+          # libXext.so: the sanity check before configure needs it, and yum-builddep qt5-devel
+          # does not bring it (ultrascan-tickets#1311)
+          - libXext-devel
           - openssl-devel
           - subversion
           - python3
