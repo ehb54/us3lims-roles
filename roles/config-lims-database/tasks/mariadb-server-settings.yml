@@ -1,0 +1,212 @@
+---
+## Gary's settings, in /etc/my.cnf.d/mariadb-server.cnf right after [mysqld].
+##
+## Earlier versions of this role added them with lineinfile and a multi-line line:. lineinfile
+## compares line: with one line of the file at a time, so it never found the block, and every
+## run added another copy, with a blank line after it, above the earlier ones
+## (ultrascan-tickets#1318). MariaDB keeps the last value it reads, so the oldest copy won.
+##
+## The first task removes those unmarked copies, in the text each earlier version wrote. It
+## matches whole copies only, so a line an admin added stays, and so does a copy an admin
+## edited. The second task keeps the settings as one marked block. Both decide from the file's
+## content alone, so old and new hosts, EL8 and EL10, are handled the same way. Neither
+## restarts MariaDB; a change takes effect at its next restart, as before.
+
+- name: Remove the unmarked copies of Gary's settings that earlier versions of this role added
+  ansible.builtin.replace:
+    path: /etc/my.cnf.d/mariadb-server.cnf
+    regexp: >-
+      ^(?:{{ _garys_settings_legacy | map('regex_escape') | join('|') | replace('POOLSIZE', '[^\n]*') }})\n?
+    replace: ""
+    backup: true
+  vars:
+    ## The block as each earlier version of the task wrote it. POOLSIZE stands for any
+    ## innodb_buffer_pool_size value. These are what is on existing hosts: don't change them
+    ## when the block below changes.
+    _garys_settings_legacy:
+      ## 2021-07: max_connections 2500
+      - |
+        # Gary's settings
+        skip-external-locking
+        skip-name-resolve
+        key_buffer_size         = 256M
+        max_allowed_packet      = 256M
+        table_open_cache        = 512
+        sort_buffer_size        = 16M
+        tmp_table_size          = 32M
+        net_buffer_length       = 2M
+        read_buffer_size        = 128k
+        read_rnd_buffer_size    = 256k
+        join_buffer_size        = 256k
+        table_definition_cache  = 1400
+        table_open_cache        = 2000
+        ##table_open_cache_instances = 16
+        myisam_sort_buffer_size = 256M
+        connect_timeout         = 21600
+        expire_logs_days        = 30
+        #innodb_force_recovery   = 1
+        innodb_file_per_table   = 1
+        max_connections         = 2500
+        max_user_connections    = 500
+        thread_cache_size       = 505
+        query_cache_type        = 1
+        query_cache_size        = 32M
+      ## 2021-09: max_connections 25000
+      - |
+        # Gary's settings
+        skip-external-locking
+        skip-name-resolve
+        key_buffer_size         = 256M
+        max_allowed_packet      = 256M
+        table_open_cache        = 512
+        sort_buffer_size        = 16M
+        tmp_table_size          = 32M
+        net_buffer_length       = 2M
+        read_buffer_size        = 128k
+        read_rnd_buffer_size    = 256k
+        join_buffer_size        = 256k
+        table_definition_cache  = 1400
+        table_open_cache        = 2000
+        ##table_open_cache_instances = 16
+        myisam_sort_buffer_size = 256M
+        connect_timeout         = 21600
+        expire_logs_days        = 30
+        #innodb_force_recovery   = 1
+        innodb_file_per_table   = 1
+        max_connections         = 25000
+        max_user_connections    = 25000
+        thread_cache_size       = 505
+        query_cache_type        = 1
+        query_cache_size        = 32M
+      ## 2021-10 and 2021-11: performance settings added
+      - |
+        # Gary's settings
+        skip-external-locking
+        skip-name-resolve
+        key_buffer_size         = 256M
+        max_allowed_packet      = 256M
+        table_open_cache        = 512
+        sort_buffer_size        = 16M
+        tmp_table_size          = 32M
+        net_buffer_length       = 2M
+        read_buffer_size        = 128k
+        read_rnd_buffer_size    = 256k
+        join_buffer_size        = 256k
+        table_definition_cache  = 1400
+        table_open_cache        = 2000
+        ##table_open_cache_instances = 16
+        myisam_sort_buffer_size = 256M
+        connect_timeout         = 21600
+        expire_logs_days        = 30
+        #innodb_force_recovery   = 1
+        innodb_file_per_table   = 1
+        max_connections         = 25000
+        max_user_connections    = 25000
+        thread_cache_size       = 505
+        query_cache_type        = 1
+        # audit plugin
+        # plugin_load_add = server_audit
+        # server_audit=FORCE_PLUS_PERMANENT
+        # server_audit_file_rotate_now=ON
+        # server_audit_file_rotate_size=1000000
+        # server_audit_file_rotations=5
+        # server_audit_output_type=syslog
+        # server_audit_file_path=/var/log/mariadb/auditlog
+        # server_audit_logging=on
+        ## Performance settings https://mariadb.com/kb/en/configuring-mariadb-for-optimal-performance
+        innodb_buffer_pool_size = POOLSIZE
+        innodb_log_file_size    = 1G
+        innodb_flush_method     = O_DIRECT
+        thread-handling         = pool-of-threads
+        query_cache_size        = 512M
+        query_cache_limit       = 384K
+      ## 2022-02 to now: max_connections 6770
+      - |
+        # Gary's settings
+        skip-external-locking
+        skip-name-resolve
+        key_buffer_size         = 256M
+        max_allowed_packet      = 256M
+        table_open_cache        = 512
+        sort_buffer_size        = 16M
+        tmp_table_size          = 32M
+        net_buffer_length       = 2M
+        read_buffer_size        = 128k
+        read_rnd_buffer_size    = 256k
+        join_buffer_size        = 256k
+        table_definition_cache  = 1400
+        table_open_cache        = 2000
+        ##table_open_cache_instances = 16
+        myisam_sort_buffer_size = 256M
+        connect_timeout         = 21600
+        expire_logs_days        = 30
+        #innodb_force_recovery   = 1
+        innodb_file_per_table   = 1
+        max_connections         = 6770
+        max_user_connections    = 6770
+        thread_cache_size       = 505
+        query_cache_type        = 1
+        # audit plugin
+        # plugin_load_add = server_audit
+        # server_audit=FORCE_PLUS_PERMANENT
+        # server_audit_file_rotate_now=ON
+        # server_audit_file_rotate_size=1000000
+        # server_audit_file_rotations=5
+        # server_audit_output_type=syslog
+        # server_audit_file_path=/var/log/mariadb/auditlog
+        # server_audit_logging=on
+        ## Performance settings https://mariadb.com/kb/en/configuring-mariadb-for-optimal-performance
+        innodb_buffer_pool_size = POOLSIZE
+        innodb_log_file_size    = 1G
+        innodb_flush_method     = O_DIRECT
+        thread-handling         = pool-of-threads
+        query_cache_size        = 512M
+        query_cache_limit       = 384K
+
+- name: Keep Gary's settings as one marked block right after [mysqld]
+  ansible.builtin.blockinfile:
+    path: /etc/my.cnf.d/mariadb-server.cnf
+    ## Later runs find the block by its marker, so don't change the marker. The block must not
+    ## start with "# Gary's settings", or the task above could match it and remove it every run.
+    marker: "# {mark} ANSIBLE MANAGED BLOCK: Gary's settings (config-lims-database)"
+    insertafter: '^\[mysqld\]'
+    block: |
+      skip-external-locking
+      skip-name-resolve
+      key_buffer_size         = 256M
+      max_allowed_packet      = 256M
+      table_open_cache        = 512
+      sort_buffer_size        = 16M
+      tmp_table_size          = 32M
+      net_buffer_length       = 2M
+      read_buffer_size        = 128k
+      read_rnd_buffer_size    = 256k
+      join_buffer_size        = 256k
+      table_definition_cache  = 1400
+      table_open_cache        = 2000
+      ##table_open_cache_instances = 16
+      myisam_sort_buffer_size = 256M
+      connect_timeout         = 21600
+      expire_logs_days        = 30
+      #innodb_force_recovery   = 1
+      innodb_file_per_table   = 1
+      max_connections         = 6770
+      max_user_connections    = 6770
+      thread_cache_size       = 505
+      query_cache_type        = 1
+      # audit plugin
+      # plugin_load_add = server_audit
+      # server_audit=FORCE_PLUS_PERMANENT
+      # server_audit_file_rotate_now=ON
+      # server_audit_file_rotate_size=1000000
+      # server_audit_file_rotations=5
+      # server_audit_output_type=syslog
+      # server_audit_file_path=/var/log/mariadb/auditlog
+      # server_audit_logging=on
+      ## Performance settings https://mariadb.com/kb/en/configuring-mariadb-for-optimal-performance
+      innodb_buffer_pool_size = {{ innodb_buffer_pool_size }}
+      innodb_log_file_size    = 1G
+      innodb_flush_method     = O_DIRECT
+      thread-handling         = pool-of-threads
+      query_cache_size        = 512M
+      query_cache_limit       = 384K
