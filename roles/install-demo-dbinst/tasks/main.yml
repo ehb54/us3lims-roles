@@ -268,7 +268,10 @@
           /etc/crontab could not be restored from /etc/crontab.pre-upgrade-idle-demo, so its LIMS lines are still
           commented out; the next run restores it before anything else.
       when: lims_idle_restore is failed
-  when: (NO_LIMS is undefined or NO_LIMS == false or NO_LIMS == '') and demo_uslims_upgrade_script.stat.exists
+  ## Not on an OS-upgrade converge (ultrascan-tickets#1314): the demo instance is as it was.
+  when:
+    - (NO_LIMS is undefined or NO_LIMS == false or NO_LIMS == '') and demo_uslims_upgrade_script.stat.exists
+    - not lims_os_upgrade | default(false) | bool
 
 - name: Note that uslims_upgrade.php was skipped (dbutils checkout predates it)
   ansible.builtin.debug:

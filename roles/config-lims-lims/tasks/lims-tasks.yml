@@ -29,6 +29,7 @@
    repo: "{{ common_url }}"
    dest: "{{ www_common }}"
    version: "{{ common_branch }}"
+   update: "{{ not (lims_os_upgrade | default(false) | bool) }}"   # ultrascan-tickets#1314: an OS-upgrade converge leaves the checkout as it is
    force: yes
   changed_when: false
 
@@ -86,6 +87,7 @@
    repo: "{{ us_airavata_bridge_url }}"
    dest: "{{ us_airavata_bridge_path }}"
    version: "{{ us_airavata_bridge_branch }}"
+   update: "{{ not (lims_os_upgrade | default(false) | bool) }}"   # ultrascan-tickets#1314: an OS-upgrade converge leaves the checkout as it is
    force: yes
   changed_when: false
   when: site_release_version is defined and (site_release_version | string) is version('4.3.0', '<')
@@ -118,6 +120,7 @@
    repo: "{{ webinfo_url }}"
    dest: "{{ www_uslims }}"
    version: "{{ webinfo_branch }}"
+   update: "{{ not (lims_os_upgrade | default(false) | bool) }}"   # ultrascan-tickets#1314: an OS-upgrade converge leaves the checkout as it is
 
 ## backup: yes has no way to redirect
 ## where it writes (ansible.builtin.template's own option is a bare
@@ -157,6 +160,7 @@
     repo: "{{ newinst_url }}"
     version: "{{ newinst_branch }}"
     dest: "{{ www_newlims }}"
+    update: "{{ not (lims_os_upgrade | default(false) | bool) }}"   # ultrascan-tickets#1314: an OS-upgrade converge leaves the checkout as it is
 
 ## Same reasoning as webinfo's own config
 ## template just above -- the backup would land inside newinst's git
@@ -368,7 +372,11 @@
           /etc/crontab could not be restored from /etc/crontab.pre-upgrade-idle, so its LIMS lines are still
           commented out; the next run restores it before anything else.
       when: lims_idle_restore is failed
-  when: uslims_upgrade_script.stat.exists
+  ## Not on an OS-upgrade converge: the host's LIMS code and data are as they were, so there is
+  ## nothing for uslims_upgrade.php to do (ultrascan-tickets#1314).
+  when:
+    - uslims_upgrade_script.stat.exists
+    - not lims_os_upgrade | default(false) | bool
 
 - name: Note that uslims_upgrade.php was skipped (dbutils checkout predates it)
   ansible.builtin.debug:

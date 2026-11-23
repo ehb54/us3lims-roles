@@ -48,6 +48,39 @@
     disable_gpg_check: true
     state: present
 
+## ultrascan-tickets#1314: EL8 and EL9 have their own tigervnc-server and EL10 has none, so on the
+## way to EL10 that package goes (with Leapp or before it), and RPM keeps vncserver.users, with the
+## displays vncadmin gave the users, as vncserver.users.rpmsave. The RPMs above bring a new
+## vncserver.users without them, and the admins count as provisioned, so nothing below adds them
+## again. On an OS-upgrade converge the old assignments are put back when the new file has none.
+## The users' ~/.vnc files stay usable: TigerVNC still reads ~/.vnc, and for a session this OS
+## lacks (EL8's gnome) it starts the first one in /usr/share/xsessions.
+- name: OS-upgrade converge, read the VNC display assignments in vncserver.users
+  ansible.builtin.command: grep -E '^\s*:[0-9]+\s*=\s*\S+\s*$' /etc/tigervnc/vncserver.users
+  register: vnc_os_upgrade_users_now
+  changed_when: false
+  failed_when: vnc_os_upgrade_users_now.rc > 1
+  when: lims_os_upgrade | default(false) | bool
+
+- name: OS-upgrade converge, read the old OS's VNC display assignments in vncserver.users.rpmsave
+  ansible.builtin.command: grep -E '^\s*:[0-9]+\s*=\s*\S+\s*$' /etc/tigervnc/vncserver.users.rpmsave
+  register: vnc_os_upgrade_users_old
+  changed_when: false
+  ## rc 1: no assignments in it; rc 2: no such file. Either way there is nothing to put back.
+  failed_when: false
+  when:
+    - lims_os_upgrade | default(false) | bool
+    - vnc_os_upgrade_users_now.stdout_lines | length == 0
+
+- name: OS-upgrade converge, give the users back the VNC displays they had on the old OS
+  ansible.builtin.lineinfile:
+    path: /etc/tigervnc/vncserver.users
+    line: "{{ item | trim }}"
+  loop: "{{ vnc_os_upgrade_users_old.stdout_lines if (vnc_os_upgrade_users_old.rc | default(1)) == 0 else [] }}"
+  when:
+    - lims_os_upgrade | default(false) | bool
+    - vnc_os_upgrade_users_now.stdout_lines | length == 0
+
 - name: Add group 'vncusers'
   ansible.builtin.group:
     name: vncusers
