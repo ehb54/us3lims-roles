@@ -26,6 +26,21 @@
           quiet: true
         tags: [always, hostname-check]
 
+      ## EL8: run every task with the system python. The python libraries the roles install as rpms
+      ## (python3-PyMySQL, python3-cryptography, ...) belong to platform-python (3.6), but Ansible's
+      ## interpreter discovery picks a newer python3.11/3.12 once one is installed, and build-qt's
+      ## llvm-toolset brings python3.12. A rerun then failed in config-lims-database ("A MySQL module is
+      ## required") and config-lims-apache ("Cannot detect the required Python library cryptography")
+      ## (ultrascan-tickets#1311). An ansible_python_interpreter set in the inventory still wins.
+      - name: use platform-python on EL8
+        ansible.builtin.set_fact:
+          ansible_python_interpreter: /usr/libexec/platform-python
+        when:
+          - ansible_facts['os_family'] == "RedHat"
+          - ansible_facts['distribution_major_version'] | int == 8
+          - ansible_python_interpreter is not defined or ansible_python_interpreter is match('auto')
+        tags: [always]
+
       - name: set www_user for Debian
         set_fact:
           www_user: "www-data"
