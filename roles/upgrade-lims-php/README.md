@@ -23,6 +23,13 @@ Modes are set by `lims_php_mode`; the playbook maps `-e run=1` to `upgrade` and 
   7. Starts the gridctl services again (`php services.php start`) if they were running before, including when the note was left by an earlier run that failed after stopping them. Fails if fewer of them are running than before.
 
   Running it again on an upgraded host changes nothing.
+- `update` (EL8, playbook `-e update=1`): for a host already on `lims_php_stream`. It installs the vendor's php fixes, which ship as new releases of 7.4.33 (for example `7.4.33-9`, RHSA-2026:100991, for the 2026-11-19 php.net criticals).
+  1. Refuses a host on another stream (move that with `upgrade`). Runs `dnf --refresh check-update 'php*'`. If dnf lists updates, the idle check and the gridctl stop work as in `upgrade` step 1.
+  2. Saves `rpm -qa 'php*'` to `lims_php_state_dir`, then runs `dnf -y update 'php*'`, which updates installed php packages only. The hand-built PECL extensions are not rebuilt (the php API does not change within a stream). ImageMagick stays excluded. Undo with `dnf history undo`.
+  3. If the installed php-common changelog lists the PHP2Shell CVEs and every CVE in `lims_php_fixed_cves`, it removes both PHP2Shell settings files (as `mitigate` with `lims_php_mitigation: false`). Otherwise it leaves them as they are.
+  4. Restarts php-fpm and httpd if they were running, verifies as in `upgrade` step 6, and starts the gridctl services again as in step 7.
+
+  Without php updates it changes nothing, except removing the settings files on a host that already has the fixes.
 
 ## Role Variables
 
@@ -37,6 +44,8 @@ See `defaults/main.yml`.
 `lims_php_ignore_extensions` - hand-built extensions to leave alone
 
 `lims_php_mitigation`, `lims_php_fpm_pools`, `lims_php_fpm_max_requests` - the PHP2Shell settings, default on, pool `www`, `1`
+
+`lims_php_fixed_cves` - CVEs the php-common changelog must list before `update` removes the PHP2Shell settings; default the four 2026-11-19 criticals (CVE-2026-129289, CVE-2026-129496, CVE-2026-126714, CVE-2026-115560)
 
 `lims_php_rpm_dir` - controller directory of fallback php RPMs, default empty (none)
 
