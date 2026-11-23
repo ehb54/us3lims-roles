@@ -6,7 +6,19 @@ lims_php_stream: "7.4"
 # mitigate: apply (or, with lims_php_mitigation false, remove) the PHP2Shell settings only
 # upgrade:  switch the stream, rebuild the hand-built PECL extensions, apply the
 #           PHP2Shell settings, verify
+# update:   on a host already on lims_php_stream, install the vendor's php updates
+#           (dnf update 'php*'), remove the PHP2Shell settings once the installed php-common
+#           lists every CVE in lims_php_fixed_cves, restart, verify
 lims_php_mode: info
+
+# update mode removes the PHP2Shell settings (zz-us3lims-php2shell.ini/.conf) only when the
+# installed php-common changelog lists all of these. Default: the 2026-11-19 php.net criticals
+# (EL8 php:7.4 fix RHSA-2026:100991, 7.4.33-9).
+lims_php_fixed_cves:
+  - CVE-2026-129289
+  - CVE-2026-129496
+  - CVE-2026-126714
+  - CVE-2026-115560
 
 # Hand-built PECL extensions this role can rebuild, keyed by the .so name in the php
 # extension_dir. The controller downloads the tarballs and checks them against sha256,

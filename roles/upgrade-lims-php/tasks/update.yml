@@ -1,0 +1,73 @@
+---
+# Install the vendor's php updates within the enabled stream (vendor packages keep 7.4.33 and add
+# fixes as new releases, e.g. 7.4.33-9 for the 2026-11-19 criticals). The hand-built PECL
+# extensions keep working: the php API does not change within a stream, and verify checks that
+# each one still loads. Undo with "dnf history undo" on the transaction this run made.
+- name: Make the state directory
+  ansible.builtin.file:
+    path: "{{ lims_php_state_dir }}"
+    state: directory
+    mode: "0700"
+  when: lims_php_update_pending | bool
+
+- name: Save the php packages before the update
+  ansible.builtin.shell: |
+    set -o pipefail
+    f={{ lims_php_state_dir }}/rpm-qa-php-before-update-{{ ansible_facts['date_time']['iso8601_basic_short'] }}.txt
+    rpm -qa 'php*' | sort > "$f"
+    echo "$f"
+  args:
+    executable: /bin/bash
+  register: lims_php_update_snapshot
+  changed_when: true
+  when: lims_php_update_pending | bool
+
+# "update" only touches installed packages; the dnf module with a wildcard and state latest would
+# install every php* package
+- name: Update the php packages
+  ansible.builtin.command: dnf -y update 'php*'
+  register: lims_php_update_run
+  changed_when: "'Upgraded:' in lims_php_update_run.stdout or 'Upgrading' in lims_php_update_run.stdout"
+  when: lims_php_update_pending | bool
+  notify:
+    - Restart php-fpm
+    - Restart httpd
+
+- name: Read the php-common package after the update
+  ansible.builtin.shell: |
+    set -o pipefail
+    rpm -q php-common
+    rpm -q --changelog php-common | grep -c -E 'CVE-2026-10961[89]' || true
+    rpm -q --changelog php-common | { grep -o -E '{{ lims_php_fixed_cves | join("|") }}' || true; } | sort -u | wc -l
+  args:
+    executable: /bin/bash
+  register: lims_php_update_rpm
+  changed_when: false
+
+# With the fix in, the PHP2Shell settings (a stopgap) come off: mitigation.yml removes both files.
+# Without it they stay as they are.
+- name: Record whether the installed php has the fixes
+  ansible.builtin.set_fact:
+    lims_php_update_fixed: >-
+      {{ (lims_php_update_rpm.stdout_lines[1] | int) > 0
+         and (lims_php_update_rpm.stdout_lines[2] | int) == lims_php_fixed_cves | length }}
+
+- name: Remove the PHP2Shell settings once the fixes are in
+  ansible.builtin.set_fact:
+    lims_php_mitigation: false
+  when: lims_php_update_fixed | bool
+
+- name: Report the update
+  ansible.builtin.debug:
+    msg:
+      - >-
+        {{ 'php packages saved in ' ~ lims_php_update_snapshot.stdout ~ '; updated: ' ~ (lims_php_update_list | join(', '))
+           if lims_php_update_pending | bool else 'no php updates to install' }}
+      - "now {{ lims_php_update_rpm.stdout_lines[0] }}"
+      - >-
+        {{ 'fixes in (PHP2Shell and all ' ~ lims_php_fixed_cves | length ~ ' lims_php_fixed_cves): the PHP2Shell settings files '
+           ~ ('are removed: ' ~ lims_php_settings_present | join(', ') if lims_php_settings_present else 'are already gone')
+           if lims_php_update_fixed | bool else
+           'the php-common changelog does not list all of ' ~ lims_php_fixed_cves | join(', ')
+           ~ ' (it names ' ~ lims_php_update_rpm.stdout_lines[2] ~ '); the PHP2Shell settings files stay: '
+           ~ (lims_php_settings_present | join(', ') or 'none') }}

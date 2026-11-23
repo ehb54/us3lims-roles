@@ -56,6 +56,11 @@
     set -o pipefail
     rpm -q php-common
     rpm -q --changelog php-common | grep -c -E 'CVE-2026-10961[89]' || true
+    rpm -q --changelog php-common | { grep -o -E '{{ lims_php_fixed_cves | join("|") }}' || true; } | sort -u | wc -l
+    for f in /etc/php.d/zz-us3lims-php2shell.ini /etc/php-fpm.d/zz-us3lims-php2shell.conf; do
+      [ -e "$f" ] && printf '%s ' "$f"
+    done
+    echo
   args:
     executable: /bin/bash
   register: lims_php_rpm_after
@@ -84,6 +89,9 @@
       - "ImageMagick: {{ lims_php_dnf_before.stdout_lines[1] }} -> {{ lims_php_dnf_after.stdout_lines[1] }}; dnf.conf unchanged"
       - "php {{ lims_php_version_before }} -> {{ lims_php_version_after }} ({{ lims_php_rpm_after.stdout_lines[0] }})"
       - "PHP2Shell fix in the installed php packages: {{ 'yes' if (lims_php_rpm_after.stdout_lines[1] | int) > 0 else 'no' }}"
+      - >-
+        php-common changelog names {{ lims_php_rpm_after.stdout_lines[2] }} of {{ lims_php_fixed_cves | length }}
+        lims_php_fixed_cves; PHP2Shell settings files: {{ lims_php_rpm_after.stdout_lines[3] | default('', true) | trim or 'none' }}
       - "rebuilt: {{ lims_php_rebuild_read.stdout_lines | default([]) | join(', ') or 'nothing' }}"
       - >-
         php-fpm {{ ansible_facts['services']['php-fpm.service']['state'] }},

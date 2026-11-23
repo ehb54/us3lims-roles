@@ -3,13 +3,14 @@
   ansible.builtin.assert:
     that:
       - ansible_facts['os_family'] == 'RedHat'
-      - lims_php_mode in ['info', 'mitigate', 'upgrade']
+      - lims_php_mode in ['info', 'mitigate', 'upgrade', 'update']
       # EL10 has no php module streams to switch: info and mitigate only
       - ansible_facts['distribution_major_version'] == '8' or
         ((ansible_facts['distribution_major_version'] | int) >= 10 and lims_php_mode in ['info', 'mitigate'])
     fail_msg: >-
-      lims_php_mode is info, mitigate or upgrade. upgrade switches EL8 php module streams and runs on EL8 only;
-      EL10 has no module streams (its php version comes with the package names), so it takes info and mitigate only
+      lims_php_mode is info, mitigate, upgrade or update. upgrade switches EL8 php module streams and update
+      updates within one, so both run on EL8 only; EL10 has no module streams (its php version comes with the
+      package names), so it takes info and mitigate only
     quiet: true
 
 - name: Read the enabled php module stream
@@ -54,10 +55,41 @@
     set -o pipefail
     rpm -q php-common
     rpm -q --changelog php-common | grep -c -E 'CVE-2026-10961[89]' || true
+    # line 3: how many of lims_php_fixed_cves the changelog names
+    rpm -q --changelog php-common | { grep -o -E '{{ lims_php_fixed_cves | join("|") }}' || true; } | sort -u | wc -l
   args:
     executable: /bin/bash
   register: lims_php_rpm_read
   changed_when: false
+
+# update mode: only php packages already installed, from the enabled stream; --refresh so
+# a stale metadata cache does not hide a fix that has just shipped. rc 100: updates listed
+- name: Look for php updates
+  ansible.builtin.command: dnf -q --refresh check-update 'php*'
+  register: lims_php_check_update
+  changed_when: false
+  failed_when: lims_php_check_update.rc not in [0, 100]
+  when: lims_php_mode == 'update'
+
+- name: Record the php updates
+  ansible.builtin.set_fact:
+    lims_php_update_pending: "{{ lims_php_check_update.rc | default(0) == 100 }}"
+    lims_php_update_list: >-
+      {{ lims_php_check_update.stdout_lines | default([]) | select('match', '^\S+\.\S+\s+\S+\s+\S+')
+         | map('regex_replace', '\s+(\S+)\s+\S+$', ' \1') | list }}
+
+- name: Look for the PHP2Shell settings files
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - /etc/php.d/zz-us3lims-php2shell.ini
+    - /etc/php-fpm.d/zz-us3lims-php2shell.conf
+  register: lims_php_settings_read
+
+- name: Record the PHP2Shell settings files
+  ansible.builtin.set_fact:
+    lims_php_settings_present: >-
+      {{ lims_php_settings_read.results | selectattr('stat.exists') | map(attribute='item') | list }}
 
 - name: Read the service states
   ansible.builtin.service_facts:
@@ -82,6 +114,14 @@
                                if ansible_facts['distribution_major_version'] == '8' else 'none (EL' ~ ansible_facts['distribution_major_version'] ~ ' has no php module streams)' }}"
       - "php version: {{ lims_php_version_before }} ({{ lims_php_rpm_read.stdout_lines[0] }})"
       - "PHP2Shell fix in the installed php packages: {{ 'yes' if (lims_php_rpm_read.stdout_lines[1] | int) > 0 else 'no' }}"
+      - >-
+        php-common changelog names {{ lims_php_rpm_read.stdout_lines[2] }} of {{ lims_php_fixed_cves | length }}
+        lims_php_fixed_cves ({{ lims_php_fixed_cves | join(', ') }})
+      - "PHP2Shell settings files: {{ lims_php_settings_present | join(', ') or 'none' }}"
+      - >-
+        php updates: {{ 'not checked (update mode only)' if lims_php_mode != 'update'
+                        else (lims_php_update_list | join(', ') or 'listed, see dnf above') if lims_php_update_pending | bool
+                        else 'none' }}
       - "hand-built extensions: {{ lims_php_hand_built | join(', ') or 'none' }}"
       - "loaded extensions php 7.4 dropped: {{ lims_php_modules_before | intersect(lims_php_modules_dropped) | join(', ') or 'none' }}"
       - "session.upload_progress.enabled: {{ 'On' if lims_php_upload_progress_before in ['1', 'On', 'on'] else 'Off' }}"
@@ -96,6 +136,16 @@
       Add them to lims_php_pecl, or to lims_php_ignore_extensions to leave them as they are.
     quiet: true
   when: lims_php_mode == 'upgrade'
+
+# update keeps the stream; moving a php:7.2 host is the upgrade's job (stream switch + PECL rebuild)
+- name: Stop an update on a host not on the target stream
+  ansible.builtin.assert:
+    that: lims_php_stream_enabled == lims_php_stream
+    fail_msg: >-
+      php:{{ lims_php_stream_enabled | default('', true) or 'none' }} is enabled; update runs on php:{{ lims_php_stream }}
+      hosts only. Move this host with -e run=1 (upgrade) instead.
+    quiet: true
+  when: lims_php_mode == 'update'
 
 - name: Check that the LIMS is idle, and stop its gridctl services for an upgrade
   ansible.builtin.import_tasks: idle.yml

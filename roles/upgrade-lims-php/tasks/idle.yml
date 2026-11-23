@@ -70,7 +70,8 @@
     # the check and the stop apply when this run changes php (a stream switch or fallback RPMs); a
     # re-run on an upgraded host changes nothing
     lims_php_changes_php: >-
-      {{ lims_php_mode == 'upgrade' and (lims_php_stream_enabled != lims_php_stream or lims_php_rpm_dir | length > 0) }}
+      {{ (lims_php_mode == 'upgrade' and (lims_php_stream_enabled != lims_php_stream or lims_php_rpm_dir | length > 0))
+         or (lims_php_mode == 'update' and lims_php_update_pending | bool) }}
     lims_php_services_running: >-
       {{ (lims_php_services_read.stdout_lines | default([])) | select('match', '^\S+\s+\d+\s+running$')
          | map('regex_replace', '\s.*$', '') | list }}
