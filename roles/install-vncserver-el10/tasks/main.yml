@@ -75,7 +75,8 @@
     dest: /etc/sudoers.d/vncctl
     owner: root
     group: root
-    mode: u=rw,g=r,o=r
+    # 0440: visudo -c rejects a sudoers file with any other mode (ultrascan-tickets#1311)
+    mode: u=r,g=r,o=
     validate: visudo -cf %s
 
 - name: Directory for icewm's system configuration

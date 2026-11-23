@@ -65,7 +65,8 @@
   copy:
     src: vncctl.sudoers.d
     dest: /etc/sudoers.d/vncctl
-    mode: u=rw,g=r,o=r
+    # 0440: visudo -c rejects a sudoers file with any other mode (ultrascan-tickets#1311)
+    mode: u=r,g=r,o=
     owner: root
     group: root
 
