@@ -121,7 +121,7 @@
     mode: '0755'
   when: vnc_icewm_toolbar | bool
 
-- name: Taskbar buttons for UltraScan and SOMO in icewm
+- name: Taskbar buttons in icewm, as the EL8 GNOME favorites (UltraScan, US-GMP, US-SOMO, Firefox, Terminal)
   ansible.builtin.template:
     src: icewm-toolbar.j2
     dest: /etc/icewm/toolbar

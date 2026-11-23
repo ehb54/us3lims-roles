@@ -5,6 +5,8 @@
   ErrorLog "/var/log/httpd/{{ hostname }}-error.log"
   CustomLog "/var/log/httpd/{{ hostname }}-access.log" combined
   RewriteEngine on
-  RewriteCond %{SERVER_NAME} ={{ server_name }}
-  RewriteRule ^ https://%{SERVER_NAME}%{REQUEST_URI} [END,NE,R=permanent]
+  # Every plain-HTTP request goes to HTTPS on {{ server_name }}, whatever name or address it came in on
+  # (localhost, an IP address, a short name). The certificate is for that name, and this vhost has none
+  # of the HTTPS vhost's /common aliases, so a page served here has no CSS (ultrascan-tickets#1319).
+  RewriteRule ^ https://{{ server_name }}%{REQUEST_URI} [END,NE,R=permanent]
 </VirtualHost>

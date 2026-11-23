@@ -633,6 +633,10 @@
       # EL8: enable php:7.4 before any role installs php (default stream is the retired 7.2)
       - config-lims-php-stream
       - config-lims-gui
+      ## OS-upgrade converge: the users' UltraScan launchers came from the old /etc/skel and name the old Qt,
+      ## so they get the ones config-lims-gui just wrote, as upgrade-qt-playbook.yml does (ultrascan-tickets#1319)
+      - role: update-users-dotlocal
+        when: lims_os_upgrade | default(false) | bool
       - config-lims-admin
       - config-lims-firewall
       - config-lims-repo

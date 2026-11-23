@@ -79,7 +79,10 @@ The preflight comments out the LIMS lines in `/etc/crontab` and stops `us3-liste
 - no checkout is pulled, checked out or re-cloned: every LIMS checkout, `/opt/ultrascan3` and `~us3/us3-nodb` stay at their commits, with any local changes;
 - `uslims_upgrade.php` is not run, neither the preflight `--check` nor the `--apply` calls;
 - `/opt/ultrascan3` and `~us3/us3-nodb` (installed into `~us3/cluster`) are recompiled in place against the Qt and Qwt the run builds, after the old build's output is removed (objects, moc files, and the Makefiles and `.qmake.stash` files qmake generated). `/opt/ultrascan3/bin` is given the tree's owner for the rebuild and its own owner back after it. A program that already loads that Qt is left as it is, so a rerun compiles nothing.
-- on EL10, the VNC display assignments vncadmin made on the old OS, which RPM keeps as `/etc/tigervnc/vncserver.users.rpmsave` when the old tigervnc-server goes, are put back if the new `vncserver.users` has none.
+- on EL10, the VNC display assignments vncadmin made on the old OS, which RPM keeps as `/etc/tigervnc/vncserver.users.rpmsave` when the old tigervnc-server goes, are put back if the new `vncserver.users` has none;
+- the users' UltraScan launchers (`~/.local/share/applications`), copied from the old `/etc/skel` and naming the old Qt, are replaced with the new ones (update-users-dotlocal, as in upgrade-qt-playbook.yml).
+
+On EL10 install-vncserver-el10 also installs firefox, with or without the mode: Leapp's EL9 to EL10 upgrade removes it.
 
 The run refuses, before it changes anything, on a host without `global_config.php` or either source tree, and on EL10 for a release before 4.3.0 (not supported there; upgrade the LIMS on the old OS first). Idle the host before the OS upgrade; this run does not check it. See UPGRADE-AND-INSTALL-MODEL.md.
 
