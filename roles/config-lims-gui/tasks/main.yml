@@ -1,12 +1,28 @@
 ---
 # tasks file for config-lims-gui
 
+# The GNOME favorites below go into /etc/dconf/db/local.d, which only a desktop install brings
+# (dconf). A host installed without one (the installer's "Server" environment) gets Workstation
+# here, as hand-built hosts did with dnf -y groupinstall workstation; a host that already has
+# GNOME (Workstation or Server with GUI) is left alone. EL10 too: its VNC desktop is icewm
+# (install-vncserver-el10), so GNOME there is for the console. -y: Ansible gives dnf no
+# terminal, so without it dnf stops at its prompt (ultrascan-tickets#1311).
+- name: Check whether GNOME is installed
+  command: rpm -q gnome-shell
+  register: lims_gui_gnome
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
 - name: groupinstall workstation
-  command: dnf groupinstall workstation
-  when: install_workstation|default(false)
+  command: dnf -y groupinstall workstation
+  when: >-
+    install_workstation | default(false) | bool
+    or (lims_gui_gnome.rc != 0
+        and not install_server_with_gui | default(false) | bool)
 
 - name: groupinstall Server with GUI
-  command: dnf groupinstall "Server with GUI"
+  command: dnf -y groupinstall "Server with GUI"
   when: install_server_with_gui|default(false)
 
 - name: install xorg-x11-apps
