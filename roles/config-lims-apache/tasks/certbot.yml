@@ -1,0 +1,60 @@
+---
+## Let's Encrypt certificates through geerlingguy.certbot, without that role's crb step.
+##
+## The role's tasks/main.yml first runs "dnf config-manager --set-enabled crb" on every
+## Red Hat-family host except Fedora (setup-RedHat.yml, since 5.2.0). Only Rocky and Alma 9
+## and later have a repo named crb, so on EL8, Oracle Linux and RHEL the role stops there with
+## "No matching repo to modify: crb". EPEL needs that repo, but config-lims-repo
+## (and the play's pre_tasks on Oracle Linux) has already enabled it under its real name
+## ({{ powertools }}). So run the role's other task files, in the order its main.yml runs
+## them. Those file names are the same from 5.0.0 to 5.5.0 (requirements.yml pins 5.5.0).
+## ultrascan-tickets#1335
+
+- name: Load the certbot variables for this OS
+  ansible.builtin.include_role:
+    name: geerlingguy.certbot
+    tasks_from: include-vars.yml
+
+- name: Stop unless certbot is installed from the OS package
+  ansible.builtin.assert:
+    that: (certbot_install_method | default('package')) == 'package'
+    fail_msg: >-
+      certbot_install_method is {{ certbot_install_method | default('package') }}; config-lims-apache installs certbot
+      only from the OS package (EPEL), so leave certbot_install_method at 'package'.
+    quiet: true
+
+- name: Install certbot
+  ansible.builtin.include_role:
+    name: geerlingguy.certbot
+    tasks_from: install-with-package.yml
+
+- name: Create the standalone certificates that don't exist yet
+  ansible.builtin.include_role:
+    name: geerlingguy.certbot
+    tasks_from: create-cert-standalone.yml
+  loop: "{{ certbot_certs }}"
+  loop_control:
+    loop_var: cert_item
+  when:
+    - certbot_create_if_missing | bool
+    - certbot_create_method == 'standalone'
+
+- name: Create the webroot certificates that don't exist yet
+  ansible.builtin.include_role:
+    name: geerlingguy.certbot
+    tasks_from: create-cert-webroot.yml
+  loop: "{{ certbot_certs }}"
+  loop_control:
+    loop_var: cert_item
+  when:
+    - certbot_create_if_missing | bool
+    - certbot_create_method == 'webroot'
+
+## root's crontab: certbot needs root for /etc/letsencrypt, port 80 and stopping httpd
+- name: Add the certbot renewal cron job
+  ansible.builtin.include_role:
+    name: geerlingguy.certbot
+    tasks_from: renew-cron.yml
+  vars:
+    certbot_auto_renew_user: root
+  when: certbot_auto_renew | default(true) | bool

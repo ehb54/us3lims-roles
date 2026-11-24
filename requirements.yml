@@ -1,7 +1,9 @@
 ---
 roles:
   - src: geerlingguy.repo-epel
+  # config-lims-apache runs this role's task files by name (tasks/certbot.yml), tested with 5.5.0
   - src: geerlingguy.certbot
+    version: "5.5.0"
 
 # modules that left ansible-core; pinned for the ansible-core 2.16 controller and
 # RHEL 8 targets (python 3.6). community.crypto 3.x needs ansible-core 2.17+.

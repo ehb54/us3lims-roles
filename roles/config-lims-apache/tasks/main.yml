@@ -38,10 +38,9 @@
     - self_signed == 'no'
     - (ansible_user | default(lookup('env', 'USER'))) != 'root'
 
-- include_role:
-         name: geerlingguy.certbot
-  vars:
-    certbot_auto_renew_user: root
+## geerlingguy.certbot without its crb step, which stops the role on EL8, Oracle Linux and RHEL
+- name: Certbot certificates
+  ansible.builtin.include_tasks: certbot.yml
   when: self_signed == 'no'
 
 - name: Create ssl folder for self-signed cert
