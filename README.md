@@ -58,7 +58,9 @@ Modifying the install-lims-server-playbook.yml is a good starting ground.
 
 `lims_enable_pam` - `true` to enable PAM login; sets `enable_PAM` in the same base config. Default `false`.
 
-Set both in the inventory or host_vars, not in the playbook's `vars:`, which would override them.
+`lims_upgrade_allow_logins` - users whose login sessions may stay while `uslims_upgrade.php` runs: a console autologin (a cloud image that logs a user in on tty1, for example) or a monitor that has to stay logged in. A list of user names, or a comma-separated string with `-e`. Each call to `uslims_upgrade.php` (the preflight `--check` and both `--apply` calls) passes them as `--allow-login` and `LIMS_ALLOW_LOGINS`, and its idle check lists their sessions as a note. Default none: any other login session makes the host not idle, so those calls are refused and a fresh install stays unfinished. Needs a dbutils whose `uslims_upgrade.php` has `--allow-login`.
+
+Set these in the inventory or host_vars, not in the playbook's `vars:`, which would override them.
 
 ### Release pinning
 

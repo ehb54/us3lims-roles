@@ -369,9 +369,10 @@
           - name: "Check the currently-deployed release's upgrade state (uslims_upgrade.php --check)"
             ansible.builtin.command:
               chdir: "{{ user_home }}/us3/lims/database/utils"
-              cmd: "php uslims_upgrade.php --check --www {{ www_base | default('/srv/www/htdocs') }}"
+              cmd: "php uslims_upgrade.php --check --www {{ www_base | default('/srv/www/htdocs') }}{{ lims_allow_logins_arg | default('') }}"
             environment:
               LIMS_CRON_JOBS_ELSEWHERE_OK: "1"
+              LIMS_ALLOW_LOGINS: "{{ lims_allow_logins_csv | default('') }}"
             register: uslims_upgrade_preflight_result
             changed_when: false
             ## Same tolerance as config-lims-lims's own --apply call: a
@@ -526,6 +527,9 @@
                 role's own services:
                 {{ uslims_upgrade_preflight_result.stdout_lines | select('search', 'FAIL ]') | map('trim') | join('; ') }}.
                 {{ lims_preflight_done }} Rerun this play once these are clear.
+                {{ 'A login that has to stay, such as a console autologin or a monitor, does not count once its'
+                   ~ ' user is in lims_upgrade_allow_logins; end any other login.'
+                   if uslims_upgrade_preflight_result.stdout is search('other login session|other users logged in') else '' }}
             when: >-
               not lims_host_busy | default(false) | bool and uslims_upgrade_preflight_result.rc != 0
               and 'the host is not idle' in uslims_upgrade_preflight_result.stderr
@@ -622,8 +626,10 @@
         msg: >-
           This fresh install is not finished: uslims_upgrade.php did not run
           ({{ lims_upgrade_not_run | join('; ') }}). /etc/lims-fresh-install-pending stays, so the
-          next run finishes it. Clear what is named and rerun this play. A console autologin counts
-          as a login (for example, systemctl stop getty@tty1 until the next reboot).
+          next run finishes it. Clear what is named and rerun this play.
+          {{ 'A login that has to stay, such as a console autologin or a monitor, does not count once its'
+             ~ ' user is in lims_upgrade_allow_logins; end any other login.'
+             if (lims_upgrade_not_run | join(' ')) is search('other login session|other users logged in') else '' }}
       when:
         - lims_upgrade_not_run | default([]) | length > 0
         - lims_fresh_install_pending.stat.exists | default(false)
