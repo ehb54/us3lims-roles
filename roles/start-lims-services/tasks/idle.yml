@@ -9,6 +9,21 @@
     user_home: "/home"
   when: user_home is undefined
 
+# For the uslims_upgrade.php call this idles for: lims_upgrade_allow_logins (a list of user names, or
+# a comma-separated string from -e) as one comma-separated string, '' for none, and as its
+# --allow-login option. Each caller passes both, the option and LIMS_ALLOW_LOGINS, so these users'
+# login sessions (a console autologin, a monitor) are listed by its idle check as a note instead of
+# refusing (ultrascan-tickets#1338).
+- name: Read the users whose logins uslims_upgrade.php may leave logged in
+  ansible.builtin.set_fact:
+    lims_allow_logins_csv: >-
+      {{ ((lims_upgrade_allow_logins.split(',') if lims_upgrade_allow_logins is string else lims_upgrade_allow_logins)
+          | map('trim') | select | join(',')) if lims_upgrade_allow_logins | default('') else '' }}
+
+- name: Make the --allow-login option for uslims_upgrade.php
+  ansible.builtin.set_fact:
+    lims_allow_logins_arg: "{{ (' --allow-login ' ~ (lims_allow_logins_csv | quote)) if lims_allow_logins_csv else '' }}"
+
 - name: Look for the us3-listen unit and uslims_jobs.php
   ansible.builtin.stat:
     path: "{{ item }}"
